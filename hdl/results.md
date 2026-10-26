@@ -215,3 +215,31 @@ one:
   runs its ROMs on the model and reads the digits as ceres does. Every eighth
   of the 1747 ROMs, 207 of them: 190 pass, 17 fail, all `oamdma`'s
   `busypush` and `busyread` (`bus-with-two-drivers`).
+
+## Ceres's transcriptions of the timer and IF
+
+`trace-blocks.sh` over 127 ROMs (77 of gbmicrotest's timer, DIV and
+interrupt ROMs, Mooneye's 13 timer and 12 interrupt tests, and Gambatte's
+20 `irq_precedence` and 5 `m1` IF-write ROMs; 5.2 GB, 26 minutes, four at a
+time), replayed by `netlist_replay` (30 s): `NetTimer` and `NetIf` match
+the model in all of the 223 million phases. What the traces exercised:
+
+| Rule                                         |  Times |
+| -------------------------------------------- | -----: |
+| TIMA overflows                               |  17136 |
+| A write of DIV, TAC, TIMA, TMA               | 65681, 166, 131, 73 |
+| A write of TIMA, or TMA, as TIMA reloads     |   2, 2 |
+| TIMA counts as DIV or TAC is written         |     46 |
+| An IF write, read, an interrupt entry        | 118, 37, 79 |
+| A source rises as it is acknowledged         |      1 |
+
+No trace has a source rising in the phase of an IF write: the replay does
+not check that rule (the proofs do, on any rise).
+
+The first run differed in 12 phases, all in phase E of a STAT write: the
+glitch's request pulse is shorter than a phase, so a trace of the values at
+the phases' ends missed the rise that set IF's flag. The traces now note
+every rising edge. Four faults planted in the transcriptions were each
+caught (TIMA counting on the clock's rise; no overflow at the A edge; TMA
+taking the bus as the write starts; a rise winning over the acknowledge,
+which only Gambatte's `late_m0irq_retrigger_2` catches).

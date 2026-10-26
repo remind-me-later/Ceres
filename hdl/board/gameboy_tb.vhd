@@ -34,6 +34,16 @@
 -- bits) as a read would see them, OAMB and VRAMB (1 while the CPU cannot
 -- read OAM, or VRAM), and DIV when the divider does not count on (a write
 -- to DIV, STOP), its value in M-cycles; values in hexadecimal.
+--
+-- BLOCKS gets the divider, the timer and IF at the end of every phase, from
+-- the CPU's first access on, for ceres-core's replay through its
+-- transcriptions of them (netlist_replay.rs): the phase that ends; the
+-- address, RD and WR, and the data bus; DIV's counter, TIMA, TMA and TAC;
+-- the timer's overflow flip-flops (int_timer, bit7_before), its clock and
+-- its write strobes of TMA and TAC; the interrupt requests, the
+-- acknowledges, IF's flags and its read latch, IE, and the requests that
+-- rose in the phase (also those that fell again before its end). Values in
+-- hexadecimal, bits as 0 or 1.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -59,6 +69,7 @@ entity gameboy_tb is
 		BUS_TRACE   : string := "";
 		PIXELS      : string := "";
 		CUTS        : string := "";
+		BLOCKS      : string := "";
 
 		-- Without the sound channels, which are not simulated: faster (see
 		-- dmg_cpu_b)
@@ -259,6 +270,82 @@ begin
 					writeline(f, l);
 				end if;
 			end if;
+		end loop;
+	end process;
+
+	-- The divider, the timer and IF at the end of every phase: sampled as the
+	-- next phase starts, before the flip-flops change (tco after the edge).
+	blocks_trace : process
+		alias phase       is << signal .gameboy_tb.u_gameboy.u_chip.phase : phase_t >>;
+		alias data_phase  is << signal .gameboy_tb.u_gameboy.u_chip.data_phase : std_ulogic >>;
+		alias c           is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.c : controls_t >>;
+		alias addr        is << signal .gameboy_tb.u_gameboy.u_chip.addr : std_logic_vector(15 downto 0) >>;
+		alias data        is << signal .gameboy_tb.u_gameboy.u_chip.data : std_logic_vector(7 downto 0) >>;
+		alias cpu_rd      is << signal .gameboy_tb.u_gameboy.u_chip.cpu_rd : std_ulogic >>;
+		alias cpu_wr      is << signal .gameboy_tb.u_gameboy.u_chip.cpu_wr : std_ulogic >>;
+		alias div         is << signal .gameboy_tb.u_gameboy.u_chip.div : unsigned(15 downto 0) >>;
+		alias tima        is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.tima : std_ulogic_vector(7 downto 0) >>;
+		alias tma         is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.tma : std_ulogic_vector(7 downto 0) >>;
+		alias tac         is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.tac : std_ulogic_vector(2 downto 0) >>;
+		alias int_timer   is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.int_timer_i : std_ulogic >>;
+		alias bit7_before is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.bit7_before : std_ulogic >>;
+		alias timer_clock is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.timer_clock : std_ulogic >>;
+		alias write_tma   is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.write_tma : std_ulogic >>;
+		alias write_tac   is << signal .gameboy_tb.u_gameboy.u_chip.u_timer.write_tac : std_ulogic >>;
+		alias int_vbl     is << signal .gameboy_tb.u_gameboy.u_chip.int_vbl : std_ulogic >>;
+		alias int_stat    is << signal .gameboy_tb.u_gameboy.u_chip.int_stat : std_ulogic >>;
+		alias int_serial  is << signal .gameboy_tb.u_gameboy.u_chip.int_serial : std_ulogic >>;
+		alias int_jp      is << signal .gameboy_tb.u_gameboy.u_chip.int_jp : std_ulogic >>;
+		alias acks        is << signal .gameboy_tb.u_gameboy.u_chip.acks : std_ulogic_vector(4 downto 0) >>;
+		alias flags       is << signal .gameboy_tb.u_gameboy.u_chip.flags : std_ulogic_vector(4 downto 0) >>;
+		alias read_value  is << signal .gameboy_tb.u_gameboy.u_chip.u_interrupts.read_value : std_ulogic_vector(4 downto 0) >>;
+		alias ie          is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.u_interrupts.ie : std_ulogic_vector(7 downto 0) >>;
+		file f        : text;
+		variable l    : line;
+		variable seen : boolean := false;
+		variable ended : phase_t;
+		-- The requests that rose in the phase, also for less than its length.
+		variable rose : std_ulogic_vector(4 downto 0) := (others => '0');
+
+		function b01(b : std_ulogic) return character is
+		begin
+			if to_x01(b) = '1' then
+				return '1';
+			end if;
+			return '0';
+		end function;
+
+		function hx(v : std_ulogic_vector) return string is
+		begin
+			return to_hstring(to_01(v));
+		end function;
+	begin
+		if BLOCKS = "" then
+			wait;
+		end if;
+		file_open(f, BLOCKS, write_mode);
+		ended := phase;
+		loop
+			wait on phase, int_vbl, int_stat, int_timer, int_serial, int_jp;
+			if rising_edge(int_vbl) then rose(0) := '1'; end if;
+			if rising_edge(int_stat) then rose(1) := '1'; end if;
+			if rising_edge(int_timer) then rose(2) := '1'; end if;
+			if rising_edge(int_serial) then rose(3) := '1'; end if;
+			if rising_edge(int_jp) then rose(4) := '1'; end if;
+			next when not phase'event;
+			if not seen and data_phase = '1' and (c.fetch = '1' or c.mread = '1' or c.mwrite = '1') then
+				seen := true;
+			end if;
+			if seen then
+				write(l, phase_t'image(ended) & ' ' & hx(addr) & ' ' & b01(cpu_rd) & b01(cpu_wr) & ' ' & hx(data)
+					& ' ' & hx(std_logic_vector(div)) & ' ' & hx(tima) & ' ' & hx(tma) & ' ' & hx(tac)
+					& ' ' & b01(int_timer) & b01(bit7_before) & b01(timer_clock) & b01(write_tma) & b01(write_tac)
+					& ' ' & hx(int_jp & int_serial & int_timer & int_stat & int_vbl) & ' ' & hx(acks)
+					& ' ' & hx(flags) & ' ' & hx(read_value) & ' ' & hx(ie) & ' ' & hx(rose));
+				writeline(f, l);
+			end if;
+			ended := phase;
+			rose  := (others => '0');
 		end loop;
 	end process;
 

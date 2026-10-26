@@ -78,7 +78,7 @@ fn netlist_timer_and_if() {
     if net_irq {
         rises[A] |= TIMER;
     }
-    let (net_if_read, net_taken) = net_if.m_cycle(if_access, &rises);
+    let (net_if_read, net_taken) = net_if.m_cycle(if_access, rises);
 
     // Ceres: the accesses at the boundary, then four T-cycles, in each of
     // which the timer runs, then IF takes the other requests, the write and

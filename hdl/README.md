@@ -351,3 +351,27 @@ This branch also held a VHDL translation of dmg-sim itself (until commit
 `d1658a21`), which matched it pin for pin at every picosecond. It was
 retired: the original, on the simulator its delays were fitted on, is the
 better oracle, and the translation had to follow every change to dmg-sim.
+
+### Checking ceres's transcriptions of it
+
+ceres-core's proofs against the netlist (`cargo kani -p ceres-core`) rest
+on Rust transcriptions of some of the model's blocks: `NetTimer`
+(`ceres-core/src/timing/netlist.rs`, of `divider.vhd` and `timer.vhd`) and
+`NetIf` (`ceres-core/src/interrupts/netlist.rs`, of `interrupts.vhd` and
+the request latch of `sm83_interrupts.vhd`). `trace-blocks.sh` records those
+blocks at the end of every phase while the model runs a ROM (the testbench's
+`BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in
+`build/blocks` through the transcriptions, phase by phase, with the model's
+accesses and interrupt requests, and lists where a transcription's state
+parts from the model's, and how often the traces exercised each rule:
+
+```sh
+ls ../external/test-roms/gbmicrotest/timer_*.gb | sed 's|^\.\./||' |
+	TEST=gbmicrotest xargs -P 4 -I{} ./trace-blocks.sh {} 0.1
+cargo test -p ceres-core --release netlist_replay -- --ignored --nocapture
+```
+
+A request that rises and falls within a phase (the STAT write's glitch)
+counts as a rise in that phase: the trace notes every rising edge of the
+request lines, not only their values at the phase's end. The results are in
+[results.md](results.md#ceress-transcriptions-of-the-timer-and-if).

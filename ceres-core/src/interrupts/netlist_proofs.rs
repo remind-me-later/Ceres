@@ -1,13 +1,9 @@
 //! Kani proofs that ceres's IF is the netlist's
 //! (`cargo kani -p ceres-core --harness netlist_if`).
 //!
-//! `NetIf` transcribes `hdl/rtl/interrupts.vhd`, and the latch of the
-//! requests and the acknowledge of `hdl/rtl/sm83_interrupts.vhd`, phase by
-//! phase. Each flag is set by a rise of its source, forced to the data bus
-//! while the CPU writes IF (E to G), and cleared by the acknowledge (G and H
-//! of the interrupt entry's last M-cycle); clearing wins. A read of IF, and
-//! the entry's choice of interrupt, take the flags as they were at the start
-//! of E.
+//! `NetIf` (`netlist.rs`) transcribes `hdl/rtl/interrupts.vhd`, and the
+//! latch of the requests and the acknowledge of
+//! `hdl/rtl/sm83_interrupts.vhd`, phase by phase.
 //!
 //! Ceres's M-cycle boundary is the start of the netlist's E: a read there
 //! sees the four T-cycles before it, an IF write lands after the first
@@ -25,56 +21,11 @@
 //! an M-cycle with any access and any rises of the sources gives the same
 //! read, the same interrupt taken, and equal IF after.
 
-use super::{INT_MASK, INT_TIMER_B, Interrupts};
-
-/// The timer's bit of IF.
-pub(crate) const TIMER: u8 = INT_TIMER_B;
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-enum Phase {
-    E,
-    F,
-    G,
-    H,
-    A,
-    B,
-    C,
-    D,
-}
-
-const PHASES: [Phase; 8] = [
-    Phase::E,
-    Phase::F,
-    Phase::G,
-    Phase::H,
-    Phase::A,
-    Phase::B,
-    Phase::C,
-    Phase::D,
-];
-
-/// Where phase A is in `PHASES`, which lists the phases in their order: a
-/// source that rises at the A edge rises there.
-pub(crate) const A: usize = Phase::A as usize;
-
-/// The ceres T-cycle (0 to 3) that a netlist phase stands for.
-const fn t_cycle(phase: Phase) -> usize {
-    match phase {
-        Phase::E | Phase::F | Phase::G => 0,
-        Phase::H => 1,
-        Phase::A | Phase::B => 2,
-        Phase::C | Phase::D => 3,
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(crate) enum Access {
-    None,
-    ReadIf,
-    WriteIf(u8),
-    /// The interrupt entry's last M-cycle: its push goes to RAM.
-    Entry,
-}
+pub(crate) use super::netlist::{A, Access, NetIf, TIMER, lowest};
+use super::{
+    INT_MASK, Interrupts,
+    netlist::{PHASES, t_cycle},
+};
 
 pub(crate) fn any_access() -> Access {
     match kani::any::<u8>() & 3 {
@@ -82,48 +33,6 @@ pub(crate) fn any_access() -> Access {
         1 => Access::ReadIf,
         2 => Access::WriteIf(kani::any()),
         _ => Access::Entry,
-    }
-}
-
-/// The lowest interrupt that is requested and enabled, as a bit.
-pub(crate) const fn lowest(requested: u8) -> u8 {
-    requested & requested.wrapping_neg()
-}
-
-/// The netlist's IF, and IE.
-pub(crate) struct NetIf {
-    pub(crate) flags: u8,
-    pub(crate) ie: u8,
-}
-
-impl NetIf {
-    /// An M-cycle from E to D, with the CPU's access and the sources that
-    /// rise in each phase. Returns what a read reads and the interrupt the
-    /// entry takes.
-    pub(crate) fn m_cycle(&mut self, access: Access, rises: &[u8; 8]) -> (Option<u8>, Option<u8>) {
-        // The read's latch, and the requests' latch, close at the start of E.
-        let read = matches!(access, Access::ReadIf).then_some(self.flags | !INT_MASK);
-        let selected = lowest(self.ie & self.flags);
-        let taken = matches!(access, Access::Entry).then_some(selected);
-        for (phase, &rise) in PHASES.iter().zip(rises) {
-            let write = match access {
-                Access::WriteIf(val) if *phase <= Phase::G => Some(val & INT_MASK),
-                _ => None,
-            };
-            let ack = match access {
-                Access::Entry if (Phase::G..=Phase::H).contains(phase) => selected,
-                _ => 0,
-            };
-            let mut flags = self.flags;
-            // A rise sets the flag, unless something forces it.
-            flags |= rise & INT_MASK;
-            if let Some(val) = write {
-                flags = val;
-            }
-            flags &= !ack;
-            self.flags = flags;
-        }
-        (read, taken)
     }
 }
 
@@ -190,7 +99,7 @@ fn netlist_if_bisimulation() {
     ints.write_ie(ie);
     let access = any_access();
     let rises: [u8; 8] = kani::any();
-    let (net_read, net_taken) = net.m_cycle(access, &rises);
+    let (net_read, net_taken) = net.m_cycle(access, rises);
     let (ceres_read, ceres_taken) = ceres_m_cycle(&mut ints, access, &rises);
     assert!(net_read == ceres_read, "the read differs");
     assert!(net_taken == ceres_taken, "the interrupt taken differs");

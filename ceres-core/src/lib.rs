@@ -15,6 +15,8 @@ mod joypad;
 mod memory;
 #[cfg(kani)]
 mod netlist_proofs;
+#[cfg(test)]
+mod netlist_replay;
 mod ppu;
 mod serial;
 mod sm83;
