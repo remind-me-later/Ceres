@@ -8,11 +8,12 @@
 //! timer drives at the end of H.
 //!
 //! Ceres makes a CPU access at the start of its M-cycle and then runs its
-//! four T-cycles; the last of them is the netlist's A edge. So at an M-cycle
-//! boundary ceres's T-cycle counter is four times the netlist's M-cycle
-//! counter, and the proof is a bisimulation: from any pair of states that
-//! `related` matches, an M-cycle with any access to FF04-FF07 gives the same
-//! read and the same interrupt on both sides, and leaves them related.
+//! four T-cycles; the netlist's A edge comes in the third or the fourth
+//! (the divider counts in the fourth, the interrupt in the third). So at an
+//! M-cycle boundary ceres's T-cycle counter is four times the netlist's
+//! M-cycle counter, and the proof is a bisimulation: from any pair of states
+//! that `related` matches, an M-cycle with any access to FF04-FF07 gives the
+//! same read and the same interrupt on both sides, and leaves them related.
 
 use super::timer::{Clock, TAC_CLOCK, TAC_ENABLE_B, TimerHost};
 
@@ -268,8 +269,15 @@ fn ceres_m_cycle(clock: &mut Clock, host: &mut DmgHost, access: Access) -> (Opti
         }
     };
     let before = host.timer_interrupts;
-    for _ in 0..4 {
+    for t in 0..4 {
+        let interrupts = host.timer_interrupts;
         clock.run(host, 1);
+        // The netlist requests it at the A edge, which IF sees in the third
+        // or fourth T-cycle (`interrupts/netlist_proofs.rs`).
+        assert!(
+            host.timer_interrupts == interrupts || t >= 2,
+            "the interrupt comes too early"
+        );
     }
     (read, host.timer_interrupts != before)
 }
