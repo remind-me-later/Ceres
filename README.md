@@ -101,9 +101,8 @@ upstream.
 - [Facts](doc/facts.toml): what is known about the hardware where the
   evidence is missing or contradictory, where ceres departs from the
   DMG-CPU B's netlist, or where a race decides, and what each rests on.
-- [DMG hardware tests](doc/dmg-hardware-tests.md) and
-  [CGB hardware tests](doc/cgb-hardware-tests.md): what is left to measure on
-  a real DMG or CGB.
+- [Hardware tests](doc/hardware-tests.md): what is left to measure on a
+  real DMG or CGB.
 
 ## Folder organization
 

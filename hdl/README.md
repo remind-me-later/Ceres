@@ -266,19 +266,8 @@ across the ROMs, as in [results.md](results.md#what-the-blocks-show-each-other).
 1 GiB (a ROM that ends on a locked CPU without a `TEST` to see it); the
 sweep lists such ROMs first.
 
-Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
-of 513. The others differ in three ways (see also
-[results.md](results.md)):
-
-- The read after HALT, when an interrupt is already pending (7 ROMs, a
-  line each): the chip reads the byte after the HALT, ceres the HALT
-  itself. Both push the HALT's address, in the same M-cycles.
-- The state at power-on (15 ROMs: `poweron_*`, `000-oam_lock`, `temp`):
-  RAM and the registers that no boot ROM writes start as dmg-sim starts
-  them, at 0 in every cell (OAM's bytes are FF, and the board's VRAM holds
-  arbitrary bytes), where ceres has zeros.
-- With quickboot, the timer's enable (`halt_bug`, `004-tima_boot_phase`):
-  the netlist counts on enabling the timer, ceres and the real DMG do not.
+The results of the sweeps, and what each difference turned out to be, are
+in [results.md](results.md#what-the-blocks-show-each-other).
 
 ### Gambatte's ROMs
 

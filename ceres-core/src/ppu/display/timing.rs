@@ -18,7 +18,7 @@
 //! The revisions share the structure and differ in a table of phases
 //! (`Phases`) and of CPU access delays (`Delays`). The CGB's were fitted to
 //! the CGB test suites (gambatte's CGB-C checks, SameSuite, Mooneye, AGE);
-//! `doc/cgb-hardware-tests.md` lists what hardware should confirm.
+//! `doc/hardware-tests.md` lists what hardware should confirm.
 //!
 //! Times are in half dots on a line clock (`h`, 912 per line) that the
 //! pixel pipeline resyncs at every line end; `h = 0` is where LY changes for
@@ -88,7 +88,7 @@ const STAT_ENABLES: u8 = STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | S
 
 /// Where a revision's signals sit on the clock. The structure is the same
 /// on every model; the CGB's phases were fitted to the CGB test suites (see
-/// `doc/cgb-hardware-tests.md` for what hardware should confirm).
+/// `doc/hardware-tests.md` for what hardware should confirm).
 #[derive(Clone, Copy)]
 struct Phases {
     /// The CGB: no STAT write glitch, writes and reads at the CGB's delays

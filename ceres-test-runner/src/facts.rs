@@ -261,14 +261,14 @@ fn headings(text: &str) -> Vec<(usize, &str)> {
     headings
 }
 
-/// The anchors of the entries under "Open questions" (level 3 under that
-/// level 2 heading).
+/// The anchors of the entries under the level 2 headings that begin "Open
+/// questions" (level 3 under those).
 fn open_questions(text: &str) -> Vec<String> {
     let mut inside = false;
     let mut questions = Vec::new();
     for (level, heading) in headings(text) {
         if level == 2 {
-            inside = heading == "Open questions";
+            inside = heading.starts_with("Open questions");
         } else if inside && level == 3 {
             questions.push(anchor(heading));
         } else {

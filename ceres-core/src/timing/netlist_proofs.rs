@@ -119,7 +119,7 @@ struct NetTimer {
     /// The data bus during the write, which TMA and TAC take as it ends.
     latched_data: u8,
     /// Whether enabling the timer while its select changes counts, as in
-    /// dmg-sim (`doc/dmg-hardware-tests.md`, entry 4). The DMG that
+    /// dmg-sim (`doc/hardware-tests.md`). The DMG that
     /// gbmicrotest was checked on does not count.
     // @fact timer-enable-race
     enable_race_counts: bool,
