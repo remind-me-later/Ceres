@@ -3,9 +3,11 @@
 #
 #   compare-frames.sh <model-frames.txt> <ceres-frames.txt>
 #
-# Neither writes the first frame after the LCD is turned on, which the LCD
-# does not show; the all-white frames before the first picture are left out
-# on both sides, since the number of them can differ. (A frame is complete on
+# A line has 160 pixels of one character each (the DMG's shades) or of four
+# (the CGB's 15-bit colours, in hexadecimal). Neither side writes the first
+# frame after the LCD is turned on, which the LCD does not show; the frames
+# of a single colour before the first picture are left out on both sides,
+# since the number of them can differ. (A frame is complete on
 # the model when its last line is latched, on ceres when STAT's mode becomes
 # 1: ceres may have one more at the cut.)
 #
@@ -20,14 +22,20 @@ set -eu
 awk '
 	FNR == 1 { file++ }
 	/^frame / { frame[file] = $2; y = 0; if ($2 + 1 > count[file]) count[file] = $2 + 1; next }
-	{ pix[file, frame[file], y++] = $0 }
-	$0 !~ /^0+$/ { drawn[file, frame[file]] = 1 }
+	{
+		w = length($0) / 160
+		if (y == 0) colour = substr($0, 1, w)
+		pix[file, frame[file], y++] = $0
+		rest = $0
+		gsub(colour, "", rest)
+		if (rest != "") drawn[file, frame[file]] = 1
+	}
 	END {
 		for (i = 1; i <= 2; i++) {
 			first[i] = 0
 			while (first[i] < count[i] && !drawn[i, first[i]]) first[i]++
 		}
-		printf "frames: %d on the model, %d on ceres; %d and %d white ones at the start left out\n",
+		printf "frames: %d on the model, %d on ceres; %d and %d of one colour at the start left out\n",
 			count[1], count[2], first[1], first[2]
 		shown = count[1] - first[1]
 		other = count[2] - first[2]
@@ -45,11 +53,12 @@ awk '
 			for (y = 0; y < 144; y++) {
 				a = pix[1, f + first[1], y] ""; b = pix[2, f + first[2], y] ""   # as strings: awk compares digits as numbers
 				if (a == b) continue
-				for (x = 1; x <= 160; x++) {
-					m = substr(a, x, 1); c = substr(b, x, 1)
+				w = length(a) / 160
+				for (x = 0; x < 160; x++) {
+					m = substr(a, x * w + 1, w); c = substr(b, x * w + 1, w)
 					if (m == c) continue
 					if (n++ < 8 && !differing)
-						printf "picture %d: x=%d y=%d model %s ceres %s\n", f, x - 1, y, m, c
+						printf "picture %d: x=%d y=%d model %s ceres %s\n", f, x, y, m, c
 				}
 			}
 			if (n) {
