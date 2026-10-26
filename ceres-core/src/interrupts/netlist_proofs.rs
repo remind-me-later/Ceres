@@ -25,7 +25,10 @@
 //! an M-cycle with any access and any rises of the sources gives the same
 //! read, the same interrupt taken, and equal IF after.
 
-use super::{INT_MASK, Interrupts};
+use super::{INT_MASK, INT_TIMER_B, Interrupts};
+
+/// The timer's bit of IF.
+pub(crate) const TIMER: u8 = INT_TIMER_B;
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum Phase {
@@ -50,6 +53,10 @@ const PHASES: [Phase; 8] = [
     Phase::D,
 ];
 
+/// Where phase A is in `PHASES`, which lists the phases in their order: a
+/// source that rises at the A edge rises there.
+pub(crate) const A: usize = Phase::A as usize;
+
 /// The ceres T-cycle (0 to 3) that a netlist phase stands for.
 const fn t_cycle(phase: Phase) -> usize {
     match phase {
@@ -61,7 +68,7 @@ const fn t_cycle(phase: Phase) -> usize {
 }
 
 #[derive(Clone, Copy)]
-enum Access {
+pub(crate) enum Access {
     None,
     ReadIf,
     WriteIf(u8),
@@ -69,7 +76,7 @@ enum Access {
     Entry,
 }
 
-fn any_access() -> Access {
+pub(crate) fn any_access() -> Access {
     match kani::any::<u8>() & 3 {
         0 => Access::None,
         1 => Access::ReadIf,
@@ -79,21 +86,21 @@ fn any_access() -> Access {
 }
 
 /// The lowest interrupt that is requested and enabled, as a bit.
-const fn lowest(requested: u8) -> u8 {
+pub(crate) const fn lowest(requested: u8) -> u8 {
     requested & requested.wrapping_neg()
 }
 
 /// The netlist's IF, and IE.
-struct NetIf {
-    flags: u8,
-    ie: u8,
+pub(crate) struct NetIf {
+    pub(crate) flags: u8,
+    pub(crate) ie: u8,
 }
 
 impl NetIf {
     /// An M-cycle from E to D, with the CPU's access and the sources that
     /// rise in each phase. Returns what a read reads and the interrupt the
     /// entry takes.
-    fn m_cycle(&mut self, access: Access, rises: &[u8; 8]) -> (Option<u8>, Option<u8>) {
+    pub(crate) fn m_cycle(&mut self, access: Access, rises: &[u8; 8]) -> (Option<u8>, Option<u8>) {
         // The read's latch, and the requests' latch, close at the start of E.
         let read = matches!(access, Access::ReadIf).then_some(self.flags | !INT_MASK);
         let selected = lowest(self.ie & self.flags);
@@ -120,6 +127,40 @@ impl NetIf {
     }
 }
 
+/// The requests of each of ceres's T-cycles, from the rises of each phase.
+pub(crate) fn requests(rises: &[u8; 8]) -> [u8; 4] {
+    let mut requests = [0; 4];
+    for (phase, &rise) in PHASES.iter().zip(rises) {
+        requests[t_cycle(*phase)] |= rise & INT_MASK;
+    }
+    requests
+}
+
+/// Ceres at the boundary of its M-cycle: what a read of IF reads, and the
+/// interrupts an entry chooses from.
+pub(crate) fn ceres_boundary(ints: &Interrupts, access: Access) -> (Option<u8>, u8) {
+    let read = matches!(access, Access::ReadIf).then(|| ints.read_if());
+    let queue = ints.read_ie() & INT_MASK & ints.read_if() & INT_MASK;
+    (read, queue)
+}
+
+/// Ceres's T-cycle `t` (0 to 3): its requests, then the IF write after the
+/// first and the acknowledge after the second.
+pub(crate) fn ceres_t_cycle(
+    ints: &mut Interrupts,
+    access: Access,
+    t: usize,
+    request: u8,
+    queue: u8,
+) {
+    ints.ifr |= request;
+    match access {
+        Access::WriteIf(val) if t == 0 => ints.write_if(val),
+        Access::Entry if t == 1 && queue != 0 => ints.acknowledge_interrupt(lowest(queue)),
+        _ => {}
+    }
+}
+
 /// Ceres's M-cycle: the access at the boundary, the requests of each
 /// T-cycle, the IF write after the first and the acknowledge after the
 /// second.
@@ -128,20 +169,10 @@ fn ceres_m_cycle(
     access: Access,
     rises: &[u8; 8],
 ) -> (Option<u8>, Option<u8>) {
-    let mut requests = [0; 4];
-    for (phase, &rise) in PHASES.iter().zip(rises) {
-        requests[t_cycle(*phase)] |= rise & INT_MASK;
-    }
-    let read = matches!(access, Access::ReadIf).then(|| ints.read_if());
-    let queue = ints.read_ie() & INT_MASK & ints.read_if() & INT_MASK;
+    let (read, queue) = ceres_boundary(ints, access);
     let taken = matches!(access, Access::Entry).then_some(lowest(queue));
-    for (t, &request) in requests.iter().enumerate() {
-        ints.ifr |= request;
-        match access {
-            Access::WriteIf(val) if t == 0 => ints.write_if(val),
-            Access::Entry if t == 1 && queue != 0 => ints.acknowledge_interrupt(lowest(queue)),
-            _ => {}
-        }
+    for (t, &request) in requests(rises).iter().enumerate() {
+        ceres_t_cycle(ints, access, t, request, queue);
     }
     (read, taken)
 }

@@ -1,5 +1,5 @@
 #[cfg(kani)]
-mod netlist_proofs;
+pub(crate) mod netlist_proofs;
 #[cfg(kani)]
 mod proofs;
 mod timer;

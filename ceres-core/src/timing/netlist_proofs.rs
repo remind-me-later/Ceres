@@ -16,11 +16,14 @@
 //! same read and the same interrupt on both sides, and leaves them related.
 
 use super::timer::{Clock, TAC_CLOCK, TAC_ENABLE_B, TimerHost};
+use crate::interrupts::Interrupts;
 
-/// A DMG in single speed that counts the timer interrupts.
-struct DmgHost {
-    serial_div_mask: u16,
-    timer_interrupts: u32,
+/// A DMG in single speed that counts the timer interrupts, and requests them
+/// in IF as the machine does.
+pub(crate) struct DmgHost {
+    pub(crate) serial_div_mask: u16,
+    pub(crate) timer_interrupts: u32,
+    pub(crate) ints: Interrupts,
 }
 
 impl TimerHost for DmgHost {
@@ -38,6 +41,7 @@ impl TimerHost for DmgHost {
 
     fn request_timer_interrupt(&mut self) {
         self.timer_interrupts += 1;
+        self.ints.request_timer();
     }
 
     fn serial_div_mask(&self) -> u16 {
@@ -56,7 +60,7 @@ impl TimerHost for DmgHost {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Reg {
+pub(crate) enum Reg {
     Div,
     Tima,
     Tma,
@@ -64,7 +68,7 @@ enum Reg {
 }
 
 #[derive(Clone, Copy)]
-enum Access {
+pub(crate) enum Access {
     None,
     Read(Reg),
     Write(Reg, u8),
@@ -79,7 +83,7 @@ fn any_reg() -> Reg {
     }
 }
 
-fn any_access() -> Access {
+pub(crate) fn any_access() -> Access {
     match kani::any::<u8>() % 3 {
         0 => Access::None,
         1 => Access::Read(any_reg()),
@@ -99,8 +103,8 @@ enum Phase {
 }
 
 /// The netlist's divider and timer, between phases.
-#[derive(Clone, Copy)]
-struct NetTimer {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct NetTimer {
     /// The divider: M-cycles.
     count: u16,
     tima: u8,
@@ -222,7 +226,7 @@ impl NetTimer {
 
     /// An M-cycle: phases B to H with the access, then the next A edge.
     /// Returns what a read reads and whether the interrupt was requested.
-    fn m_cycle(&mut self, access: Access) -> (Option<u8>, bool) {
+    pub(crate) fn m_cycle(&mut self, access: Access) -> (Option<u8>, bool) {
         for phase in [
             Phase::B,
             Phase::C,
@@ -242,11 +246,22 @@ impl NetTimer {
         self.edge_a();
         (read, !before && self.int_timer)
     }
+
+    /// Whether phases B to D leave the timer as it is: then the M-cycle can
+    /// as well be cut at the start of E, where ceres's begins, as at the
+    /// start of B.
+    pub(crate) fn quiet_until_e(&self, access: Access) -> bool {
+        let mut net = *self;
+        for phase in [Phase::B, Phase::C, Phase::D] {
+            net.phase(phase, access);
+        }
+        net == *self
+    }
 }
 
-/// Ceres's M-cycle: the access, then four T-cycles.
-fn ceres_m_cycle(clock: &mut Clock, host: &mut DmgHost, access: Access) -> (Option<u8>, bool) {
-    let read = match access {
+/// Ceres's access, at the start of its M-cycle: what a read reads.
+pub(crate) fn ceres_access(clock: &mut Clock, host: &mut DmgHost, access: Access) -> Option<u8> {
+    match access {
         Access::None => None,
         Access::Read(Reg::Div) => Some(clock.read_div()),
         Access::Read(Reg::Tima) => Some(clock.tima()),
@@ -268,13 +283,24 @@ fn ceres_m_cycle(clock: &mut Clock, host: &mut DmgHost, access: Access) -> (Opti
             clock.write_tac(host, val);
             None
         }
-    };
+    }
+}
+
+/// Ceres's T-cycle.
+pub(crate) fn ceres_t_cycle(clock: &mut Clock, host: &mut DmgHost) {
+    clock.run(host, 1);
+}
+
+/// Ceres's M-cycle: the access, then four T-cycles.
+fn ceres_m_cycle(clock: &mut Clock, host: &mut DmgHost, access: Access) -> (Option<u8>, bool) {
+    let read = ceres_access(clock, host, access);
     let before = host.timer_interrupts;
     for t in 0..4 {
         let interrupts = host.timer_interrupts;
-        clock.run(host, 1);
+        ceres_t_cycle(clock, host);
         // The netlist requests it at the A edge, which IF sees in the third
-        // or fourth T-cycle (`interrupts/netlist_proofs.rs`).
+        // T-cycle (`interrupts/netlist_proofs.rs`; `netlist_proofs.rs` joins
+        // the two).
         assert!(
             host.timer_interrupts == interrupts || t >= 2,
             "the interrupt comes too early"
@@ -284,7 +310,7 @@ fn ceres_m_cycle(clock: &mut Clock, host: &mut DmgHost, access: Access) -> (Opti
 }
 
 /// The states match: what ceres keeps for the netlist's flip-flops.
-fn related(net: &NetTimer, clock: &Clock) -> bool {
+pub(crate) fn related(net: &NetTimer, clock: &Clock) -> bool {
     let same_regs = clock.div == net.count.wrapping_mul(4)
         && clock.tma == net.tma
         && clock.tac & 7 == net.tac
@@ -315,7 +341,7 @@ fn related(net: &NetTimer, clock: &Clock) -> bool {
     same_regs && timer
 }
 
-fn any_net_timer() -> NetTimer {
+pub(crate) fn any_net_timer() -> NetTimer {
     let count: u16 = kani::any();
     let tac = kani::any::<u8>() & 7;
     NetTimer {
@@ -334,7 +360,7 @@ fn any_net_timer() -> NetTimer {
 }
 
 /// The ceres timer that `related` matches with `net`.
-fn ceres_for(net: &NetTimer) -> Clock {
+pub(crate) fn ceres_for(net: &NetTimer) -> Clock {
     let (tima, pending, countdown) = if net.int_timer {
         (net.tma, 5, 0)
     } else if net.bit7_before && net.tima & 0x80 == 0 {
@@ -354,7 +380,7 @@ fn ceres_for(net: &NetTimer) -> Clock {
 }
 
 /// Where ceres parts from the netlist: each is a fact of `doc/facts.toml`.
-fn known_difference(net: &NetTimer, access: Access) -> bool {
+pub(crate) fn known_difference(net: &NetTimer, access: Access) -> bool {
     // 1. @fact tima-reload-tick
     //    A tick between an overflow and the end of the reload is lost: TIMA
     //    loads TMA through the M-cycle after the overflow, from the A edge
@@ -402,6 +428,7 @@ fn netlist_timer_bisimulation() {
     let mut host = DmgHost {
         serial_div_mask: kani::any(),
         timer_interrupts: 0,
+        ints: Interrupts::default(),
     };
     let reloading = net.int_timer;
     let (net_read, net_irq) = net.m_cycle(access);

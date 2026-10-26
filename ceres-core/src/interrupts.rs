@@ -1,5 +1,5 @@
 #[cfg(kani)]
-mod netlist_proofs;
+pub(crate) mod netlist_proofs;
 
 // IF and IE bits, by priority: the vector of bit n is 0x40 + 8 * n.
 const INT_VBLANK_B: u8 = 0x01;
