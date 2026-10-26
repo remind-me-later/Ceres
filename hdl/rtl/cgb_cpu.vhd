@@ -1,10 +1,15 @@
 -- SPDX-License-Identifier: MIT
 --
--- The DMG-CPU B, the Game Boy's chip: its blocks wired together, behind the
--- chip's pins. Outside it are the crystal, the cartridge (ROM, RAM and its
--- MBC) and the work RAM on the cartridge bus, the VRAM chip on the VRAM
--- bus, the buttons, the link port, the LCD and the amplifier (see
--- ../board/gameboy.vhd).
+-- The CPU CGB, the Game Boy Color's chip: its blocks wired together, behind
+-- the chip's pins. Outside it are the crystal, the cartridge (ROM, RAM and
+-- its MBC) and the work RAM on the cartridge bus (with three more lines for
+-- its banks), the buttons, the link port, the LCD and the amplifier (see
+-- ../board/gameboy.vhd). The VRAM is inside.
+--
+-- This is the DMG-CPU B's model (branch hdl) changed into the CGB's: the
+-- blocks are the DMG's, which the netlist describes, and what the CGB does
+-- differently comes from tests, emulators and documents, each tagged where it
+-- is (`@hw inferred:`); ../cgb.md lists the differences.
 --
 -- Inside, the CPU core reaches the other blocks through the chip's address
 -- bus (addr) and data bus (data): each block decodes its own addresses from
@@ -20,10 +25,16 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.clocking.all;
+use work.revisions.all;
 
-entity dmg_cpu_b is
+entity cgb_cpu is
 	generic (
-		BOOTROM : string;  -- the file with the boot ROM's 256 bytes
+		BOOTROM  : string;                -- the file with the boot ROM's 2304 bytes
+		REVISION : revision_t := CGB_E;
+
+		-- Whether the VRAM starts with zeros (as the boot ROM leaves it)
+		-- instead of arbitrary bytes
+		VRAM_ZERO : boolean := false;
 
 		-- Without the four sound channels (the registers of the sound
 		-- controller stay) the simulation runs about 15 % faster; the
@@ -45,11 +56,7 @@ entity dmg_cpu_b is
 		d          : inout std_logic_vector(7 downto 0);
 		rd_n, wr_n : inout std_logic;
 		cs_n       : out   std_ulogic;  -- A000 to FDFF
-
-		-- The VRAM bus
-		ma                  : out   std_ulogic_vector(12 downto 0);
-		md                  : inout std_logic_vector(7 downto 0);
-		mcs_n, mrd_n, mwr_n : inout std_logic;
+		wram_bank  : out   std_ulogic_vector(2 downto 0);  -- A12 to A14 of the work RAM
 
 		-- The link port
 		sin  : inout std_logic;
@@ -62,7 +69,7 @@ entity dmg_cpu_b is
 
 		-- The LCD
 		cpg, cp, cpl, fr, st, s : out std_ulogic;
-		ld                      : out std_ulogic_vector(1 downto 0);  -- the pixel
+		rgb                     : out std_ulogic_vector(14 downto 0);  -- the pixel: red low, blue high
 
 		-- Sound: the cartridge's (VIN), and the right and left outputs, in
 		-- volts
@@ -71,7 +78,7 @@ entity dmg_cpu_b is
 	);
 end entity;
 
-architecture rtl of dmg_cpu_b is
+architecture rtl of cgb_cpu is
 	-- The CPU core
 	signal read, write, ctl_mreq     : std_ulogic;
 	signal mreq, fexx_ffxx           : std_ulogic;
@@ -93,7 +100,10 @@ architecture rtl of dmg_cpu_b is
 	signal cpu_rd, cpu_wr, non_vram_mreq                        : std_ulogic;
 	signal t1_only, t2_only, test_reset                         : std_ulogic;
 	signal ff60                                                 : std_ulogic_vector(1 downto 0);
-	signal boot_sel                                             : std_ulogic;
+	signal boot_sel, boot_on                                    : std_ulogic;
+	signal cgb_mode, dmg_priority                               : std_ulogic;
+	signal clk4, double_speed, switch_wake                      : std_ulogic;
+	signal apu_div                                              : unsigned(15 downto 0);
 	signal int_timer, int_serial, int_jp, int_vbl, int_stat     : std_ulogic;
 	signal cpu_wakeup                                           : std_ulogic;
 	signal sin_drive, sout_test                                 : std_ulogic;
@@ -119,6 +129,10 @@ architecture rtl of dmg_cpu_b is
 	signal px                                                   : unsigned(7 downto 0);
 	signal rendering, fetch_read, fetch_hold, sprite_loaded     : std_ulogic;
 	signal render_ma                                            : std_logic_vector(12 downto 0);
+	signal render_bank, pixel_obj                               : std_ulogic;
+	signal pixel_palette                                        : std_ulogic_vector(2 downto 0);
+	signal pixel_colour                                         : std_ulogic_vector(1 downto 0);
+	signal vram_attr                                            : std_ulogic_vector(7 downto 0);
 	signal fetching, sprite_read, sprite_mrd                    : std_ulogic;
 	signal apu_reset, apu_phi, apu_test                         : std_ulogic;
 	signal ajer, ch1_1mhz, ch2_1mhz, ch3_2mhz, ch4_1mhz, khz512 : std_ulogic;
@@ -127,9 +141,13 @@ architecture rtl of dmg_cpu_b is
 	signal ch1_out, ch2_out, ch3_out, ch4_out                   : std_ulogic_vector(3 downto 0);
 
 	-- The VRAM bus inside the chip (the address and the data that the CPU,
-	-- the PPU and OAM DMA put on it)
-	signal vram_addr : std_logic_vector(12 downto 0);
-	signal vram_data : std_logic_vector(7 downto 0);
+	-- the PPU and OAM DMA put on it), and the wires to the VRAM (the DMG's
+	-- pins)
+	signal vram_addr           : std_logic_vector(13 downto 0);
+	signal vram_data           : std_logic_vector(7 downto 0);
+	signal ma                  : std_ulogic_vector(13 downto 0);
+	signal md                  : std_logic_vector(7 downto 0);
+	signal mcs_n, mrd_n, mwr_n : std_logic;
 
 	-- The bus keeper
 	signal kept : std_ulogic_vector(7 downto 0) := (others => '1');
@@ -151,7 +169,7 @@ begin
 		port map (
 			clk => clk_1mhz, exec_phase => exec_phase, data_phase => data_phase,
 			write_phase => clk_t4, pch_phase => pch_phase, sys_reset => cpu_sys_reset,
-			pwron_reset => reset, clk_ready => osc_stable, wake => cpu_wakeup, nmi => '0',
+			pwron_reset => reset, clk_ready => osc_stable, wake => cpu_wakeup or switch_wake, nmi => '0',
 			oe_n => t1_only, internal_access => fexx_ffxx, shadow_access => boot_slow,
 			shadow_override => t2_only, int => "000" & flags,
 			a => addr, d => data, ctl_mreq => ctl_mreq, mreq => mreq, rd => read, wr => write,
@@ -163,8 +181,8 @@ begin
 		port map (
 			ck1 => ck1, reset_pin_n => reset_n, t1 => t1, t2 => t2, phi => phi,
 			osc_ena => osc_ena, clk_ena => clk_ena, mreq => mreq, write => write,
-			test_reset => test_reset, div_16hz => div(15),
-			clk => clk, phase => phase,
+			test_reset => test_reset, div_16hz => div(15), double_speed => double_speed,
+			clk => clk, phase => phase, clk4 => clk4,
 			clk_1mhz => clk_1mhz, clk_t4 => clk_t4, data_phase => data_phase,
 			exec_phase => exec_phase, pch_phase => pch_phase, cpu_wr_sync => cpu_wr_sync,
 			cpu_ext_cs_en => cpu_ext_cs_en,
@@ -221,7 +239,29 @@ begin
 		)
 		port map (
 			reset2 => reset2, t2_only => t2_only,
-			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr, boot_sel => boot_sel
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			boot_sel => boot_sel, boot_on => boot_on
+		);
+
+	u_speed_switch : entity work.speed_switch
+		port map (
+			ck1 => ck1, reset2 => reset2, cgb_mode => cgb_mode, osc_ena => osc_ena,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			double_speed => double_speed, wake => switch_wake
+		);
+
+	u_cgb_mode : entity work.cgb_mode
+		port map (
+			reset2 => reset2, boot_on => boot_on,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			cgb_mode => cgb_mode, dmg_priority => dmg_priority
+		);
+
+	u_wram_bank : entity work.wram_bank
+		port map (
+			reset2 => reset2, cgb_mode => cgb_mode, boot_on => boot_on,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			a12_pin => a(12), bank_pins => wram_bank
 		);
 
 	u_high_ram : entity work.high_ram
@@ -252,16 +292,17 @@ begin
 			vram_to_oam => vram_to_oam
 		);
 
+	-- The PPU runs on the 4 MiHz clock, whatever the CPU's speed.
 	u_lcd_control : entity work.lcd_control
 		port map (
-			clk => clk, reset2 => reset2,
+			clk => clk4, reset2 => reset2,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			lcdc => lcdc, ppu_4mhz => ppu_4mhz, hard_reset => hard_reset, ppu_reset => ppu_reset
 		);
 
 	u_lcd_timing : entity work.lcd_timing
 		port map (
-			clk => clk, ppu_reset => ppu_reset, hard_reset => hard_reset, lcd_on => lcdc(7), div => div,
+			clk => clk4, ppu_reset => ppu_reset, hard_reset => hard_reset, lcd_on => lcdc(7), div => div,
 			mode2 => mode2, mode3 => mode3, mode0 => mode0,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			wuvu => wuvu, wosu => wosu, hclk => hclk, vclk => vclk, lx => lx, ly => ly, mode1 => mode1,
@@ -271,7 +312,7 @@ begin
 
 	u_oam_scan : entity work.oam_scan
 		port map (
-			clk => clk, ppu_reset => ppu_reset, wuvu => wuvu, wosu => wosu, vclk => vclk, ly => ly,
+			clk => clk4, ppu_reset => ppu_reset, wuvu => wuvu, wosu => wosu, vclk => vclk, ly => ly,
 			tall => lcdc(2), dma_run => dma_run, sprite_y => oam_even,
 			line_start => line_start, mode2 => mode2, scanning => scanning, ceno => ceno,
 			stop_scan => stop_scan, index => scan_index,
@@ -289,7 +330,7 @@ begin
 
 	u_oam : entity work.oam
 		port map (
-			clk => clk, hard_reset => hard_reset, clk_t4 => clk_t4, dma_phi => dma_phi,
+			clk => clk4, hard_reset => hard_reset, clk_t4 => clk_t4, dma_phi => dma_phi,
 			wuvu => wuvu, wosu => wosu,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			dma_run => dma_run, dma_addr => dma_addr(7 downto 0), dma_addr_ext => dma_addr_ext,
@@ -301,32 +342,69 @@ begin
 
 	u_render : entity work.render
 		port map (
-			clk => clk, ppu_reset => ppu_reset, hard_reset => hard_reset, hclk => hclk,
-			mode1 => mode1, ly => ly, lcdc => lcdc,
+			clk => clk4, ppu_reset => ppu_reset, hard_reset => hard_reset, hclk => hclk,
+			mode1 => mode1, ly => ly, lcdc => lcdc, cgb_mode => cgb_mode, dmg_priority => dmg_priority,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			line_start => line_start, stop_scan => stop_scan, ceno => ceno, x_match => x_match,
-			sprite_line => render_line, tile => oam_even, attributes => oam_odd, md => vram_data,
+			sprite_line => render_line, tile => oam_even, attributes => oam_odd, sprite_index => render_index,
+			md => vram_data, md_attr => vram_attr,
 			mode3 => mode3, mode0 => mode0, px => px,
 			rendering => rendering, fetch_read => fetch_read, fetch_hold => fetch_hold,
 			sprite_loaded => sprite_loaded,
-			ma => render_ma, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
-			cp => cp, st => st, ld => ld
+			ma => render_ma, bank => render_bank, fetching => fetching, sprite_read => sprite_read,
+			sprite_mrd => sprite_mrd, cp => cp, st => st,
+			pixel_obj => pixel_obj, pixel_palette => pixel_palette, pixel_colour => pixel_colour
+		);
+
+	u_colour_palettes : entity work.colour_palettes
+		port map (
+			reset2 => reset2, cgb_mode => cgb_mode, boot_on => boot_on, mode3 => mode3,
+			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
+			pixel_obj => pixel_obj, pixel_palette => pixel_palette, pixel_colour => pixel_colour,
+			rgb => rgb
 		);
 
 	u_vram_bus : entity work.vram_bus
 		port map (
-			hard_reset => hard_reset, clk_t4 => clk_t4, cpu_wr_sync => cpu_wr_sync,
+			hard_reset => hard_reset, reset2 => reset2, cgb_mode => cgb_mode,
+			clk_t4 => clk_t4, cpu_wr_sync => cpu_wr_sync,
 			cpu_ext_cs_en => cpu_ext_cs_en, t1_only => t1_only,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, write => write, non_vram_mreq => non_vram_mreq,
 			vram_to_oam => vram_to_oam, dma_addr => dma_addr(12 downto 0),
 			mode3 => mode3, fetching => fetching, sprite_read => sprite_read, sprite_mrd => sprite_mrd,
-			render_ma => render_ma, ma => vram_addr, md => vram_data,
+			render_ma => render_ma, render_bank => render_bank, ma => vram_addr, md => vram_data,
 			ma_pins => ma, md_pins => md, mcs_n => mcs_n, mrd_n => mrd_n, mwr_n => mwr_n
 		);
 
+	u_video_ram : entity work.video_ram
+		generic map (
+			ZERO => VRAM_ZERO
+		)
+		port map (
+			ma => ma, md => md, mcs_n => mcs_n, mrd_n => mrd_n, mwr_n => mwr_n, md_attr => vram_attr
+		);
+
+	-- The DMG's board keeps the VRAM's data and control lines; so do these
+	-- wires.
+	md_keeper : entity work.keeper generic map (WIDTH => 8) port map (lines => md);
+	controls_keeper : entity work.keeper
+		generic map (
+			WIDTH => 3
+		)
+		port map (
+			lines(0) => mrd_n, lines(1) => mwr_n, lines(2) => mcs_n
+		);
+
+	-- The APU's dividers run on the 4 MiHz clock, and its frame sequencer
+	-- takes the divider's bit that ticks at 512 Hz in either speed (DIV bit
+	-- 4, or 5 in double speed); its registers are the CPU's.
+	-- @hw inferred: Pan Docs ("Audio": APU ticks do not change with the
+	-- speed; "Audio details": DIV bit 5 in double speed)
+	apu_div <= shift_right(div, 1) when double_speed = '1' else div;
+
 	u_apu_control : entity work.apu_control
 		port map (
-			clk => clk, reset2 => reset2, data_phase => data_phase, clk_t4 => clk_t4, div => div,
+			clk => clk4, reset2 => reset2, data_phase => data_phase, clk_t4 => clk_t4, div => apu_div,
 			t1_only => t1_only,
 			addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 			apu_reset => apu_reset, apu_phi => apu_phi, test => apu_test,
@@ -357,7 +435,7 @@ begin
 
 		u_apu_ch3 : entity work.apu_ch3
 			port map (
-				clk => clk, apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, pch_phase => pch_phase,
+				clk => clk4, apu_reset => apu_reset, apu_phi => apu_phi, clk_t4 => clk_t4, pch_phase => pch_phase,
 				ajer => ajer, ch3_2mhz => ch3_2mhz, hz256 => hz256, test => apu_test,
 				addr => addr, data => data, data_out => data, cpu_rd => cpu_rd, cpu_wr => cpu_wr,
 				active => apu_active(3), dac_on => apu_dac(3), output => ch3_out

@@ -1,11 +1,16 @@
 -- SPDX-License-Identifier: MIT
 --
--- The VRAM bus: the pins MA0 to MA12, MD0 to MD7, /MCS, /MRD and /MWR to
--- the VRAM chip, and who addresses VRAM: the CPU (outside mode 3), OAM DMA,
--- or the PPU's fetches.
+-- The VRAM bus: MA0 to MA13, MD0 to MD7, /MCS, /MRD and /MWR to the VRAM,
+-- and who addresses VRAM: the CPU (outside mode 3), OAM DMA, or the PPU's
+-- fetches. And VBK (FF4F), the bank of VRAM that the CPU sees.
 --
 -- @hw die: dmg-schematics, category ppu-vram (sheet "VRAM interface");
 -- checked against dmg-sim (../check/chip_tb.vhd).
+-- @hw inferred: the CGB's VRAM has two banks of 8 KiB, and its chip keeps
+-- them inside (the DMG's pins become wires to it). MA13 is the bank: VBK's
+-- for the CPU and for OAM DMA, the fetcher's for the PPU. VBK takes writes
+-- in the CGB's mode only, and reads back on any CGB (Pan Docs "FF4F — VBK";
+-- SameBoy's GB_IO_VBK).
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -15,6 +20,8 @@ use work.clocking.all;
 entity vram_bus is
 	port (
 		hard_reset    : in std_ulogic;
+		reset2        : in std_ulogic;
+		cgb_mode      : in std_ulogic;
 		clk_t4        : in std_ulogic;
 		cpu_wr_sync   : in std_ulogic;
 		cpu_ext_cs_en : in std_ulogic;
@@ -38,12 +45,13 @@ entity vram_bus is
 		sprite_read : in std_ulogic;
 		sprite_mrd  : in std_ulogic;
 		render_ma   : in std_logic_vector(12 downto 0);
+		render_bank : in std_ulogic;  -- the bank the fetcher reads
 
-		ma : inout std_logic_vector(12 downto 0);  -- the address inside the chip
+		ma : inout std_logic_vector(13 downto 0);  -- the address inside the chip
 		md : inout std_logic_vector(7 downto 0);   -- the data inside the chip
 
-		-- Pins
-		ma_pins : out   std_ulogic_vector(12 downto 0);
+		-- To the VRAM (pins on the DMG)
+		ma_pins : out   std_ulogic_vector(13 downto 0);
 		md_pins : inout std_logic_vector(7 downto 0);
 		mcs_n   : inout std_logic;
 		mrd_n   : inout std_logic;
@@ -64,7 +72,23 @@ architecture rtl of vram_bus is
 	signal reading   : std_ulogic;  -- racu: nobody reads VRAM
 	signal idle      : std_ulogic;  -- sutu: nobody uses VRAM
 	signal writing   : std_ulogic;  -- sohy: the CPU does not write VRAM
+	signal write_vbk : std_ulogic;
+	signal vbk       : std_ulogic := '0';
+	signal render_bank_settled : std_ulogic := '0';
 begin
+	-- VBK: the CGB's mode only. Latched as the write strobe falls, as the
+	-- DMG's registers are.
+	write_vbk <= '1' when cpu_wr_sync = '1' and addr = x"FF4F" else '0';
+
+	vbk_reg : process (write_vbk, reset2)
+	begin
+		if reset2 = '1' then
+			vbk <= '0';
+		elsif falling_edge(write_vbk) and cgb_mode = '1' then
+			vbk <= to_x01(data(0));
+		end if;
+	end process;
+
 	-- Test mode: T1 alone makes /MCS, /MRD and /MWR inputs, every other time.
 	-- @hw die: SOTO (dffr), SYCY, TUTO
 	soto_ff : process (t1_only, hard_reset)
@@ -93,17 +117,18 @@ begin
 	address : process (all)
 	begin
 		if vram_to_oam = '0' and mode3 = '0' then
-			ma <= addr(12 downto 0);
+			ma <= vbk & addr(12 downto 0);
 		elsif vram_to_oam = '1' then
-			ma <= dma_addr;
+			ma <= vbk & dma_addr;
 		elsif render_settled(0) /= 'Z' then
-			ma <= render_settled;
+			ma <= render_bank_settled & render_settled;
 		end if;
 	end process;
 
 	-- The drivers of the PPU's addresses take a moment: a glitch shorter
 	-- than that does not reach the lines, which keep their value.
-	render_settled <= render_ma after 2 ns;
+	render_settled      <= render_ma after 2 ns;
+	render_bank_settled <= render_bank after 2 ns;
 	ma_pins <= to_x01(ma);
 
 	-- The data: the CPU's while it writes VRAM, the pins' otherwise.
@@ -114,7 +139,9 @@ begin
 
 	-- The CPU reads VRAM in phases G and H.
 	-- @hw die: TYVY SEBY, RUGA..TOKU (not_if1)
-	data_out <= to_x01(md) when cpu_vram = '1' and cpu_rd = '1' and clk_t4 = '1' else (others => 'Z');
+	data_out <= to_x01(md) when cpu_vram = '1' and cpu_rd = '1' and clk_t4 = '1' else
+	            "1111111" & vbk when cpu_rd = '1' and addr = x"FF4F" else
+	            (others => 'Z');
 
 	-- /MCS is low while anyone uses VRAM; /MRD unless the CPU writes it, or
 	-- in mode 3, unless the PPU reads it; /MWR while the CPU writes it, in

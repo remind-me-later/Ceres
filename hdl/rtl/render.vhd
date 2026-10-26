@@ -14,6 +14,21 @@
 -- ppu-window, ppu-bgfifo, ppu-objfifo, ppu-mux, ppu-pal, the sprite fetch
 -- of ppu-ycomp, the sprite shifters of ppu-xcomp, and the pixel counter of
 -- ppu-stat; checked against dmg-sim (../check/chip_tb.vhd).
+--
+-- The CGB adds the colours (@hw inferred, each where it is):
+-- - the tile map's attributes, in VRAM's bank 1 at the map's address, read
+--   with the tile number (VRAM has a second data bus for bank 1): the tile's
+--   bank, its flips in X and Y, its palette and its priority over sprites;
+-- - a sprite's CGB attributes in OAM: its bank and its palette (in the
+--   CGB's mode only: the DMG's mode keeps the DMG's bits);
+-- - priority between sprites by their index in OAM, unless OPRI says by X
+--   (as the DMG, where the sprite fetched first wins);
+-- - LCDC bit 0, in the CGB's mode, turns off the priorities over sprites
+--   instead of the background;
+-- - the pixel goes out as a palette and a colour, which ../colour_palettes.vhd
+--   turns into 15 bits: in the CGB's mode the attributes' palette and the
+--   pixel's colour; in the DMG's, BGP's, OBP0's and OBP1's shade, in the
+--   background's palette 0 and the sprites' palettes 0 and 1.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -31,6 +46,9 @@ entity render is
 		ly         : in unsigned(7 downto 0);
 		lcdc       : in std_ulogic_vector(7 downto 0);
 
+		cgb_mode     : in std_ulogic;  -- the CGB's mode, not the DMG's
+		dmg_priority : in std_ulogic;  -- sprites take priority by X (OPRI)
+
 		-- The CPU's bus
 		addr   : in    std_ulogic_vector(15 downto 0);
 		data   : in std_logic_vector(7 downto 0);
@@ -46,8 +64,10 @@ entity render is
 		sprite_line : in std_logic_vector(3 downto 0);
 		tile       : in std_ulogic_vector(7 downto 0);  -- OAM's even byte: the sprite's tile
 		attributes : in std_ulogic_vector(7 downto 0);  -- OAM's odd byte
+		sprite_index : in std_logic_vector(5 downto 0);  -- the fetched sprite's index in OAM
 
-		md : in std_logic_vector(7 downto 0);  -- VRAM's data
+		md      : in std_logic_vector(7 downto 0);   -- VRAM's data
+		md_attr : in std_ulogic_vector(7 downto 0);  -- VRAM's bank 1 at the same address
 
 		mode3 : out std_ulogic;
 		mode0 : out std_ulogic;
@@ -61,6 +81,7 @@ entity render is
 
 		-- The VRAM addresses of the fetches, and when they apply
 		ma          : out std_logic_vector(12 downto 0);
+		bank        : out std_ulogic;  -- VRAM's bank, for a tile's bytes
 		fetching    : out std_ulogic;  -- the background or the window
 		sprite_read : out std_ulogic;  -- a sprite
 		sprite_mrd  : out std_ulogic;  -- ... and reads VRAM now
@@ -68,7 +89,11 @@ entity render is
 		-- LCD pins
 		cp : out std_ulogic;  -- the pixel clock
 		st : out std_ulogic;  -- the line's start
-		ld : out std_ulogic_vector(1 downto 0)  -- the pixel
+
+		-- The pixel, for the palettes
+		pixel_obj     : out std_ulogic;                     -- a sprite's
+		pixel_palette : out std_ulogic_vector(2 downto 0);
+		pixel_colour  : out std_ulogic_vector(1 downto 0)
 	);
 end entity;
 
@@ -107,6 +132,9 @@ architecture rtl of render is
 	signal bg_low              : std_ulogic_vector(7 downto 0) := (others => '0');
 	signal bg_shift_a          : std_ulogic_vector(7 downto 0) := (others => '0');
 	signal bg_shift_b          : std_ulogic_vector(7 downto 0) := (others => '0');
+	signal bg_attr             : std_ulogic_vector(7 downto 0) := (others => '0');
+	signal bg_palette          : std_ulogic_vector(2 downto 0) := (others => '0');
+	signal bg_priority         : std_ulogic := '0';
 
 	-- The window
 	signal wy_match, wxy_match : std_ulogic;
@@ -148,14 +176,22 @@ architecture rtl of render is
 	signal sp_a, sp_b          : std_ulogic_vector(7 downto 0) := (others => '0');
 	signal sp_palette          : std_ulogic_vector(7 downto 0) := (others => '0');
 	signal sp_priority         : std_ulogic_vector(7 downto 0) := (others => '0');
+	type palettes_t is array (0 to 7) of std_ulogic_vector(2 downto 0);
+	type indices_t is array (0 to 7) of unsigned(5 downto 0);
+	signal sp_cgb_palette      : palettes_t := (others => (others => '0'));
+	signal sp_index            : indices_t := (others => (others => '0'));
+	signal cgb_palette         : std_ulogic_vector(2 downto 0);
 	signal sprite_on           : std_ulogic_vector(7 downto 0);
+	signal before              : std_ulogic_vector(7 downto 0);  -- the fetched sprite comes first in OAM
 
 	-- The pixel
 	signal bg_a, bg_b          : std_ulogic;
 	signal obj_a, obj_b        : std_ulogic;
+	signal bg_shown            : std_ulogic;
 	signal show_sprite         : std_ulogic;
 	signal pixel               : std_ulogic_vector(1 downto 0);
 	signal palette             : std_ulogic_vector(7 downto 0);
+	signal shade               : std_ulogic_vector(1 downto 0);
 begin
 	----------------------------------------------------------------------
 	-- The registers: latches, open while the CPU writes them.
@@ -384,15 +420,40 @@ begin
 		end if;
 	end process;
 
+	-- The tile's attributes, from VRAM's bank 1, latched with the tile
+	-- number.
+	-- @hw inferred: SameBoy reads them in the same T-cycle as the tile
+	-- number on any CGB ("the CGB has a 16-bit data bus for the VRAM"); the
+	-- latch is a guess, the low byte's latch in count 1
+	attr_latch : process (all)
+	begin
+		if myso = '1' and fetch_count = 1 then
+			bg_attr <= to_x01(md_attr);
+		end if;
+	end process;
+
 	-- The background shifter: two shift registers, loaded with a tile's
-	-- bit planes while the fetcher restarts, and shifted at clkpipe.
+	-- bit planes while the fetcher restarts, and shifted at clkpipe. A tile
+	-- flipped in X loads mirrored; its palette and priority load with it
+	-- (the shifter holds one tile at a time).
 	-- @hw die: MYDE NOZO MOJU MACU NEPO MODU NEDA PYBO, TOMY TACA SADY RYSA
 	-- SOBO SETU RALU SOHU (dffsr), LUXA LOZE
-	bg_shifter : process (clkpipe, fetch_reset, bg_low, bg_tile)
+	-- @hw inferred: the flip, the palette and the priority (Pan Docs "BG Map
+	-- Attributes"; where they load is a guess)
+	bg_shifter : process (clkpipe, fetch_reset, bg_low, bg_tile, bg_attr)
 	begin
 		if fetch_reset = '1' then
-			bg_shift_a <= bg_low;
-			bg_shift_b <= bg_tile;
+			if bg_attr(5) = '1' then
+				for i in 0 to 7 loop
+					bg_shift_a(i) <= bg_low(7 - i);
+					bg_shift_b(i) <= bg_tile(7 - i);
+				end loop;
+			else
+				bg_shift_a <= bg_low;
+				bg_shift_b <= bg_tile;
+			end if;
+			bg_palette  <= bg_attr(2 downto 0);
+			bg_priority <= bg_attr(7);
 		elsif rising_edge(clkpipe) then
 			bg_shift_a <= bg_shift_a(6 downto 0) & '0' after tco;
 			bg_shift_b <= bg_shift_b(6 downto 0) & '0' after tco;
@@ -684,29 +745,46 @@ begin
 	-- @hw die: NYLU PEFU NATY PYJO VARE WEBA VANU VUPY, NURO MASO LEFE LESU
 	-- WYHO WORA VAFO WUFY (dffsr); the palette and priority shifters (ppu-
 	-- xcomp); MEFU..WOPE LESY..: sprite_on
+	--
+	-- With priority by OAM index, a pixel of the fetched sprite that is not
+	-- transparent also loads over one of a sprite with a greater index; each
+	-- pixel keeps its sprite's index for that, and its CGB palette.
+	-- @hw inferred: SameBoy (fifo_overlay_object_row); Pan Docs ("Object
+	-- Priority and Conflicts")
 	free_pixels : for i in 0 to 7 generate
-		sprite_on(i) <= loaded and not sp_a(i) and not sp_b(i);
+		before(i)    <= '1' when to_x01(unsigned(sprite_index)) < sp_index(i) else '0';
+		sprite_on(i) <= loaded and ((not sp_a(i) and not sp_b(i))
+		                            or (not dmg_priority and (sp_low_a(i) or sp_low_b(i)) and before(i)));
 	end generate;
 
-	sprite_shifter : process (clkpipe, sprite_on, sp_low_a, sp_low_b, attributes)
+	-- The CGB's palette: in the CGB's mode only.
+	cgb_palette <= attributes(2 downto 0) when cgb_mode = '1' else "000";
+
+	sprite_shifter : process (clkpipe, sprite_on, sp_low_a, sp_low_b, attributes, cgb_palette, sprite_index)
 	begin
 		for i in 0 to 7 loop
 			if sprite_on(i) = '1' then
-				sp_a(i)        <= sp_low_a(i);
-				sp_b(i)        <= sp_low_b(i);
-				sp_palette(i)  <= attributes(4);
-				sp_priority(i) <= attributes(7);
+				sp_a(i)           <= sp_low_a(i);
+				sp_b(i)           <= sp_low_b(i);
+				sp_palette(i)     <= attributes(4);
+				sp_priority(i)    <= attributes(7);
+				sp_cgb_palette(i) <= cgb_palette;
+				sp_index(i)       <= to_x01(unsigned(sprite_index));
 			elsif rising_edge(clkpipe) then
 				if i = 0 then
-					sp_a(i)        <= '0' after tco;
-					sp_b(i)        <= '0' after tco;
-					sp_palette(i)  <= '0' after tco;
-					sp_priority(i) <= '1' after tco;
+					sp_a(i)           <= '0' after tco;
+					sp_b(i)           <= '0' after tco;
+					sp_palette(i)     <= '0' after tco;
+					sp_priority(i)    <= '1' after tco;
+					sp_cgb_palette(i) <= "000" after tco;
+					sp_index(i)       <= (others => '1') after tco;
 				else
-					sp_a(i)        <= sp_a(i - 1) after tco;
-					sp_b(i)        <= sp_b(i - 1) after tco;
-					sp_palette(i)  <= sp_palette(i - 1) after tco;
-					sp_priority(i) <= sp_priority(i - 1) after tco;
+					sp_a(i)           <= sp_a(i - 1) after tco;
+					sp_b(i)           <= sp_b(i - 1) after tco;
+					sp_palette(i)     <= sp_palette(i - 1) after tco;
+					sp_priority(i)    <= sp_priority(i - 1) after tco;
+					sp_cgb_palette(i) <= sp_cgb_palette(i - 1) after tco;
+					sp_index(i)       <= sp_index(i - 1) after tco;
 				end if;
 			end if;
 		end loop;
@@ -719,26 +797,47 @@ begin
 	-- POBU NELO NURA, VYRO VATA VOLO VUGO WALY WUFU, LEDO LARU LYKY LOPU MUFA
 	-- MOKA; PERO PATY REMY RAVO LD0 LD1
 	----------------------------------------------------------------------
-	bg_a  <= bg_shift_a(7) and lcdc(0);
-	bg_b  <= bg_shift_b(7) and lcdc(0);
+	-- In the CGB's mode, LCDC bit 0 does not hide the background.
+	-- @hw inferred: Pan Docs ("LCDC.0 — BG and Window enable/priority");
+	-- SameBoy
+	bg_shown <= lcdc(0) or cgb_mode;
+	bg_a  <= bg_shift_a(7) and bg_shown;
+	bg_b  <= bg_shift_b(7) and bg_shown;
 	obj_a <= sp_a(7) and lcdc(1);
 	obj_b <= sp_b(7) and lcdc(1);
 
 	-- A sprite's A plane is the tile's high byte (read second) and B the low
 	-- one (read first), the other way round from the background's A and B:
 	-- the palette picks 2*A + B (the cells of OBP0 and OBP1).
-	show_sprite <= (obj_a or obj_b) and not (sp_priority(7) and (bg_a or bg_b));
+	-- A sprite is behind a background pixel that is not 0 when its own
+	-- priority bit or the tile's says so; in the CGB's mode, not while LCDC
+	-- bit 0 is clear.
+	-- @hw inferred: the tile's priority and LCDC bit 0, Pan Docs ("BG-to-OBJ
+	-- Priority in CGB Mode"); SameBoy
+	show_sprite <= (obj_a or obj_b) and not ((sp_priority(7) or bg_priority) and lcdc(0) and (bg_a or bg_b));
 	pixel       <= obj_a & obj_b when show_sprite = '1' else bg_b & bg_a;
 
 	palette <= bgp when show_sprite = '0' else
 	           obp1 when sp_palette(7) = '1' else
 	           obp0;
 
-	with pixel select ld <=
+	with pixel select shade <=
 		palette(1 downto 0) when "00",
 		palette(3 downto 2) when "01",
 		palette(5 downto 4) when "10",
 		palette(7 downto 6) when others;
+
+	-- To the colour palettes: in the CGB's mode, the pixel and its palette;
+	-- in the DMG's, the DMG palettes' shade, in the background's palette 0 or
+	-- the sprites' palette 0 or 1.
+	-- @hw inferred: Pan Docs ("Compatibility palettes": BGP, OBP0 and OBP1
+	-- index into the CGB palettes); SameBoy
+	pixel_obj     <= show_sprite;
+	pixel_colour  <= pixel when cgb_mode = '1' else shade;
+	pixel_palette <= sp_cgb_palette(7) when cgb_mode = '1' and show_sprite = '1' else
+	                 bg_palette when cgb_mode = '1' else
+	                 "00" & sp_palette(7) when show_sprite = '1' else
+	                 "000";
 
 	----------------------------------------------------------------------
 	-- The VRAM addresses of the fetches.
@@ -755,14 +854,22 @@ begin
 		map_x := px_i + unsigned(scx);
 		map_y := ly + unsigned(scy);
 		ma    <= (others => 'Z');
+		bank  <= '0';
 		if tile_map_cycle = '1' and in_window = '0' then
 			ma <= "11" & lcdc(3) & std_logic_vector(map_y(7 downto 3)) & std_logic_vector(map_x(7 downto 3));
 		elsif tile_map_cycle = '1' and in_window = '1' then
 			ma <= "11" & lcdc(6) & std_logic_vector(win_y(7 downto 3)) & std_logic_vector(win_x);
 		elsif bit_plane_cycle = '1' and in_window = '0' then
-			ma <= (bg_tile(7) nor lcdc(4)) & bg_tile & std_logic_vector(map_y(2 downto 0)) & fetch_count(2);
+			-- A tile flipped in Y reads its rows from the bottom; its bank is
+			-- the attributes'.
+			-- @hw inferred: Pan Docs ("BG Map Attributes")
+			row(2 downto 0) := std_ulogic_vector(map_y(2 downto 0)) xor (2 downto 0 => bg_attr(6));
+			ma   <= (bg_tile(7) nor lcdc(4)) & bg_tile & std_logic_vector(row(2 downto 0)) & fetch_count(2);
+			bank <= bg_attr(3);
 		elsif bit_plane_cycle = '1' and in_window = '1' then
-			ma <= (bg_tile(7) nor lcdc(4)) & bg_tile & std_logic_vector(win_y(2 downto 0)) & fetch_count(2);
+			row(2 downto 0) := std_ulogic_vector(win_y(2 downto 0)) xor (2 downto 0 => bg_attr(6));
+			ma   <= (bg_tile(7) nor lcdc(4)) & bg_tile & std_logic_vector(row(2 downto 0)) & fetch_count(2);
+			bank <= bg_attr(3);
 		elsif sprite_cycles = '1' then
 			-- The stored line counts from the bottom: flipped in Y, it is the
 			-- row; otherwise its inverse is.
@@ -772,6 +879,9 @@ begin
 				sprite(0) := row(3);
 			end if;
 			ma <= '0' & sprite & row(2 downto 0) & vonu;
+			-- The CGB's mode only.
+			-- @hw inferred: Pan Docs ("Byte 3 — Attributes/Flags"); ceres
+			bank <= attributes(3) and cgb_mode;
 		end if;
 	end process;
 end architecture;

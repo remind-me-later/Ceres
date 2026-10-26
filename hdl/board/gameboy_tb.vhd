@@ -45,6 +45,7 @@ use std.env.finish;
 use work.clocking.all;
 use work.high_ram_types.all;
 use work.sm83_controls.all;
+use work.revisions.all;
 
 entity gameboy_tb is
 	generic (
@@ -60,8 +61,11 @@ entity gameboy_tb is
 		PIXELS      : string := "";
 		CUTS        : string := "";
 
+		-- The revision of the CGB's chip: CGB_C or CGB_E
+		REVISION : revision_t := CGB_E;
+
 		-- Without the sound channels, which are not simulated: faster (see
-		-- dmg_cpu_b)
+		-- cgb_cpu)
 		WITH_CHANNELS : boolean := true;
 
 		-- VRAM starting with zeros (see gameboy)
@@ -73,7 +77,7 @@ architecture run of gameboy_tb is
 	signal sin, sck : std_logic;
 	signal sout     : std_ulogic;
 	signal cpg, cp, cpl, fr, st, s : std_ulogic;
-	signal ld       : std_ulogic_vector(1 downto 0);
+	signal rgb      : std_ulogic_vector(14 downto 0);
 	signal so1, so2 : real;
 
 	signal booted : boolean := false;
@@ -104,6 +108,33 @@ architecture run of gameboy_tb is
 		return digits(n / 16 + 1) & digits(n mod 16 + 1);
 	end function;
 
+	-- An M-cycle's number, from the time since the CPU's first access: whole
+	-- M-cycles of the normal speed (952 ns, four periods of the 4 MiHz
+	-- clock), and ".5" for an M-cycle that starts in the second half of one,
+	-- which double speed has. Counting time, not the CPU's M-cycles, the
+	-- numbers stay ceres's (whose bus_trace counts 8 MiHz units) through a
+	-- speed switch and while the oscillator is stopped.
+	function mcycle_at(since : delay_length) return string is
+		constant half : delay_length := 476 ns;
+		variable n    : natural := (since + half / 2) / half;
+	begin
+		if n mod 2 = 1 then
+			return integer'image(n / 2) & ".5";
+		end if;
+		return integer'image(n / 2);
+	end function;
+
+	-- How far into phase H the traces look: in its middle, where the CPU's
+	-- address and data have settled (they take up to 40 ns), in a phase of
+	-- 119 ns, or of 59.5 ns in double speed.
+	function in_phase_h(double_speed : std_ulogic) return delay_length is
+	begin
+		if double_speed = '1' then
+			return 50 ns;
+		end if;
+		return 60 ns;
+	end function;
+
 	procedure end_with(result : string) is
 	begin
 		report "result: " & result & " (" & now_ms & ")";
@@ -113,11 +144,12 @@ architecture run of gameboy_tb is
 begin
 	u_gameboy : entity work.gameboy
 		generic map (
-			ROM => ROM, BOOTROM => BOOTROM, WITH_CHANNELS => WITH_CHANNELS, VRAM_ZERO => VRAM_ZERO
+			ROM => ROM, BOOTROM => BOOTROM, REVISION => REVISION, WITH_CHANNELS => WITH_CHANNELS,
+			VRAM_ZERO => VRAM_ZERO
 		)
 		port map (
 			sin => sin, sout => sout, sck => sck,
-			cpg => cpg, cp => cp, cpl => cpl, fr => fr, st => st, s => s, ld => ld,
+			cpg => cpg, cp => cp, cpl => cpl, fr => fr, st => st, s => s, rgb => rgb,
 			so1 => so1, so2 => so2
 		);
 
@@ -223,10 +255,10 @@ begin
 	end process;
 
 	-- The CPU's accesses, seen in the middle of phase H: the M-cycle's
-	-- address and the byte on the core's data bus, read or written. The
-	-- phases run on through HALT, which stops the core's clocks (no
-	-- data_phase then), so that M-cycles count time.
+	-- address and the byte on the core's data bus, read or written, numbered
+	-- by mcycle_at.
 	accesses : process
+		alias double_speed is << signal .gameboy_tb.u_gameboy.u_chip.double_speed : std_ulogic >>;
 		alias phase      is << signal .gameboy_tb.u_gameboy.u_chip.phase : phase_t >>;
 		alias data_phase is << signal .gameboy_tb.u_gameboy.u_chip.data_phase : std_ulogic >>;
 		alias c          is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.c : controls_t >>;
@@ -234,8 +266,8 @@ begin
 		alias db         is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.db : std_logic_vector(7 downto 0) >>;
 		file f            : text;
 		variable l        : line;
-		variable mcycle   : natural := 0;
 		variable started  : boolean := false;
+		variable first_at : delay_length := 0 ns;
 		variable kind     : character;
 	begin
 		if BUS_TRACE = "" then
@@ -243,21 +275,17 @@ begin
 		end if;
 		file_open(f, BUS_TRACE, write_mode);
 		loop
-			wait until phase = A or phase = H;
-			if phase = A then
-				mcycle := mcycle + 1;
-			else
-				wait for 60 ns;
-				if data_phase = '1' and (c.fetch = '1' or c.mread = '1' or c.mwrite = '1') then
-					if not started then
-						started := true;
-						mcycle  := 0;
-					end if;
-					kind := 'W' when c.mwrite = '1' else 'R';
-					write(l, integer'image(mcycle) & ' ' & kind & ' ' & to_hstring(address) & ' '
-						& to_hstring(to_x01(db)));
-					writeline(f, l);
+			wait until phase = H;
+			wait for in_phase_h(double_speed);
+			if data_phase = '1' and (c.fetch = '1' or c.mread = '1' or c.mwrite = '1') then
+				if not started then
+					started  := true;
+					first_at := now;
 				end if;
+				kind := 'W' when c.mwrite = '1' else 'R';
+				write(l, mcycle_at(now - first_at) & ' ' & kind & ' ' & to_hstring(address) & ' '
+					& to_hstring(to_x01(db)));
+				writeline(f, l);
 			end if;
 		end loop;
 	end process;
@@ -265,6 +293,7 @@ begin
 	-- What the blocks show each other, seen when the accesses are (in the
 	-- middle of phase H), from the M-cycle of the CPU's first access on.
 	cut_trace : process
+		alias double_speed is << signal .gameboy_tb.u_gameboy.u_chip.double_speed : std_ulogic >>;
 		alias phase      is << signal .gameboy_tb.u_gameboy.u_chip.phase : phase_t >>;
 		alias data_phase is << signal .gameboy_tb.u_gameboy.u_chip.data_phase : std_ulogic >>;
 		alias c          is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.c : controls_t >>;
@@ -279,7 +308,7 @@ begin
 		alias oam_free   is << signal .gameboy_tb.u_gameboy.u_chip.u_oam.free : std_ulogic >>;
 		file f          : text;
 		variable l      : line;
-		variable mcycle : natural := 0;
+		variable first_at : delay_length := 0 ns;
 		variable first  : boolean := true;
 		variable seen   : boolean := false;
 		variable mode   : std_ulogic_vector(1 downto 0);
@@ -292,7 +321,7 @@ begin
 
 		procedure put(name : string; value : string) is
 		begin
-			write(l, integer'image(mcycle) & ' ' & name & ' ' & value);
+			write(l, mcycle_at(now - first_at) & ' ' & name & ' ' & value);
 			writeline(f, l);
 		end procedure;
 	begin
@@ -301,52 +330,48 @@ begin
 		end if;
 		file_open(f, CUTS, write_mode);
 		loop
-			wait until phase = A or phase = H;
-			if phase = A then
-				mcycle := mcycle + 1;
-			else
-				wait for 60 ns;
-				if not seen and data_phase = '1' and (c.fetch = '1' or c.mread = '1' or c.mwrite = '1') then
-					seen   := true;
-					mcycle := 0;
+			wait until phase = H;
+			wait for in_phase_h(double_speed);
+			if not seen and data_phase = '1' and (c.fetch = '1' or c.mread = '1' or c.mwrite = '1') then
+				seen     := true;
+				first_at := now;
+			end if;
+			if seen then
+				flags_now := "000" & to_x01(flags);
+				mode      := (stat_mode2 or mode3) & (mode3 or mode1);
+				if first or flags_now /= last_flags then
+					put("IF", to_hstring(flags_now));
 				end if;
-				if seen then
-					flags_now := "000" & to_x01(flags);
-					mode      := (stat_mode2 or mode3) & (mode3 or mode1);
-					if first or flags_now /= last_flags then
-						put("IF", to_hstring(flags_now));
-					end if;
-					if first or to_x01(tima) /= last_tima then
-						put("TIMA", to_hstring(to_x01(tima)));
-					end if;
-					if first or to_x01(dma_run) /= last_dma then
-						put("DMA", to_string(to_x01(dma_run)));
-					end if;
-					if first or std_ulogic_vector(ly) /= last_ly then
-						put("LY", to_hstring(std_ulogic_vector(ly)));
-					end if;
-					if first or to_x01(mode) /= last_mode then
-						put("MODE", integer'image(to_integer(unsigned(to_01(mode)))));
-					end if;
-					if first or to_x01(not oam_free) /= last_oamb then
-						put("OAMB", to_string(to_x01(not oam_free)));
-					end if;
-					if first or to_x01(mode3) /= last_vramb then
-						put("VRAMB", to_string(to_x01(mode3)));
-					end if;
-					if first or div /= last_div + 1 then
-						put("DIV", to_hstring(div));
-					end if;
-					first      := false;
-					last_flags := flags_now;
-					last_tima  := to_x01(tima);
-					last_dma   := to_x01(dma_run);
-					last_ly    := std_ulogic_vector(ly);
-					last_mode  := to_x01(mode);
-					last_div   := div;
-					last_oamb  := to_x01(not oam_free);
-					last_vramb := to_x01(mode3);
+				if first or to_x01(tima) /= last_tima then
+					put("TIMA", to_hstring(to_x01(tima)));
 				end if;
+				if first or to_x01(dma_run) /= last_dma then
+					put("DMA", to_string(to_x01(dma_run)));
+				end if;
+				if first or std_ulogic_vector(ly) /= last_ly then
+					put("LY", to_hstring(std_ulogic_vector(ly)));
+				end if;
+				if first or to_x01(mode) /= last_mode then
+					put("MODE", integer'image(to_integer(unsigned(to_01(mode)))));
+				end if;
+				if first or to_x01(not oam_free) /= last_oamb then
+					put("OAMB", to_string(to_x01(not oam_free)));
+				end if;
+				if first or to_x01(mode3) /= last_vramb then
+					put("VRAMB", to_string(to_x01(mode3)));
+				end if;
+				if first or div /= last_div + 1 then
+					put("DIV", to_hstring(div));
+				end if;
+				first      := false;
+				last_flags := flags_now;
+				last_tima  := to_x01(tima);
+				last_dma   := to_x01(dma_run);
+				last_ly    := std_ulogic_vector(ly);
+				last_mode  := to_x01(mode);
+				last_div   := div;
+				last_oamb  := to_x01(not oam_free);
+				last_vramb := to_x01(mode3);
 			end if;
 		end loop;
 	end process;
@@ -427,7 +452,7 @@ begin
 	-- fall of ST and on the rise of CPL, which latches the line; S starts
 	-- the frame.
 	lcd : process
-		type line_t is array (0 to 159) of std_ulogic_vector(1 downto 0);
+		type line_t is array (0 to 159) of std_ulogic_vector(14 downto 0);
 		type frame_t is array (0 to 143) of line_t;
 		variable pixels  : line_t;
 		variable frame   : frame_t;
@@ -441,7 +466,7 @@ begin
 		procedure take_pixel is
 		begin
 			if x < 160 then
-				pixels(x) := ld;
+				pixels(x) := rgb;
 				x := x + 1;
 			end if;
 		end procedure;
@@ -451,12 +476,14 @@ begin
 			variable l : line;
 		begin
 			file_open(f, SCREEN, write_mode);
-			write(l, string'("P2 160 144 3"));
+			write(l, string'("P3 160 144 31"));
 			writeline(f, l);
 			for row in frame'range loop
 				for col in line_t'range loop
-					write(l, 3 - to_integer(unsigned(to_01(frame(row)(col)))));
-					write(l, ' ');
+					for channel in 0 to 2 loop
+						write(l, to_integer(unsigned(to_01(frame(row)(col)(5 * channel + 4 downto 5 * channel)))));
+						write(l, ' ');
+					end loop;
 				end loop;
 				writeline(f, l);
 			end loop;
@@ -470,7 +497,7 @@ begin
 			writeline(frames_file, l);
 			for row in frame'range loop
 				for col in line_t'range loop
-					write(l, to_integer(unsigned(to_01(frame(row)(col)))));
+					write(l, to_hstring('0' & to_01(frame(row)(col))));
 				end loop;
 				writeline(frames_file, l);
 			end loop;
@@ -499,7 +526,7 @@ begin
 				if enabled and y < 144 then
 					-- Fewer than 160 pixels repeat, as in vid_dump.sv.
 					for i in line_t'range loop
-						frame(y)(i) := pixels(i mod x) when x > 0 else "00";
+						frame(y)(i) := pixels(i mod x) when x > 0 else (others => '0');
 					end loop;
 					y := y + 1;
 					-- The frame is whole when its last line is latched, not

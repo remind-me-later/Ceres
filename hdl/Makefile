@@ -44,6 +44,7 @@ PROBES  := oracle/probe_pins.sv oracle/probe_results.sv oracle/probe_phases.sv
 QUICKBOOT := $(DMG_SIM)/boot/quickboot.bin
 FASTBOOT  := $(BUILD)/fastboot.bin
 TINYBOOT  := $(BUILD)/tinyboot.bin
+TINYBOOT_CGB := $(BUILD)/tinyboot_cgb.bin
 APU_ROM   := $(BUILD)/apu.gb
 CPU_ROM   := $(BUILD)/cpu.gb
 SPRITES_ROM := $(BUILD)/sprites.gb
@@ -55,7 +56,7 @@ abs = $(abspath $(1))
 
 .PHONY: all run phases smoke model run-model check clean
 
-all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM)
+all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(TINYBOOT_CGB) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM)
 
 # A boot ROM that only turns the LCD on and goes to 0100, for the checks
 # of the readable model, which do not need the boot ROM's timing:
@@ -73,6 +74,15 @@ $(TINYBOOT): boot/tinyboot.asm
 	rgbasm -o $(BUILD)/tinyboot.o $<
 	rgblink -x -o $@ $(BUILD)/tinyboot.o
 	rm -f $(BUILD)/tinyboot.o
+
+# A boot ROM that leaves the CGB as the CGB-E's boot ROM does, in a
+# hundredth of the time (boot/tinyboot_cgb.asm), for the runs of the CGB's
+# model.
+$(TINYBOOT_CGB): boot/tinyboot_cgb.asm
+	mkdir -p $(BUILD)
+	rgbasm -o $(BUILD)/tinyboot_cgb.o $<
+	rgblink -x -o $@ $(BUILD)/tinyboot_cgb.o
+	rm -f $(BUILD)/tinyboot_cgb.o
 
 # The stimuli of the APU, the CPU core and the PPU's sprites, for the checks too
 # (check/apu.asm, check/cpu.asm, check/sprites.asm), and of STAT at the end
@@ -104,16 +114,20 @@ phases: $(VVP)
 		+SECS=$(SECS) +PHASES_FILE=$(call abs,$(PHASES))
 
 # The readable model, in the order nvc analyses it, and its checks.
-MODEL  := rtl/clocking.vhd rtl/clocks.vhd rtl/divider.vhd rtl/timer.vhd rtl/interrupts.vhd \
-          rtl/serial.vhd rtl/joypad.vhd rtl/test_mode.vhd rtl/boot_rom.vhd rtl/high_ram.vhd \
+MODEL  := rtl/clocking.vhd rtl/revisions.vhd rtl/clocks.vhd rtl/divider.vhd rtl/timer.vhd rtl/interrupts.vhd \
+          rtl/serial.vhd rtl/joypad.vhd rtl/test_mode.vhd rtl/boot_rom.vhd rtl/cgb_mode.vhd rtl/speed_switch.vhd rtl/high_ram.vhd \
+          rtl/wram_bank.vhd \
           rtl/external_bus.vhd rtl/dma.vhd rtl/lcd_control.vhd rtl/lcd_timing.vhd \
-          rtl/oam_scan.vhd rtl/sprite_store.vhd rtl/oam.vhd rtl/render.vhd rtl/vram_bus.vhd \
+          rtl/oam_scan.vhd rtl/sprite_store.vhd rtl/oam.vhd rtl/render.vhd rtl/colour_palettes.vhd rtl/vram_bus.vhd \
+          rtl/video_ram.vhd \
           rtl/apu_control.vhd rtl/apu_ch1.vhd rtl/apu_ch2.vhd rtl/apu_ch3.vhd rtl/apu_ch4.vhd \
           rtl/sm83_decoder.vhd rtl/sm83_control.vhd rtl/sm83_sequencer.vhd rtl/sm83_interrupts.vhd \
           rtl/sm83_registers.vhd rtl/sm83_idu.vhd rtl/sm83_alu.vhd rtl/sm83.vhd \
-          rtl/dmg_cpu_b.vhd
-BOARD  := board/keeper.vhd board/cartridge.vhd board/gameboy.vhd board/gameboy_tb.vhd
-CHECKS := check/oracle.vhd check/chip_tb.vhd
+          board/keeper.vhd rtl/cgb_cpu.vhd
+BOARD  := board/cartridge.vhd board/gameboy.vhd board/gameboy_tb.vhd
+# The checks against dmg-sim are the DMG's (branch hdl): they do not apply
+# to the CGB's chip.
+CHECKS :=
 TBS    := chip_tb
 WORK   := $(BUILD)/model
 NVC    := nvc --std=2008 -H 64m --work=$(abspath $(WORK))/work

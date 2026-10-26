@@ -4,6 +4,16 @@
 --
 -- @hw die: dmg-schematics, category clocks; checked against dmg-sim
 -- (../check/chip_tb.vhd).
+--
+-- The CGB's crystal runs at 8 MiHz. Halved, it is the 4 MiHz clock of the
+-- PPU and of the APU's dividers (clk4), and in the normal speed of the CPU
+-- too; in double speed the CPU runs on the 8 MiHz clock itself, so that its
+-- phases, and everything that counts them (the divider, the timer, the
+-- serial port, OAM DMA, the cartridge's PHI), go twice as fast. The speed
+-- changes only while the oscillator is stopped (by STOP, ../speed_switch.vhd).
+-- @hw inferred: Pan Docs ("FF4D — KEY1", "Rendering": dots do not change
+-- with the speed; "Audio": APU ticks neither); the clocks' circuit is a
+-- guess.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -13,7 +23,7 @@ use work.clocking.all;
 entity clocks is
 	port (
 		-- Pins
-		ck1         : in  std_ulogic;  -- the crystal
+		ck1         : in  std_ulogic;  -- the crystal, 8 MiHz
 		reset_pin_n : in  std_ulogic;  -- /RESET, high on the Game Boy once powered
 		t1, t2      : in  std_ulogic;  -- test pins, low on the Game Boy
 		phi         : out std_ulogic;  -- PHI, the M-cycle clock for the cartridge
@@ -27,8 +37,11 @@ entity clocks is
 		test_reset : in std_ulogic;  -- from the test register FF60
 		div_16hz   : in std_ulogic;  -- the last bit of the divider
 
-		clk   : out std_ulogic;  -- the 4 MiHz clock inside the chip
-		phase : out phase_t;     -- the phase of the M-cycle
+		double_speed : in std_ulogic;  -- KEY1 bit 7
+
+		clk   : out std_ulogic;  -- the CPU's clock: 4 MiHz, 8 MiHz in double speed
+		phase : out phase_t;     -- the phase of the CPU's M-cycle
+		clk4  : out std_ulogic;  -- the 4 MiHz clock, whatever the speed
 
 		-- Clocks for the other blocks
 		clk_1mhz      : out std_ulogic;  -- high in phase A: the M-cycle starts
@@ -49,6 +62,9 @@ entity clocks is
 end entity;
 
 architecture rtl of clocks is
+	signal osc                    : std_ulogic;
+	signal clk4_i                 : std_ulogic := '0';
+	signal double_sel             : std_ulogic := '0';
 	signal clk_in                 : std_ulogic := '0';
 	signal afur, alef, apuk, adyk : std_ulogic := '0';
 	signal phase_i                : phase_t := H;
@@ -62,8 +78,31 @@ architecture rtl of clocks is
 begin
 	-- The oscillator's output, held high when it is stopped.
 	-- @hw die: CK1_CK2 (pad_xtal), ANOS AVET ARYS, ATAL
-	clk_in <= ck1 when osc_ena = '1' else '1';
+	osc <= ck1 when osc_ena = '1' else '1';
+
+	-- Halved: 4 MiHz.
+	-- @hw inferred: guess
+	halve : process (osc)
+	begin
+		if rising_edge(osc) then
+			clk4_i <= not clk4_i;
+		end if;
+	end process;
+
+	-- The CPU's clock takes the new speed while the oscillator is stopped.
+	-- @hw inferred: guess
+	speed_latch : process (all)
+	begin
+		if osc_ena = '0' then
+			double_sel <= double_speed;
+		end if;
+	end process;
+
+	clk_in <= '1' when osc_ena = '0' else
+	          osc when double_sel = '1' else
+	          clk4_i;
 	clk    <= clk_in;
+	clk4   <= '1' when osc_ena = '0' else clk4_i;
 
 	-- Four latches count the phases: AFUR and APUK are open while the clock
 	-- is high, ALEF and ADYK while it is low, and each copies the one before
