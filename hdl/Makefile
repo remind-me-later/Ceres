@@ -85,6 +85,11 @@ $(BUILD)/%.gb: check/%.asm
 	rgblink -o $@ $(BUILD)/$*.o
 	rgbfix -v -p 0 $@
 
+# The VHPI plugin that notes the model's short pulses (find-runts.sh).
+$(BUILD)/runts.so: oracle/runts.c
+	mkdir -p $(BUILD)
+	$(CC) -O2 -Wall -Wextra -shared -fPIC -o $@ $<
+
 # dmg-sim is copied from its submodule, which stays clean. Icarus 13 has no
 # string method tolower, which dmg-sim only uses for event files.
 $(VVP): $(PROBES)

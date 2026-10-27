@@ -377,3 +377,49 @@ A request that rises and falls within a phase (the STAT write's glitch)
 counts as a rise in that phase: the trace notes every rising edge of the
 request lines, not only their values at the phase's end. The results are in
 [results.md](results.md#ceress-transcriptions-of-the-timer-if-and-oam-dma).
+
+### Finding its races
+
+Where the model's outcome rests on its delays rather than on the order of
+its signals, a flip-flop is clocked by, or a latch sees, a pulse much
+shorter than a phase. `find-runts.sh ROM [SECS]` runs a ROM with
+`oracle/runts.c`, a VHPI plugin for nvc that notes every pulse shorter
+than 60 ns on any one-bit signal or bit of a vector, down to the pulses of
+no width (a delta cycle) that a waveform dump leaves out, and prints the
+ones at a signal that clocks a flip-flop or that a latch, a reset or a
+process without a clock tests (`oracle/controls.awk` finds those in
+`rtl/`):
+
+```sh
+ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
+	TEST=gbmicrotest xargs -P 6 -I{} ./find-runts.sh {} 0.25
+./find-runts.sh -s
+```
+
+The 513 gbmicrotest ROMs take 24 minutes at six at a time.
+[races.toml](races.toml) gives each race found, and each delay of `rtl/`,
+a verdict: order, if any delays that keep the order of the signals give
+the same outcome, or width, if the die's physics decides (the `race` of
+[doc/facts.toml](../doc/facts.toml)), with the evidence and the facts that
+rest on it.
+
+## The knowledge database
+
+`knowledge.sh` gathers what the repository knows into one SQLite database,
+`build/knowledge.db`, generated from the sources each time: the model's
+instances, its signals and the ones that control its storage, its delays and its
+`@hw` tags; the short pulses of the reports of `find-runts.sh`; the facts
+of `doc/facts.toml` and their `@fact` tags across the repository (through
+ceres-test-runner's example `facts`); and the verdicts of `races.toml`.
+`knowledge/schema.sql` says what each table holds.
+
+```sh
+./knowledge.sh list            # the saved queries and checks
+./knowledge.sh width-facts     # run one (knowledge/queries/*.sql)
+./knowledge.sh check           # the checks (knowledge/checks/*.sql)
+sqlite3 -column -header build/knowledge.db
+```
+
+A check is a query that must find nothing: a delay or a short pulse at a
+control without a verdict, a verdict naming what `rtl/` does not have, a
+fact on a width race that no race names.

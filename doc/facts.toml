@@ -163,6 +163,28 @@ race = "width"
 tests = ["gbmicrotest/oam_write_l1_a.gb", "gbmicrotest/poweron_stat_026.gb"]
 note = "In dmg-sim the scan's flag clears a moment before mode 3's sets; OAM sees that moment (oam_write_l1_c), STAT does not."
 
+[oam-write-as-mode-3-starts]
+title = "A CPU write to OAM lands in the moment between the OAM scan and mode 3"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = ["gbmicrotest/oam_write_l1_c.gb"]
+note = "OAM is free for 1 ns between the scan's end and mode 3 (mode3_i in hdl/rtl/render.vhd), and the CPU's data reaches its lines 1 ns after the drivers turn (oam.vhd). With no gap the write is lost; with drivers of 3 ns it writes FF."
+
+[lcdc-write-latch-delay]
+title = "A write to LCDC reaches the PPU a moment after the CPU's strobe"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = [
+  "gambatte/sprites/late_sizechange2_sp00_2_dmg08_cgb04c_out0.gbc",
+  "gambatte/sprites/late_sizechange2_sp02_2_dmg08_cgb04c_out0.gbc",
+  "gambatte/sprites/late_sizechange_sp00_4_dmg08_cgb04c_out0.gbc",
+]
+note = "LCDC's latch opens 3 ns after the strobe, as dmg-sim's gates do (write_lcdc in hdl/rtl/lcd_control.vhd). Opened at once, the new sprite size reaches the OAM scan and these ROMs show 3, not 0; at 6 ns nothing changes. The window's enable, from the same latch, cuts the dot clock for those 3 ns: without that pulse gbmicrotest's ppu_win_vs_wx draws differently (no screenshot)."
+
 [window-wx-166]
 title = "The window at WX 166: an object there waits for it, and it carries into the next line"
 models = ["dmg"]

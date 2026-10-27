@@ -34,6 +34,18 @@ pub enum ModelName {
 }
 
 impl ModelName {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Dmg => "dmg",
+            Self::Mgb => "mgb",
+            Self::Sgb => "sgb",
+            Self::Cgb => "cgb",
+            Self::CgbC => "cgb-c",
+            Self::CgbE => "cgb-e",
+        }
+    }
+
     /// The model has the DMG-CPU's logic (the MGB's and SGB's as a working
     /// assumption), so the netlist speaks for it.
     #[must_use]
@@ -55,6 +67,18 @@ pub enum Netlist {
     None,
 }
 
+impl Netlist {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Same => "same",
+            Self::Differs => "differs",
+            Self::Silent => "silent",
+            Self::None => "none",
+        }
+    }
+}
+
 /// What the hardware-verified test ROMs (`tests`) show, against ceres.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -65,6 +89,17 @@ pub enum Hardware {
     None,
 }
 
+impl Hardware {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Same => "same",
+            Self::Differs => "differs",
+            Self::None => "none",
+        }
+    }
+}
+
 /// What the other emulators (SameBoy, Gambatte) do, where it matters.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -73,6 +108,16 @@ pub enum Emulators {
     Agree,
     /// They differ, from ceres or from each other.
     Disagree,
+}
+
+impl Emulators {
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Agree => "agree",
+            Self::Disagree => "disagree",
+        }
+    }
 }
 
 /// How the outcome hangs on the order of two signals.

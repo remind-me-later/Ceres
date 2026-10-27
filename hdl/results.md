@@ -261,3 +261,42 @@ another one started the transfer over, where the netlist only takes the
 new source. No test of the suites tells any of them apart, and ceres now
 follows the netlist in all three (facts `dma-oam-write-after-start` and
 `dma-restart-bytes`).
+
+## The model's races
+
+`find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses
+under 10 ns at 49 signals that control storage. Each pulse, and each delay
+of `rtl/` (its `after` clauses), was then given a verdict in
+[races.toml](races.toml) by a variant of the model: a pulse filtered where
+it is taken (an inertial delay a little longer than the pulse), a delay set
+to 0 and to twice its value or more. The ROMs that show the pulse (86
+gbmicrotest ROMs for a delay, with Gambatte's 23 `late_sizechange` ROMs for
+LCDC's) ran on the variant, and their bus traces, frames and results were
+compared with the model's. Where a filter also delays the signal, a variant
+that only delays it (a `transport` delay) tells the two apart.
+`./knowledge.sh check` now finds no delay, and no pulse under 10 ns, without
+a verdict, and no fact on a width race without its race.
+
+| Verdict | Races                                                        |
+| ------- | ------------------------------------------------------------ |
+| order   | 10: the flip-flops' tco, the CPU's bus timings (scaled by 0.8 and 1.2), the VRAM address drivers, the fetcher's flags and cycles at a fetch start or window start, the sprite load, OAM's read strobes, the interrupt boundary, the noise channel's volume ripple |
+| width   | 9: the cartridge address latches, LCDC's latch delay, the OAM write between the scan and mode 3, mode 0 after the LY = LYC flag, STAT's mode 2 into mode 3, STAT's OR at VBlank's end, the tile register at a window start, the timer's clock at a TAC write, a BGP or WX write against the pixel clock |
+
+Two of the width races are new facts, both on hardware tests that the model
+and ceres pass:
+
+- `lcdc-write-latch-delay`: LCDC's latch opens 3 ns after the CPU's strobe.
+  With it opened at once, Gambatte's `late_sizechange2_sp00_2`,
+  `late_sizechange2_sp02_2` and `late_sizechange_sp00_4` show 3, not the
+  DMG-08's 0; at 6 ns nothing changes. The same latch turns the window on
+  and cuts the dot clock for those 3 ns, the pulse at `dot`, `clkpipe` and
+  `segu` in 165 ROMs: filtered, `ppu_win_vs_wx` draws differently.
+- `oam-write-as-mode-3-starts`: OAM is free for 1 ns between the scan's end
+  and mode 3, and `oam_write_l1_c` writes in it. With no gap, or with OAM's
+  `free` flag or write strobes filtered, the write is lost; with the data
+  drivers at 3 ns instead of 1, it writes `FF`.
+
+The BGP and WX writes of `bgp-write-in-mode-3` and
+`window-start-wx-written-every-line`, where the netlist draws a pixel off
+the screenshots, do not move with the CPU's delays scaled by 0.8 or 1.2:
+the model has no delay near its own that reaches the hardware's outcome.
