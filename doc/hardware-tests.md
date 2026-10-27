@@ -183,16 +183,16 @@ CGB is left to check, since there is no netlist for it.
 - **Measure:** write FF46, then write OAM (`FExx`) in the next M-cycle, and
   in the one after, outside modes 2 and 3; read the byte back after the
   transfer, from a source that does not hold that byte.
-- **The evidence:** no test that ceres runs tells the two apart: with ceres
-  blocking the writes as the netlist does, all of Gambatte's, Mooneye's,
-  gbmicrotest's, AGE's and SameSuite's tests still pass (2026-10-27).
+- **The evidence:** no test that ceres runs tells the two apart: all of
+  Gambatte's, Mooneye's, gbmicrotest's, AGE's and SameSuite's tests pass
+  with the write let through and with it dropped (2026-10-27).
 - **The netlist:** OAM is free for the CPU until `run` rises, at the A edge
   that ends the M-cycle after the write (`hdl/rtl/oam.vhd`, `dma.vhd`): a
   write in that M-cycle lands, and the transfer then overwrites the byte.
-- **Ceres today:** drops the CPU's OAM writes from the write to FF46 on
-  (`blocks_oam_write` in `ceres-core/src/memory/dma/mod.rs`), and reads as
-  the netlist does. The proof in `memory/dma/netlist_proofs.rs` states the
-  difference.
+- **Ceres today:** lets the write through, as the netlist does
+  (`blocks_oam` in `ceres-core/src/memory/dma/mod.rs`, proved in
+  `memory/dma/netlist_proofs.rs`). Until 2026-10-27 it dropped the CPU's
+  OAM writes from the write to FF46 on, as SameBoy does.
 - **Outcomes:** whether the byte written in that M-cycle shows after a
   transfer that does not reach it (a restart cut short), or in a sprite
   fetched meanwhile.
@@ -203,21 +203,25 @@ CGB is left to check, since there is no netlist for it.
 - **Measure:** start a transfer, write FF46 again with another source while
   it copies byte c, and sweep c and the moment; dump OAM (or draw sprites
   from it) in the two M-cycles that follow, before the new transfer
-  reaches bytes 0 and c.
-- **The evidence:** no test that ceres runs tells the two rules apart: with
-  ceres restarting as the netlist does, all the suites still pass
-  (2026-10-27).
+  reaches bytes 0 and c. Then write FF46 twice in a row, and when the
+  first byte lands.
+- **The evidence:** no test that ceres runs tells the two rules apart: all
+  the suites pass with either (2026-10-27).
 - **The netlist:** FF46 is a latch, open while the CPU writes it, so the
   byte c that the transfer writes in that M-cycle comes from the new source;
   in the next, the restart clears the count as the write of OAM begins, so
   it writes byte 0, from the new source; then the new transfer runs from
-  byte 0. The replay of the model's traces (`netlist_replay`) and the proof
-  `netlist_dma_restart` show both.
-- **Ceres today:** Gambatte's rule (`oamDmaStartPos_`): byte c from the old
-  source, then byte c + 1 from the new one (`restart_at` in
-  `ceres-core/src/memory/dma/mod.rs`). Two OAM bytes differ until the new
-  transfer reaches them.
-- **Outcomes:** which bytes hold what in those two M-cycles.
+  byte 0. A write in the M-cycle after another one finds the restart pulse
+  (`start_2`) still high, which clears its request: it only changes the
+  source. The replay of the model's traces (`netlist_replay`) shows the
+  restart.
+- **Ceres today:** follows the netlist (`Dma::write` in
+  `ceres-core/src/memory/dma/mod.rs`, proved in
+  `memory/dma/netlist_proofs.rs`). Until 2026-10-27 it had Gambatte's rule
+  (`oamDmaStartPos_`): byte c from the old source, then byte c + 1 from the
+  new one, and a second write started the transfer over.
+- **Outcomes:** which bytes hold what in those two M-cycles, and whether a
+  second write delays the first byte.
 - **Needs:** a test ROM; a B, a C and a CGB.
 
 ## Open questions on the DMG

@@ -210,21 +210,22 @@ note = "The line-end pulse comes 156 ns before the LCD's reset; hdl/check/lcd_of
 [dma-oam-write-after-start]
 title = "A CPU write to OAM in the M-cycle after a write to FF46"
 models = ["dmg", "cgb"]
-netlist = "differs"
+netlist = "same"
 hardware = "none"
+emulators = "disagree"
 open = ["doc/hardware-tests.md#a-cpu-write-to-oam-just-after-a-write-to-ff46"]
 needs = ["flash-cart", "dmg-b", "dmg-c", "cgb-c", "cgb-e"]
-note = "The netlist lets it through (run rises at the next A edge), ceres drops it. Every suite passes either way (2026-10-27)."
+note = "Let through, as in the netlist (run rises at the next A edge). SameBoy drops it; ceres did too until 2026-10-27, and no test fails either way."
 
 [dma-restart-bytes]
-title = "The first two OAM bytes of an OAM DMA restarted while it runs"
+title = "The first two OAM bytes of an OAM DMA restarted while it runs, and a second write to FF46 right after one"
 models = ["dmg", "cgb"]
-netlist = "differs"
+netlist = "same"
 hardware = "none"
 emulators = "disagree"
 open = ["doc/hardware-tests.md#an-oam-dma-restarted-while-it-runs"]
 needs = ["flash-cart", "dmg-b", "dmg-c", "cgb-c", "cgb-e"]
-note = "Netlist: byte c from the new source, then byte 0. Ceres (Gambatte): byte c from the old source, then byte c + 1 from the new one. Every suite passes either way (2026-10-27)."
+note = "As in the netlist: byte c from the new source, then byte 0; a write in the M-cycle after another only changes the source. Gambatte writes byte c from the old source, then byte c + 1 from the new one, and starts over on the second write; ceres did too until 2026-10-27, and no test fails either way."
 
 # Interrupts and the timer
 

@@ -56,9 +56,9 @@ pub(crate) enum DmaStep {
     /// Copies the byte at `src` to OAM byte `dest`.
     Copy { src: u16, dest: u8 },
     /// The start-up delay or the last step, after which the run stops. A
-    /// restarted transfer still copies, in its start-up delay, the byte the
-    /// interrupted one was at, from the new source (`src` to OAM byte
-    /// `dest`). `Dma::end_pause` ends the step.
+    /// restarted transfer already copies, in its start-up delay, byte 0
+    /// from the new source (`src` to OAM byte `dest`). `Dma::end_pause`
+    /// ends the step.
     Pause { rewrite: Option<(u16, u8)> },
 }
 
@@ -70,13 +70,11 @@ pub(crate) struct Dma {
     phase: DmaPhase,
     current_src: u16,
     reg: u8,
-    /// A new transfer was started while another one was running.
-    restarting: bool,
-    /// The OAM index the interrupted transfer was about to write when it
-    /// was restarted: it still writes it, from the new source, during the
-    /// new transfer's start-up delay (gambatte's `oamDmaStartPos_`).
+    /// A new transfer was started over one on its way or running: the DMA
+    /// runs on through the start-up delay, which copies byte 0 (as the
+    /// netlist's restart clears its count while it still runs).
     // @fact dma-restart-bytes
-    restart_at: Option<u8>,
+    restarting: bool,
 }
 
 impl Default for Dma {
@@ -88,7 +86,6 @@ impl Default for Dma {
             current_src: 0,
             reg: 0xFF,
             restarting: false,
-            restart_at: None,
         }
     }
 }
@@ -136,23 +133,19 @@ impl Dma {
         matches!(self.phase, DmaPhase::Last)
     }
 
-    /// The first byte is next, with no interrupted transfer still writing.
+    /// The first byte is next, and the DMA does not run yet.
     const fn is_warming_up(&self) -> bool {
         matches!(self.phase, DmaPhase::StartUp)
-            || (matches!(self.phase, DmaPhase::Copy { next: 0 }) && self.restart_at.is_none())
+            || (matches!(self.phase, DmaPhase::Copy { next: 0 }) && !self.restarting)
     }
 
-    /// CPU reads of OAM return 0xFF while the DMA owns it.
-    #[must_use]
-    pub(crate) const fn blocks_oam_read(&self) -> bool {
-        self.is_active() && (!matches!(self.phase, DmaPhase::Copy { next: 0 }) || self.restarting)
-    }
-
-    /// CPU writes to OAM are dropped while a transfer is active.
+    /// The DMA owns OAM: CPU reads of it return 0xFF and CPU writes to it
+    /// are dropped. It does not yet in the M-cycle after a write to FF46,
+    /// unless a transfer was running.
     #[must_use]
     // @fact dma-oam-write-after-start
-    pub(crate) const fn blocks_oam_write(&self) -> bool {
-        self.is_active()
+    pub(crate) const fn blocks_oam(&self) -> bool {
+        self.is_active() && (!matches!(self.phase, DmaPhase::Copy { next: 0 }) || self.restarting)
     }
 
     #[must_use]
@@ -171,11 +164,38 @@ impl Dma {
         self.is_active() && (self.cycles_modulo == 2 || double_speed)
     }
 
+    /// The M-cycle after a restart, in which the hardware writes byte 0, as
+    /// the start-up delay copied it.
+    const fn is_after_restart(&self) -> bool {
+        matches!(self.phase, DmaPhase::Copy { next: 0 }) && self.restarting
+    }
+
+    /// The OAM byte copied last, which the hardware writes in this M-cycle,
+    /// once one was.
+    const fn oam_byte(&self) -> Option<u8> {
+        if self.is_after_restart() {
+            return Some(0);
+        }
+        match self.phase.written() {
+            Some(written) => Some(written - 1),
+            None => None,
+        }
+    }
+
     /// The OAM index of the byte being copied, once one was.
     const fn oam_index(&self) -> Option<usize> {
-        match self.phase.written() {
-            Some(written) => Some(written as usize - 1),
+        match self.oam_byte() {
+            Some(byte) => Some(byte as usize),
             None => None,
+        }
+    }
+
+    /// The source address of the byte being copied.
+    const fn copied_src(&self) -> u16 {
+        if self.is_after_restart() {
+            self.current_src
+        } else {
+            self.current_src.wrapping_sub(1)
         }
     }
 
@@ -205,15 +225,13 @@ impl Dma {
 
     const fn step(&mut self) -> DmaStep {
         let DmaPhase::Copy { next: dest } = self.phase else {
-            let rewrite = match (self.phase, self.restart_at) {
-                (DmaPhase::StartUp, Some(at)) => {
-                    Some((self.current_src.wrapping_add(at as u16), at))
-                }
-                _ => None,
+            let rewrite = if matches!(self.phase, DmaPhase::StartUp) && self.restarting {
+                Some((self.current_src, 0))
+            } else {
+                None
             };
             return DmaStep::Pause { rewrite };
         };
-        self.restart_at = None;
         self.phase = self.phase.step();
         let src = self.current_src;
         self.current_src = src.wrapping_add(1);
@@ -225,17 +243,23 @@ impl Dma {
         self.phase = self.phase.step();
     }
 
-    pub(crate) fn write(&mut self, val: u8) {
-        self.restarting = !matches!(self.phase, DmaPhase::Idle | DmaPhase::Last);
-        self.restart_at = match self.phase {
-            DmaPhase::Copy { next } if next != 0 => Some(next),
-            _ => None,
-        };
-        self.cycles = 0;
-        self.cycles_modulo = 2;
-        self.phase = DmaPhase::StartUp;
+    /// A write to FF46. Returns the byte the hardware writes to OAM in this
+    /// M-cycle, read again: FF46 is a latch, open while the CPU writes it, so
+    /// the byte copied last comes from the new source (`src` to OAM byte
+    /// `dest`). A write in the M-cycle after another one only changes the
+    /// source: the start it asks for is the one already on its way.
+    // @fact dma-restart-bytes
+    pub(crate) fn write(&mut self, val: u8) -> Option<(u16, u8)> {
+        let last = self.oam_byte();
+        if !matches!(self.phase, DmaPhase::StartUp | DmaPhase::Copy { next: 0 }) {
+            self.restarting = !matches!(self.phase, DmaPhase::Idle | DmaPhase::Last);
+            self.cycles = 0;
+            self.cycles_modulo = 2;
+            self.phase = DmaPhase::StartUp;
+        }
         self.current_src = u16::from(val) << 8;
         self.reg = val;
+        last.map(|dest| (self.current_src | u16::from(dest), dest))
     }
 }
 
@@ -295,11 +319,9 @@ impl<A: AudioCallback> Gb<A> {
         }
         let cgb = self.model.is_cgb_hardware();
         let src = self.dma.current_src;
-        if let Some(at) = self.dma.restart_at
-            && self.dma.phase == (DmaPhase::Copy { next: 0 })
-        {
-            // The byte the interrupted transfer just wrote.
-            return Some(src.wrapping_add(u16::from(at)));
+        if self.dma.is_after_restart() {
+            // Byte 0 of the new source.
+            return Some(src);
         }
         if cgb && bus_for_addr(cgb, addr) == DmaBus::Main && src >= ECHO_START {
             // Cart specific.
@@ -321,7 +343,7 @@ impl<A: AudioCallback> Gb<A> {
     /// What a CPU read that conflicted with a VRAM-sourced transfer leaves
     /// behind on the CPU-CGB-C: the OAM byte being copied is cleared.
     pub(crate) fn dma_after_read(&mut self, addr: u16) {
-        let src = self.dma.current_src.wrapping_sub(1);
+        let src = self.dma.copied_src();
         if self.model == Model::CgbC
             && (VRAM_START..CART_RAM_START).contains(&src)
             && self.is_addr_in_dma_use(addr)
@@ -344,7 +366,7 @@ impl<A: AudioCallback> Gb<A> {
         if !cgb {
             // The write only reaches the OAM byte the DMA is writing (ANDed
             // with it when the DMA reads the work RAM).
-            let current = src.wrapping_sub(1);
+            let current = self.dma.copied_src();
             let index = self.dma.oam_index();
             let oam = self.ppu.oam_mut().bytes_mut();
             if let Some(byte) = index.and_then(|i| oam.get_mut(i)) {
@@ -359,7 +381,7 @@ impl<A: AudioCallback> Gb<A> {
         if model == Model::CgbC && addr < WRAM_START {
             // CPU-CGB-C (measured by Gambatte's tests): the write lands in the
             // OAM byte being copied, or clears it when the DMA reads the VRAM.
-            let current = src.wrapping_sub(1);
+            let current = self.dma.copied_src();
             let index = self.dma.oam_index();
             let oam = self.ppu.oam_mut().bytes_mut();
             if let Some(byte) = index.and_then(|i| oam.get_mut(i)) {
@@ -379,7 +401,7 @@ impl<A: AudioCallback> Gb<A> {
             return Some(wram_conflict_addr(src, addr));
         }
 
-        let current = src.wrapping_sub(1);
+        let current = self.dma.copied_src();
         let index = self.dma.oam_index();
         let before_cgb_c = matches!(model, Model::Cgb0 | Model::CgbA | Model::CgbB);
         let before_cgb_e = before_cgb_c || matches!(model, Model::CgbC | Model::CgbD);
@@ -424,6 +446,29 @@ impl<A: AudioCallback> Gb<A> {
         }
     }
 
+    /// The CPU writes FF46.
+    pub(crate) fn write_dma(&mut self, val: u8) {
+        if let Some((src, dest)) = self.dma.write(val) {
+            self.dma_copy(src, dest);
+        }
+        self.ppu
+            .set_dma_state(self.dma.phase, self.dma.current_src, true);
+    }
+
+    /// Copies the byte at `src` to OAM byte `dest`. The CGB's DMA reads FF
+    /// from E000 up, the DMG's reads the work RAM through its echo.
+    fn dma_copy(&mut self, src: u16, dest: u8) {
+        let value = if src < ECHO_START {
+            self.dma_read(src)
+        } else if self.model.is_cgb_hardware() {
+            0xFF
+        } else {
+            self.dma_read(src & !ECHO_B)
+        };
+        self.ppu
+            .write_oam_by_dma(OAM_START | u16::from(dest), value);
+    }
+
     /// The phase `run_dma` will have reached after the next `cycles`.
     pub(crate) const fn dma_phase_after(&self, cycles: i32) -> DmaPhase {
         let mut phase = self.dma.phase;
@@ -452,16 +497,13 @@ impl<A: AudioCallback> Gb<A> {
         if self.speed_switch.unhalt {
             return;
         }
-        let cgb = self.model.is_cgb_hardware();
         self.dma.begin_run();
         while let Some(step) = self.dma.due_step() {
             let (src, dest) = match step {
                 DmaStep::Copy { src, dest } => (src, dest),
                 DmaStep::Pause { rewrite } => {
                     if let Some((src, dest)) = rewrite {
-                        let value = self.dma_read(src);
-                        self.ppu
-                            .write_oam_by_dma(OAM_START | u16::from(dest), value);
+                        self.dma_copy(src, dest);
                     }
                     self.dma.end_pause();
                     self.ppu.dma_finished();
@@ -472,16 +514,8 @@ impl<A: AudioCallback> Gb<A> {
                 && (self.hdma.has_multiple_steps_left() || !self.hdma.is_at_block_end())
             {
                 // The HDMA owns the bus: nothing is copied.
-            } else if src < ECHO_START {
-                let value = self.dma_read(src);
-                self.ppu
-                    .write_oam_by_dma(OAM_START | u16::from(dest), value);
-            } else if cgb {
-                self.ppu.write_oam_by_dma(OAM_START | u16::from(dest), 0xFF);
             } else {
-                let value = self.dma_read(src & !ECHO_B);
-                self.ppu
-                    .write_oam_by_dma(OAM_START | u16::from(dest), value);
+                self.dma_copy(src, dest);
             }
             self.ppu.clear_dma_vram_conflict();
         }

@@ -253,8 +253,11 @@ the clock's rise; no overflow at the A edge; TMA taking the bus as the
 write starts; a rise winning over the acknowledge, which only Gambatte's
 `late_m0irq_retrigger_2` catches).
 
-The proofs against ceres (`cargo kani -p ceres-core`) then show where
-ceres's OAM DMA parts from `NetDma`: ceres drops the CPU's OAM writes in
-the M-cycle after a write to FF46, where the netlist lets them through, and
-a restart's first two bytes differ. No test of the suites tells either
-apart (facts `dma-oam-write-after-start` and `dma-restart-bytes`).
+The proofs against ceres (`cargo kani -p ceres-core`) then showed where
+ceres's OAM DMA parted from `NetDma`: it dropped the CPU's OAM writes in
+the M-cycle after a write to FF46, where the netlist lets them through; a
+restart's first two bytes differed; and a write in the M-cycle after
+another one started the transfer over, where the netlist only takes the
+new source. No test of the suites tells any of them apart, and ceres now
+follows the netlist in all three (facts `dma-oam-write-after-start` and
+`dma-restart-bytes`).

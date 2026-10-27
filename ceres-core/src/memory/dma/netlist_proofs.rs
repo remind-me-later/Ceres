@@ -12,9 +12,9 @@
 //!
 //! The proof is a bisimulation: from any pair of states that `related`
 //! matches, an M-cycle with any access to FF46 gives the same read and the
-//! same OAM write on both sides, blocks the CPU's reads of OAM in the same
-//! M-cycles, and leaves them related. `known_difference` lists where ceres
-//! parts from the netlist.
+//! same OAM write on both sides, blocks the CPU's accesses to OAM in the
+//! same M-cycles, and leaves them related. A write to FF46 while the DMA
+//! runs (a restart) is one of the accesses.
 
 use super::{Dma, DmaPhase, DmaStep};
 use crate::memory::netlist::{NetDma, Phase};
@@ -55,7 +55,6 @@ fn any_ceres() -> Ceres {
             current_src: kani::any(),
             reg: kani::any(),
             restarting: kani::any(),
-            restart_at: kani::any::<bool>().then(kani::any),
         },
         last_copy: kani::any::<bool>().then(|| (kani::any(), kani::any())),
     }
@@ -101,7 +100,8 @@ fn ceres_m_cycle(ceres: &mut Ceres, access: Access) -> (Option<u8>, Option<(u16,
         Access::None => None,
         Access::Read => Some(ceres.dma.read()),
         Access::Write(val) => {
-            ceres.dma.write(val);
+            // The byte copied last, read again from the new source.
+            ceres.last_copy = ceres.dma.write(val);
             None
         }
     };
@@ -130,9 +130,7 @@ fn ceres_m_cycle(ceres: &mut Ceres, access: Access) -> (Option<u8>, Option<(u16,
 fn related(net: &NetDma, ceres: &Ceres) -> bool {
     let dma = &ceres.dma;
     let base = u16::from(dma.reg) << 8;
-    // A restart leaves `restarting` set until the next write; it only
-    // counts in the M-cycle after a write.
-    let regs = dma.reg == net.source && dma.cycles == 0 && dma.restart_at.is_none();
+    let regs = dma.reg == net.source && dma.cycles == 0;
     let state = match dma.phase {
         // Nothing asked for, started or running.
         DmaPhase::Idle => {
@@ -145,10 +143,21 @@ fn related(net: &NetDma, ceres: &Ceres) -> bool {
         }
         // A run always passes the start-up delay.
         DmaPhase::StartUp => false,
+        // The M-cycle after a restart: the start is on its way, and the
+        // netlist, still running, writes byte 0, which ceres copied.
+        DmaPhase::Copy { next: 0 } if dma.restarting => {
+            net.requested
+                && net.start_1
+                && !net.start_2
+                && net.enabled
+                && net.run
+                && ceres.last_copy == Some((base, 0))
+                && dma.current_src == base
+                && dma.cycles_modulo == 2
+        }
         // The M-cycle after the write to FF46: the start is on its way.
         DmaPhase::Copy { next: 0 } => {
-            !dma.restarting
-                && net.requested
+            net.requested
                 && net.start_1
                 && !net.start_2
                 && !net.enabled
@@ -180,16 +189,9 @@ fn related(net: &NetDma, ceres: &Ceres) -> bool {
     regs && state
 }
 
-/// Where ceres parts from the netlist: a write to FF46 while a transfer is
-/// on its way or running (a restart), which `netlist_dma_restart` covers.
-// @fact dma-restart-bytes
-fn known_difference(ceres: &Ceres, access: Access) -> bool {
-    matches!(access, Access::Write(_)) && ceres.dma.is_active()
-}
-
 /// From any related pair, an M-cycle with any access to FF46 gives the same
-/// read, OAM write and blocking of the CPU's OAM reads, and leaves the pair
-/// related.
+/// read, OAM write and blocking of the CPU's OAM accesses, and leaves the
+/// pair related.
 #[kani::proof]
 #[kani::unwind(5)]
 fn netlist_dma_bisimulation() {
@@ -197,85 +199,29 @@ fn netlist_dma_bisimulation() {
     let mut ceres = any_ceres();
     kani::assume(related(&net, &ceres));
     let access = any_access();
-    kani::assume(!known_difference(&ceres, access));
+    let write = matches!(access, Access::Write(_));
+    let starting = ceres.dma.phase == (DmaPhase::Copy { next: 0 });
+    let restart = write && net.run && !starting;
+    let write_after_write = write && starting && !net.run;
+    let write_after_restart = write && starting && net.run;
     let (net_read, net_write) = net_m_cycle(&mut net, access);
     let (ceres_read, ceres_write) = ceres_m_cycle(&mut ceres, access);
     assert!(net_read == ceres_read, "the read differs");
     assert!(net_write == ceres_write, "the OAM write differs");
+    // @fact dma-oam-write-after-start
     assert!(
-        ceres.dma.blocks_oam_read() == net.run,
-        "the CPU's OAM reads are blocked otherwise"
-    );
-    // @fact dma-oam-write-after-start: ceres also drops the CPU's OAM writes
-    // in the M-cycle after the write to FF46, where the netlist does not run.
-    assert!(
-        ceres.dma.blocks_oam_write()
-            == (net.run || matches!(ceres.dma.phase, DmaPhase::Copy { next: 0 })),
-        "the CPU's OAM writes are blocked otherwise"
+        ceres.dma.blocks_oam() == net.run,
+        "the CPU's OAM accesses are blocked otherwise"
     );
     assert!(related(&net, &ceres), "the states part");
     kani::cover!(matches!(access, Access::Write(_)), "a transfer starts");
+    kani::cover!(restart, "a restart");
+    kani::cover!(write_after_write, "a write after a write");
+    kani::cover!(write_after_restart, "a write after a restart");
     kani::cover!(net_write.is_some_and(|(_, n)| n == 0), "byte 0");
     kani::cover!(net_write.is_some_and(|(_, n)| n == 159), "byte 159");
     kani::cover!(
         ceres.dma.phase == DmaPhase::Idle && net_write.is_some(),
         "the transfer ends"
-    );
-}
-
-/// A write to FF46 while a transfer runs: in that M-cycle and the next the
-/// two sides write other OAM bytes, and then they are related again.
-#[kani::proof]
-#[kani::unwind(5)]
-fn netlist_dma_restart() {
-    let mut net = any_net_dma();
-    let mut ceres = any_ceres();
-    kani::assume(related(&net, &ceres));
-    kani::assume(net.run);
-    let val: u8 = kani::any();
-    let restart_at = match ceres.dma.phase {
-        DmaPhase::Copy { next } if next != 0 => Some(next),
-        _ => None,
-    };
-    let (_, net_first) = net_m_cycle(&mut net, Access::Write(val));
-    let (_, ceres_first) = ceres_m_cycle(&mut ceres, Access::Write(val));
-    // The byte of the restart's M-cycle: the same index, but the netlist
-    // reads it from the new source (FF46 is a latch, open while written).
-    let new = u16::from(val) << 8;
-    assert!(
-        net_first == ceres_first.map(|(src, n)| (new | (src & 0xFF), n)),
-        "the first write is not the new source's"
-    );
-    assert!(
-        ceres.dma.blocks_oam_read() == net.run,
-        "blocked otherwise, first"
-    );
-    let access = any_access();
-    kani::assume(!matches!(access, Access::Write(_)));
-    let running = net.run;
-    let (net_read, net_second) = net_m_cycle(&mut net, access);
-    let (ceres_read, ceres_second) = ceres_m_cycle(&mut ceres, access);
-    assert!(net_read == ceres_read, "the read differs");
-    assert!(
-        ceres.dma.blocks_oam_read() == net.run,
-        "blocked otherwise, second"
-    );
-    // The next byte: the netlist's restart clears its count as the write
-    // begins, so it writes byte 0; ceres writes the byte the interrupted
-    // transfer was at, from the new source (Gambatte's rule).
-    assert!(
-        net_second == running.then_some((new, 0)),
-        "the second netlist write is not byte 0"
-    );
-    assert!(
-        ceres_second == restart_at.map(|at| (new | u16::from(at), at)),
-        "the second ceres write is not the interrupted byte"
-    );
-    assert!(related(&net, &ceres), "the states part");
-    kani::cover!(net_first != ceres_first, "the first writes differ");
-    kani::cover!(net_second != ceres_second, "the second writes differ");
-    kani::cover!(
-        net_first == ceres_first && net_second == ceres_second,
-        "the writes are the same"
     );
 }

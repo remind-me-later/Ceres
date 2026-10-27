@@ -204,7 +204,7 @@ impl<A: AudioCallback> Gb<A> {
     #[inline]
     pub fn cpu_read_mem(&mut self, addr: u16) -> u8 {
         if (OAM_START..IO_START).contains(&addr) {
-            let dma_blocked = self.dma.blocks_oam_read();
+            let dma_blocked = self.dma.blocks_oam();
             return self.ppu.cpu_read_oam_area(addr, dma_blocked);
         }
         let value = self
@@ -228,7 +228,7 @@ impl<A: AudioCallback> Gb<A> {
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.read_wram_lo(addr),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.read_wram_hi(addr),
             0xFE00..=0xFE9F => {
-                if self.dma.blocks_oam_read() {
+                if self.dma.blocks_oam() {
                     0xFF
                 } else {
                     self.ppu.read_oam(addr)
@@ -272,11 +272,7 @@ impl<A: AudioCallback> Gb<A> {
             SCY => self.ppu.write_scy(val),
             SCX => self.ppu.write_scx(val),
             LYC => self.ppu.write_lyc(val),
-            DMA => {
-                self.dma.write(val);
-                self.ppu
-                    .set_dma_state(DmaPhase::StartUp, u16::from(val) << 8, true);
-            }
+            DMA => self.write_dma(val),
             BGP => self.ppu.write_bgp(val),
             OBP0 => self.ppu.write_obp0(val),
             OBP1 => self.ppu.write_obp1(val),
@@ -369,7 +365,7 @@ impl<A: AudioCallback> Gb<A> {
             0xC000..=0xCFFF | 0xE000..=0xEFFF => self.wram.write_wram_lo(addr, val),
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
             0xFE00..=0xFEFF => {
-                let dma_blocked = self.dma.blocks_oam_write();
+                let dma_blocked = self.dma.blocks_oam();
                 self.ppu.cpu_write_oam_area(addr, val, dma_blocked);
             }
             0xFF00..=0xFFFF => self.write_io((addr & 0xFF) as u8, val),
