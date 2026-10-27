@@ -1,8 +1,8 @@
-//! Replays the readable model's traces of the divider, the timer and IF
-//! (`hdl/trace-blocks.sh`, in `hdl/build/blocks`) through their
-//! transcriptions, `NetTimer` and `NetIf`, phase by phase, and reports where
-//! a transcription parts from the model. The proofs against ceres
-//! (`timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
+//! Replays the readable model's traces of the divider, the timer, IF and OAM
+//! DMA (`hdl/trace-blocks.sh`, in `hdl/build/blocks`) through their
+//! transcriptions, `NetTimer`, `NetIf` and `NetDma`, phase by phase, and
+//! reports where a transcription parts from the model. The proofs against
+//! ceres (`timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
 //! `netlist_proofs.rs`) rest on these transcriptions; this checks them.
 //!
 //! Each block starts from the model's state at a phase boundary. Then every
@@ -16,6 +16,7 @@
 use {
     crate::{
         interrupts::netlist::{NetIf, lowest},
+        memory::netlist::{NetDma, Phase as DmaPhase},
         timing::netlist::{Access, NetTimer, Phase, Reg},
     },
     std::{
@@ -53,6 +54,12 @@ struct Line {
     ie: u8,
     /// The requests that rose in the phase, also for less than its length.
     rose: u8,
+    dma: NetDma,
+    /// OAM's DMA write strobe.
+    dma_write: bool,
+    /// The DMA's clock, high in A to D and while the CPU is halted (older
+    /// traces lack it).
+    dma_phi: Option<bool>,
 }
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
@@ -74,6 +81,11 @@ fn parse(text: &str) -> Option<Line> {
         read_value,
         ie,
         rose,
+        dma_source,
+        dma_bits,
+        dma_count,
+        dma_write,
+        ref dma_phi @ ..,
     ] = fields.as_slice()
     else {
         return None;
@@ -100,6 +112,22 @@ fn parse(text: &str) -> Option<Line> {
         read_value: hex8(read_value)?,
         ie: hex8(ie)?,
         rose: hex8(rose)?,
+        dma: NetDma {
+            source: hex8(dma_source)?,
+            requested: bit(dma_bits, 0)?,
+            start_1: bit(dma_bits, 1)?,
+            start_2: bit(dma_bits, 2)?,
+            enabled: bit(dma_bits, 3)?,
+            done: bit(dma_bits, 4)?,
+            run: bit(dma_bits, 5)?,
+            count: hex8(dma_count)?,
+        },
+        dma_write: bit(dma_write, 0)?,
+        dma_phi: match *dma_phi {
+            [] => None,
+            [phi] => Some(bit(phi, 0)?),
+            _ => return None,
+        },
     })
 }
 
@@ -390,6 +418,89 @@ fn replay_if(name: &str, lines: &[Line], report: &mut Report) {
     }
 }
 
+const DMA_PHASES: [(char, DmaPhase); 8] = [
+    ('a', DmaPhase::A),
+    ('b', DmaPhase::B),
+    ('c', DmaPhase::C),
+    ('d', DmaPhase::D),
+    ('e', DmaPhase::E),
+    ('f', DmaPhase::F),
+    ('g', DmaPhase::G),
+    ('h', DmaPhase::H),
+];
+
+fn replay_dma(name: &str, lines: &[Line], report: &mut Report) {
+    let Some(start) = lines
+        .iter()
+        .skip(1)
+        .position(|l| l.phase == 'a')
+        .map(|i| i + 1)
+    else {
+        return;
+    };
+    let mut net = lines[start - 1].dma;
+    for (n, cycle) in lines[start..].as_chunks::<8>().0.iter().enumerate() {
+        let first = start + 1 + 8 * n;
+        if cycle.iter().zip(DMA_PHASES).any(|(l, (p, _))| l.phase != p) {
+            report.differ(
+                "DMA: the phases are out of order".to_owned(),
+                format!("{name}:{first}"),
+            );
+            return;
+        }
+        if cycle.iter().any(|l| l.wr && l.addr == 0xFF46) {
+            report.saw(if net.enabled {
+                "DMA: a write of FF46 while a transfer runs"
+            } else {
+                "DMA: a write of FF46"
+            });
+        }
+        for (k, (line, (letter, phase))) in cycle.iter().zip(DMA_PHASES).enumerate() {
+            let write = (line.wr && line.addr == 0xFF46).then_some(line.data);
+            let was = net;
+            // The clock's edges, where the trace has it; else the phases'.
+            match (line.dma_phi, lines[start + 8 * n + k - 1].dma_phi) {
+                (Some(phi), Some(before)) => {
+                    if phi && !before {
+                        net.rise(write.is_some());
+                    } else if !phi && before {
+                        net.fall();
+                    } else if phi && letter == 'e' {
+                        report.saw("DMA: dma_phi stays high in E (HALT)");
+                    } else {
+                        // No edge.
+                    }
+                    net.settle(write);
+                }
+                _ => net.phase(phase, write),
+            }
+            report.phases += 1;
+            if net.enabled && !was.enabled {
+                report.saw("DMA: a transfer starts");
+            }
+            if was.enabled && !net.enabled {
+                report.saw("DMA: a transfer ends");
+            }
+            let low = line
+                .dma_phi
+                .map_or(matches!(letter, 'e' | 'f' | 'g' | 'h'), |phi| !phi);
+            let strobe = net.oam_write().is_some() && low && matches!(letter, 'e' | 'f' | 'g');
+            if net != line.dma || strobe != line.dma_write {
+                report.differ(
+                    format!("DMA, phase {letter}"),
+                    format!(
+                        "{name}:{} ({net:?} strobe {strobe}, model {:?} strobe {})",
+                        first + k,
+                        line.dma,
+                        line.dma_write
+                    ),
+                );
+                net = line.dma;
+            }
+        }
+    }
+}
+
 #[test]
 #[ignore = "needs traces of the model: hdl/trace-blocks.sh"]
 #[expect(
@@ -420,6 +531,7 @@ fn netlist_replay() {
             .collect();
         replay_timer(name, &lines, &mut report);
         replay_if(name, &lines, &mut report);
+        replay_dma(name, &lines, &mut report);
     }
 
     let summary = summary(traces.len(), &report).expect("a String takes any text");

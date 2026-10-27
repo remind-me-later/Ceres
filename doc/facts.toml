@@ -207,6 +207,25 @@ hardware = "none"
 race = "order"
 note = "The line-end pulse comes 156 ns before the LCD's reset; hdl/check/lcd_off_line_start.asm reads IF at each M-cycle around it."
 
+[dma-oam-write-after-start]
+title = "A CPU write to OAM in the M-cycle after a write to FF46"
+models = ["dmg", "cgb"]
+netlist = "differs"
+hardware = "none"
+open = ["doc/hardware-tests.md#a-cpu-write-to-oam-just-after-a-write-to-ff46"]
+needs = ["flash-cart", "dmg-b", "dmg-c", "cgb-c", "cgb-e"]
+note = "The netlist lets it through (run rises at the next A edge), ceres drops it. Every suite passes either way (2026-10-27)."
+
+[dma-restart-bytes]
+title = "The first two OAM bytes of an OAM DMA restarted while it runs"
+models = ["dmg", "cgb"]
+netlist = "differs"
+hardware = "none"
+emulators = "disagree"
+open = ["doc/hardware-tests.md#an-oam-dma-restarted-while-it-runs"]
+needs = ["flash-cart", "dmg-b", "dmg-c", "cgb-c", "cgb-e"]
+note = "Netlist: byte c from the new source, then byte 0. Ceres (Gambatte): byte c from the old source, then byte c + 1 from the new one. Every suite passes either way (2026-10-27)."
+
 # Interrupts and the timer
 
 [ack-run-ahead]

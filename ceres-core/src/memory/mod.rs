@@ -2,6 +2,8 @@ mod dma;
 mod hdma;
 mod hram;
 mod key1;
+#[cfg(any(kani, test))]
+pub(crate) mod netlist;
 mod svbk;
 #[cfg(test)]
 mod tests;

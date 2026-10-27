@@ -42,8 +42,11 @@
 -- the timer's overflow flip-flops (int_timer, bit7_before), its clock and
 -- its write strobes of TMA and TAC; the interrupt requests, the
 -- acknowledges, IF's flags and its read latch, IE, and the requests that
--- rose in the phase (also those that fell again before its end). Values in
--- hexadecimal, bits as 0 or 1.
+-- rose in the phase (also those that fell again before its end); OAM DMA's
+-- FF46, its flip-flops (requested, start_1, start_2, enabled, done, run)
+-- and its count, OAM's DMA write strobe, and the DMA's clock dma_phi (high
+-- in A to D, and while the CPU is halted). Values in hexadecimal, bits as 0
+-- or 1.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -300,6 +303,16 @@ begin
 		alias flags       is << signal .gameboy_tb.u_gameboy.u_chip.flags : std_ulogic_vector(4 downto 0) >>;
 		alias read_value  is << signal .gameboy_tb.u_gameboy.u_chip.u_interrupts.read_value : std_ulogic_vector(4 downto 0) >>;
 		alias ie          is << signal .gameboy_tb.u_gameboy.u_chip.u_cpu.u_interrupts.ie : std_ulogic_vector(7 downto 0) >>;
+		alias dma_source  is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.source : std_ulogic_vector(7 downto 0) >>;
+		alias dma_req     is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.requested : std_ulogic >>;
+		alias dma_start_1 is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.start_1 : std_ulogic >>;
+		alias dma_start_2 is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.start_2 : std_ulogic >>;
+		alias dma_enabled is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.enabled : std_ulogic >>;
+		alias dma_done    is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.done : std_ulogic >>;
+		alias dma_run     is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.run : std_ulogic >>;
+		alias dma_count   is << signal .gameboy_tb.u_gameboy.u_chip.u_dma.count : unsigned(7 downto 0) >>;
+		alias dma_write   is << signal .gameboy_tb.u_gameboy.u_chip.u_oam.dma_write : std_ulogic >>;
+		alias dma_phi     is << signal .gameboy_tb.u_gameboy.u_chip.dma_phi : std_ulogic >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := false;
@@ -341,7 +354,10 @@ begin
 					& ' ' & hx(std_logic_vector(div)) & ' ' & hx(tima) & ' ' & hx(tma) & ' ' & hx(tac)
 					& ' ' & b01(int_timer) & b01(bit7_before) & b01(timer_clock) & b01(write_tma) & b01(write_tac)
 					& ' ' & hx(int_jp & int_serial & int_timer & int_stat & int_vbl) & ' ' & hx(acks)
-					& ' ' & hx(flags) & ' ' & hx(read_value) & ' ' & hx(ie) & ' ' & hx(rose));
+					& ' ' & hx(flags) & ' ' & hx(read_value) & ' ' & hx(ie) & ' ' & hx(rose)
+					& ' ' & hx(dma_source) & ' ' & b01(dma_req) & b01(dma_start_1) & b01(dma_start_2)
+					& b01(dma_enabled) & b01(dma_done) & b01(dma_run) & ' ' & hx(std_ulogic_vector(dma_count))
+					& ' ' & b01(dma_write) & ' ' & b01(dma_phi));
 				writeline(f, l);
 			end if;
 			ended := phase;

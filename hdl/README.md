@@ -356,9 +356,11 @@ better oracle, and the translation had to follow every change to dmg-sim.
 
 ceres-core's proofs against the netlist (`cargo kani -p ceres-core`) rest
 on Rust transcriptions of some of the model's blocks: `NetTimer`
-(`ceres-core/src/timing/netlist.rs`, of `divider.vhd` and `timer.vhd`) and
+(`ceres-core/src/timing/netlist.rs`, of `divider.vhd` and `timer.vhd`),
 `NetIf` (`ceres-core/src/interrupts/netlist.rs`, of `interrupts.vhd` and
-the request latch of `sm83_interrupts.vhd`). `trace-blocks.sh` records those
+the request latch of `sm83_interrupts.vhd`) and `NetDma`
+(`ceres-core/src/memory/netlist.rs`, of `dma.vhd`, clocked by `dma_phi`,
+which stops while the CPU is halted). `trace-blocks.sh` records those
 blocks at the end of every phase while the model runs a ROM (the testbench's
 `BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in
 `build/blocks` through the transcriptions, phase by phase, with the model's
@@ -374,4 +376,4 @@ cargo test -p ceres-core --release netlist_replay -- --ignored --nocapture
 A request that rises and falls within a phase (the STAT write's glitch)
 counts as a rise in that phase: the trace notes every rising edge of the
 request lines, not only their values at the phase's end. The results are in
-[results.md](results.md#ceress-transcriptions-of-the-timer-and-if).
+[results.md](results.md#ceress-transcriptions-of-the-timer-if-and-oam-dma).

@@ -56,6 +56,7 @@ begin
 		end if;
 	end process;
 
+	-- @fact dma-restart-bytes, @fact dma-oam-write-after-start
 	-- A write requests a transfer; it starts when the write is over, after
 	-- the next rise and fall of dma_phi, and then starts over even if one is
 	-- already running.

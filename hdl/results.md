@@ -216,30 +216,45 @@ one:
   of the 1747 ROMs, 207 of them: 190 pass, 17 fail, all `oamdma`'s
   `busypush` and `busyread` (`bus-with-two-drivers`).
 
-## Ceres's transcriptions of the timer and IF
+## Ceres's transcriptions of the timer, IF and OAM DMA
 
-`trace-blocks.sh` over 127 ROMs (77 of gbmicrotest's timer, DIV and
-interrupt ROMs, Mooneye's 13 timer and 12 interrupt tests, and Gambatte's
-20 `irq_precedence` and 5 `m1` IF-write ROMs; 5.2 GB, 26 minutes, four at a
-time), replayed by `netlist_replay` (30 s): `NetTimer` and `NetIf` match
-the model in all of the 223 million phases. What the traces exercised:
+`trace-blocks.sh` over 169 ROMs (77 of gbmicrotest's timer, DIV and
+interrupt ROMs and its 7 `dma_` ROMs, Mooneye's 13 timer, 12 interrupt and
+6 OAM DMA tests, and 54 of Gambatte's: its 20 `irq_precedence` and 5 `m1`
+IF-write ROMs, and 29 `oamdma` ROMs, among them the four that change the
+source as a transfer runs; 13 GB), replayed by `netlist_replay` (70 s):
+`NetTimer`, `NetIf` and `NetDma` match the model in all of the 598 million
+phases. What the traces exercised:
 
 | Rule                                         |  Times |
 | -------------------------------------------- | -----: |
-| TIMA overflows                               |  17136 |
-| A write of DIV, TAC, TIMA, TMA               | 65681, 166, 131, 73 |
+| TIMA overflows                               |  18296 |
+| A write of DIV, TAC, TIMA, TMA               | 65681, 168, 133, 75 |
 | A write of TIMA, or TMA, as TIMA reloads     |   2, 2 |
 | TIMA counts as DIV or TAC is written         |     46 |
-| An IF write, read, an interrupt entry        | 118, 37, 79 |
+| An IF write, read, an interrupt entry        | 147, 37, 106 |
 | A source rises as it is acknowledged         |      1 |
+| An OAM DMA starts, ends                      | 64, 63 |
+| FF46 written while a transfer runs           |      9 |
+| A phase E with dma_phi held high (HALT)      | 149223 |
 
 No trace has a source rising in the phase of an IF write: the replay does
 not check that rule (the proofs do, on any rise).
 
-The first run differed in 12 phases, all in phase E of a STAT write: the
-glitch's request pulse is shorter than a phase, so a trace of the values at
-the phases' ends missed the rise that set IF's flag. The traces now note
-every rising edge. Four faults planted in the transcriptions were each
-caught (TIMA counting on the clock's rise; no overflow at the A edge; TMA
-taking the bus as the write starts; a rise winning over the acknowledge,
-which only Gambatte's `late_m0irq_retrigger_2` catches).
+The first runs differed in two ways, both in what the trace gave the
+transcriptions, not in them. In phase E of a STAT write, the glitch's
+request pulse is shorter than a phase, and a trace of the values at the
+phases' ends missed the rise that set IF's flag: the traces now note every
+rising edge. And in `oamdma_late_halt_stat_1`, which halts the CPU during a
+transfer, the DMA's clock (`dma_phi`) stays high while the CPU is halted, so
+the transfer waits; the replay now clocks `NetDma` by that signal. Four
+faults planted in `NetTimer` and `NetIf` were each caught (TIMA counting on
+the clock's rise; no overflow at the A edge; TMA taking the bus as the
+write starts; a rise winning over the acknowledge, which only Gambatte's
+`late_m0irq_retrigger_2` catches).
+
+The proofs against ceres (`cargo kani -p ceres-core`) then show where
+ceres's OAM DMA parts from `NetDma`: ceres drops the CPU's OAM writes in
+the M-cycle after a write to FF46, where the netlist lets them through, and
+a restart's first two bytes differ. No test of the suites tells either
+apart (facts `dma-oam-write-after-start` and `dma-restart-bytes`).
