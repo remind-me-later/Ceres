@@ -390,8 +390,9 @@ the request latch of `sm83_interrupts.vhd`) and `NetDma`
 (`ceres-core/src/memory/netlist.rs`, of `dma.vhd`, clocked by `dma_phi`,
 which stops while the CPU is halted), and `NetLcd`
 (`ceres-core/src/ppu/display/timing/netlist.rs`, of `lcd_timing.vhd`'s
-line clock, LY, VBlank, LY = LYC and STAT interrupt line, edge by edge;
-the first block of the PPU, not replayed yet). `trace-blocks.sh` records those
+line clock, LY, VBlank, LY = LYC, the latches of LYC and STAT's enables,
+and the STAT interrupt line, edge by edge; the first block of the PPU).
+`trace-blocks.sh` records those
 blocks at the end of every phase while the model runs a ROM (the testbench's
 `BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in
 `build/blocks` through the transcriptions, phase by phase, with the model's
@@ -407,7 +408,9 @@ cargo test -p ceres-core --release netlist_replay -- --ignored --nocapture
 A request that rises and falls within a phase (the STAT write's glitch)
 counts as a rise in that phase: the trace notes every rising edge of the
 request lines, not only their values at the phase's end. The results are in
-[results.md](results.md#ceress-transcriptions-of-the-timer-if-and-oam-dma).
+[results.md](results.md#ceress-transcriptions-of-the-timer-if-and-oam-dma)
+and, for the line timing,
+[results.md](results.md#ceress-transcription-of-the-line-timing).
 
 ### Finding its races
 

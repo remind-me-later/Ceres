@@ -264,6 +264,51 @@ new source. No test of the suites tells any of them apart, and ceres now
 follows the netlist in all three (facts `dma-oam-write-after-start` and
 `dma-restart-bytes`).
 
+## Ceres's transcription of the line timing
+
+`NetLcd` (`ceres-core/src/ppu/display/timing/netlist.rs`) transcribes
+`lcd_timing.vhd`'s DMG part edge by edge: the clock's dividers, LX, the
+line's end, LY and its reset in line 153, VBlank, LY = LYC's sample, the
+latches of LYC and STAT's enables, and the STAT interrupt's line. The
+traces now carry those flip-flops, the clock, the LCD's reset and the
+modes. Over 169 of gbmicrotest's ROMs (line 153, LYC, STAT's write glitch,
+the LCD turned on, the VBlank, OAM and line 144 interrupts; 1.2 GB),
+`netlist_replay` finds `NetLcd` the model's in all 50.8 million phases:
+every flip-flop, every rise of the interrupt's line (225), and every read
+of STAT, LY and LYC (69). What it took:
+
+- The CPU's phases are the PPU clock's edges, D where ceres's half dot is
+  `h = 0` (mod 8) and H where it is 4, at which the LY = LYC sample
+  falls. Ceres makes its accesses at `h = 0` (all 28 to these registers in
+  60 of the ROMs), from the end of the first line after the LCD is turned
+  on: in that line its clock runs 2 half dots off the CPU's (35 accesses at
+  `h = 2`), until the pixel pipeline resyncs it at the line's end.
+- A write's latches open in E while the data bus is still precharged:
+  they take FF before the byte written, which is STAT's write glitch (117
+  rises the first replay missed).
+- A read is not the register's value at one moment. The core's data bus
+  is precharged high and only pulled low while the read drives it, from E
+  until the CPU takes it in the middle of H, so a read gives the AND of
+  what the register showed over E to H: a bit that rises at H's edge (the
+  LY = LYC flag, VBlank, a mode) is not seen, and one that falls is (LY's
+  reset in line 153 reads 0). It is the DMG's counterpart of the CGB's
+  `old & new` LY (fact `cgb-ly-read-during-increment`). (Where a bit rises
+  during the read, the model's chip data bus shows X for that bit: the
+  core keeps its precharged bus low there.)
+
+The proofs (`cargo kani -p ceres-core --harness netlist_lcd`) then show
+ceres's `LcdTiming` bisimilar to it: a free-running half dot, and an
+M-cycle with any access to STAT, LY or LYC (the same byte read, STAT's
+mode bits aside, and the same rises by the T-cycles IF tells apart). Ceres
+gets the reads' AND without modelling it: its DMG delays read the flag 3
+half dots ahead (before the sample), LY 4 (after line 153's reset), and the
+flag only while LY still equals LYC, and its DMG reads see VBlank only from
+line 144. One difference is left, below what the CPU can see: an LYC write
+raises ceres's line a half dot before the netlist's sample at H, within
+the same T-cycle. STAT's mode bits, the HBlank source, the LCD turned on
+and off and ceres's resync of its clock at each line's end are not proved
+yet.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

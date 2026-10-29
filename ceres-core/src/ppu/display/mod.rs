@@ -26,6 +26,8 @@ mod pixels;
 mod stat;
 mod state;
 mod timing;
+#[cfg(test)]
+pub(crate) use timing::netlist::NetLcd;
 mod window;
 
 use {

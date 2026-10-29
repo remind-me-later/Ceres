@@ -25,7 +25,7 @@
 //! a CPU read (gambatte's clock, which its tests are written against).
 
 #[cfg(any(kani, test))]
-mod netlist;
+pub(super) mod netlist;
 #[cfg(kani)]
 mod netlist_proofs;
 
@@ -349,6 +349,7 @@ impl LcdTiming {
 /// How many half dots after the unit's clock a CPU access lands: writes
 /// reach the unit that much later, reads see it that much ahead.
 // @fact cgb-read-delays, @fact cgb-stat-write-delay, @fact cgb-lyc-write-sampled
+#[derive(Clone, Copy)]
 struct Delays {
     stat_write: u8,
     /// On the CGB, at the first LY=LYC sample after it.
@@ -417,54 +418,17 @@ impl Ppu {
         }
     }
 
-    /// LY as a CPU read sees it. On the CGB a read in the half dot where LY
-    /// changes sees the counter rippling: the bits that fall have fallen,
-    /// the one that rises has not risen yet.
+    /// LY as a CPU read sees it.
     pub(in crate::ppu) fn timing_read_ly(&self) -> u8 {
-        let delay = self.delays().ly_read;
-        let mut t = self.d.timing.clone();
-        let mut before = t.ly;
-        for _ in 0..delay {
-            before = t.ly;
-            t.unit();
-        }
-        // @fact cgb-ly-read-during-increment
-        if self.d.timing.phases.cgb && delay > 0 && before != t.ly {
-            before & t.ly
-        } else {
-            t.ly
-        }
+        self.d.timing.read_ly(self.delays())
     }
 
     /// STAT's mode and LY=LYC flag as a CPU read sees them, over `stat`
-    /// (the enables and the pipeline's mode). The flag comes from a latch
-    /// (`RUPO`) that follows the synced comparison, and on the DMG drops as
-    /// soon as LY changes.
+    /// (the enables and the pipeline's mode).
     pub(in crate::ppu) fn timing_read_stat(&self, stat: u8) -> u8 {
-        let enables = stat & !(STAT_MODE_B | STAT_LYC_B);
-        let t = &self.d.timing;
-        if !t.on {
-            // With the LCD off the comparison clock stops: the flag keeps
-            // its last value whatever LY and LYC are, and the mode reads 0.
-            return enables | if t.ly_match { STAT_LYC_B } else { 0 };
-        }
-        let delays = self.delays();
-        let holds = t.phases.cgb && (self.double_speed() || t.phases.flag_holds);
-        // One run ahead serves both views.
-        let mut t = t.clone();
-        let (mut lyc_flag, mut mode) = (false, 0);
-        for k in 0..=delays.flag_read.max(delays.mode_read) {
-            if k > 0 {
-                t.unit();
-            }
-            if k == delays.flag_read {
-                lyc_flag = t.ly_match && (holds || t.ly == t.lyc);
-            }
-            if k == delays.mode_read {
-                mode = t.read_mode(stat & STAT_MODE_B);
-            }
-        }
-        enables | mode | if lyc_flag { STAT_LYC_B } else { 0 }
+        self.d
+            .timing
+            .read_stat(stat, self.delays(), self.double_speed())
     }
 
     /// Advances the unit by a half dot.
@@ -539,47 +503,107 @@ impl Ppu {
         self.d.timing.position()
     }
 
-    /// A STAT write. On the DMG the write briefly sets every enable: any
-    /// active source raises the interrupt (with the LCD off, a set LY=LYC).
-    /// The CGB has no such glitch, and its enables reach the line later.
+    /// A STAT write (`LcdTiming::write_stat`).
     pub(in crate::ppu) const fn timing_write_stat(&mut self, val: u8, ints: &mut Interrupts) {
-        let delay = self.delays().stat_write;
-        let t = &mut self.d.timing;
+        let delays = self.delays();
+        if self.d.timing.write_stat(val, delays) {
+            ints.request_lcd();
+        }
+    }
+
+    /// An LYC write (`LcdTiming::write_lyc`).
+    pub(in crate::ppu) const fn timing_write_lyc(&mut self, val: u8) {
+        let delays = self.delays();
+        self.d.timing.write_lyc(val, delays);
+    }
+}
+
+impl LcdTiming {
+    /// LY as a CPU read sees it. On the CGB a read in the half dot where LY
+    /// changes sees the counter rippling: the bits that fall have fallen,
+    /// the one that rises has not risen yet.
+    fn read_ly(&self, delays: Delays) -> u8 {
+        let delay = delays.ly_read;
+        let mut t = self.clone();
+        let mut before = t.ly;
+        for _ in 0..delay {
+            before = t.ly;
+            t.unit();
+        }
+        // @fact cgb-ly-read-during-increment
+        if self.phases.cgb && delay > 0 && before != t.ly {
+            before & t.ly
+        } else {
+            t.ly
+        }
+    }
+
+    /// STAT's mode and LY=LYC flag as a CPU read sees them, over `stat`
+    /// (the enables and the pipeline's mode). The flag comes from a latch
+    /// (`RUPO`) that follows the synced comparison, and on the DMG drops as
+    /// soon as LY changes.
+    fn read_stat(&self, stat: u8, delays: Delays, double_speed: bool) -> u8 {
+        let enables = stat & !(STAT_MODE_B | STAT_LYC_B);
+        if !self.on {
+            // With the LCD off the comparison clock stops: the flag keeps
+            // its last value whatever LY and LYC are, and the mode reads 0.
+            return enables | if self.ly_match { STAT_LYC_B } else { 0 };
+        }
+        let holds = self.phases.cgb && (double_speed || self.phases.flag_holds);
+        // One run ahead serves both views.
+        let mut t = self.clone();
+        let (mut lyc_flag, mut mode) = (false, 0);
+        for k in 0..=delays.flag_read.max(delays.mode_read) {
+            if k > 0 {
+                t.unit();
+            }
+            if k == delays.flag_read {
+                lyc_flag = t.ly_match && (holds || t.ly == t.lyc);
+            }
+            if k == delays.mode_read {
+                mode = t.read_mode(stat & STAT_MODE_B);
+            }
+        }
+        enables | mode | if lyc_flag { STAT_LYC_B } else { 0 }
+    }
+
+    /// A STAT write: `true` if it raises the interrupt. On the DMG the
+    /// write briefly sets every enable: any active source raises the
+    /// interrupt (with the LCD off, a set LY=LYC). The CGB has no such
+    /// glitch, and its enables reach the line later.
+    const fn write_stat(&mut self, val: u8, delays: Delays) -> bool {
+        let delay = delays.stat_write;
         let enables = val & STAT_ENABLES;
         // A write still on its way lands now.
-        if let Some(write) = t.stat_pending.take() {
-            t.enables = write.value;
-            t.dirty = true;
+        if let Some(write) = self.stat_pending.take() {
+            self.enables = write.value;
+            self.dirty = true;
         }
-        if t.on && delay > 0 {
-            t.stat_pending = Some(PendingWrite {
+        if self.on && delay > 0 {
+            self.stat_pending = Some(PendingWrite {
                 value: enables,
                 half_dots_left: delay,
             });
-            return;
+            return false;
         }
-        let glitch = !t.phases.cgb && t.line_for(STAT_ENABLES) && !t.stat_line;
-        t.stat_line |= glitch;
-        t.enables = enables;
-        if t.update_line() || glitch {
-            ints.request_lcd();
-        }
+        let glitch = !self.phases.cgb && self.line_for(STAT_ENABLES) && !self.stat_line;
+        self.stat_line |= glitch;
+        self.enables = enables;
+        self.update_line() || glitch
     }
 
     /// An LYC write: it reaches the comparison `Delays::lyc_write` half dots
     /// later, which then follows it at once on the DMG, and at its next
     /// sample on the CGB.
-    pub(in crate::ppu) const fn timing_write_lyc(&mut self, val: u8) {
-        let delay = self.delays().lyc_write;
-        let t = &mut self.d.timing;
-        if t.on {
-            t.lyc_pending = Some(PendingWrite {
+    const fn write_lyc(&mut self, val: u8, delays: Delays) {
+        if self.on {
+            self.lyc_pending = Some(PendingWrite {
                 value: val,
-                half_dots_left: delay,
+                half_dots_left: delays.lyc_write,
             });
         } else {
-            t.lyc = val;
-            t.lyc_pending = None;
+            self.lyc = val;
+            self.lyc_pending = None;
         }
     }
 }

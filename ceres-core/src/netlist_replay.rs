@@ -1,9 +1,11 @@
-//! Replays the readable model's traces of the divider, the timer, IF and OAM
-//! DMA (`hdl/trace-blocks.sh`, in `hdl/build/blocks`) through their
-//! transcriptions, `NetTimer`, `NetIf` and `NetDma`, phase by phase, and
-//! reports where a transcription parts from the model. The proofs against
-//! ceres (`timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
-//! `netlist_proofs.rs`) rest on these transcriptions; this checks them.
+//! Replays the readable model's traces of the divider, the timer, IF, OAM
+//! DMA and the line timing (`hdl/trace-blocks.sh`, in `hdl/build/blocks`)
+//! through their transcriptions, `NetTimer`, `NetIf`, `NetDma` and
+//! `NetLcd`, phase by phase, and reports where a transcription parts from
+//! the model. The proofs against ceres (`timing/netlist_proofs.rs`,
+//! `interrupts/netlist_proofs.rs`, `memory/dma/netlist_proofs.rs`,
+//! `ppu/display/timing/netlist_proofs.rs`, `netlist_proofs.rs`) rest on
+//! these transcriptions; this checks them.
 //!
 //! Each block starts from the model's state at a phase boundary. Then every
 //! phase gets the trace's inputs (the CPU's access, the interrupt requests
@@ -17,6 +19,7 @@ use {
     crate::{
         interrupts::netlist::{NetIf, lowest},
         memory::netlist::{NetDma, Phase as DmaPhase},
+        ppu::NetLcd,
         timing::netlist::{Access, NetTimer, Phase, Reg},
     },
     std::{
@@ -60,6 +63,25 @@ struct Line {
     /// The DMA's clock, high in A to D and while the CPU is halted (older
     /// traces lack it).
     dma_phi: Option<bool>,
+    /// The line timing (older traces lack it).
+    lcd: Option<LcdLine>,
+}
+
+/// The line timing in a line of a trace: its flip-flops (the LCD's pins'
+/// left out), and the clock, the LCD's reset and the modes it takes in.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the trace's clock, reset and modes"
+)]
+struct LcdLine {
+    net: NetLcd,
+    clk: bool,
+    ppu_reset: bool,
+    mode0: bool,
+    mode2: bool,
+    mode3: bool,
+    /// The byte a read takes, in the middle of phase H (older traces lack it).
+    read: Option<u8>,
 }
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
@@ -85,7 +107,7 @@ fn parse(text: &str) -> Option<Line> {
         dma_bits,
         dma_count,
         dma_write,
-        ref dma_phi @ ..,
+        ref rest @ ..,
     ] = fields.as_slice()
     else {
         return None;
@@ -123,9 +145,43 @@ fn parse(text: &str) -> Option<Line> {
             count: hex8(dma_count)?,
         },
         dma_write: bit(dma_write, 0)?,
-        dma_phi: match *dma_phi {
+        dma_phi: match *rest {
             [] => None,
-            [phi] => Some(bit(phi, 0)?),
+            [phi, ..] => Some(bit(phi, 0)?),
+        },
+        lcd: match *rest {
+            [] | [_] => None,
+            [_, inputs, flops, lx, ly, lyc, enables, ref read @ ..] => Some(LcdLine {
+                net: NetLcd {
+                    clk: bit(inputs, 0)?,
+                    wuvu: bit(flops, 0)?,
+                    vena: bit(flops, 1)?,
+                    wosu: bit(flops, 2)?,
+                    lx: hex8(lx)?,
+                    vclk: bit(flops, 3)?,
+                    nype: bit(flops, 4)?,
+                    ly: hex8(ly)?,
+                    line_153: bit(flops, 5)?,
+                    first_line: bit(flops, 6)?,
+                    mode1: bit(flops, 7)?,
+                    frame: false,
+                    line_parity: false,
+                    cpg_lx: false,
+                    lyc: hex8(lyc)?,
+                    lyc_match: bit(flops, 8)?,
+                    stat_enable: hex8(enables)?,
+                },
+                clk: bit(inputs, 0)?,
+                ppu_reset: bit(inputs, 1)?,
+                mode0: bit(inputs, 2)?,
+                mode2: bit(inputs, 3)?,
+                mode3: bit(inputs, 4)?,
+                read: match *read {
+                    [] => None,
+                    [byte] => Some(hex8(byte)?),
+                    _ => return None,
+                },
+            }),
             _ => return None,
         },
     })
@@ -501,6 +557,179 @@ fn replay_dma(name: &str, lines: &[Line], report: &mut Report) {
     }
 }
 
+/// The flip-flops of the line timing that differ from the model's (the
+/// LCD's pins' are not traced).
+fn lcd_differences(net: &NetLcd, model: &NetLcd) -> Vec<&'static str> {
+    let fields: [(&str, bool); 15] = [
+        ("clk", net.clk == model.clk),
+        ("wuvu", net.wuvu == model.wuvu),
+        ("vena", net.vena == model.vena),
+        ("wosu", net.wosu == model.wosu),
+        ("lx", net.lx == model.lx),
+        ("vclk", net.vclk == model.vclk),
+        ("nype", net.nype == model.nype),
+        ("ly", net.ly == model.ly),
+        ("line_153", net.line_153 == model.line_153),
+        ("first_line", net.first_line == model.first_line),
+        ("mode1", net.mode1 == model.mode1),
+        ("lyc", net.lyc == model.lyc),
+        ("lyc_match", net.lyc_match == model.lyc_match),
+        ("stat_enable", net.stat_enable == model.stat_enable),
+        ("-", true),
+    ];
+    fields
+        .iter()
+        .filter(|&&(_, same)| !same)
+        .map(|&(name, _)| name)
+        .collect()
+}
+
+/// The CPU's write, through LYC's and the enables' latches, which follow
+/// the data bus while the strobe is up: as it opens they take the bus as it
+/// was (precharged, FF), and then the byte written (STAT's write glitch).
+/// Whether the interrupt's line rose, from `level`.
+fn lcd_write(
+    net: &mut NetLcd,
+    line: &Line,
+    previous: &Line,
+    mode0: bool,
+    level: &mut bool,
+    report: &mut Report,
+) -> bool {
+    let mut rose = false;
+    let opens = !previous.wr;
+    for addr in [0xFF45, 0xFF41] {
+        if !(line.wr && line.addr == addr) {
+            continue;
+        }
+        for data in [opens.then_some(previous.data), Some(line.data)]
+            .into_iter()
+            .flatten()
+        {
+            if addr == 0xFF45 {
+                net.lyc = data;
+            } else {
+                net.stat_enable = data & 0x78;
+            }
+            let now = net.int_stat(mode0);
+            rose |= now && !*level;
+            *level = now;
+        }
+        if opens {
+            report.saw(if addr == 0xFF45 {
+                "LCD: an LYC write"
+            } else {
+                "LCD: a STAT write"
+            });
+        }
+    }
+    rose
+}
+
+/// A line of a trace has the flip-flops as the edge that began its phase
+/// left them, and the clock as the next edge (the one that ends the phase)
+/// leaves it: `clk` is that edge's.
+fn replay_lcd(name: &str, lines: &[Line], report: &mut Report) {
+    let Some(start) = lines.first().and_then(|l| l.lcd.as_ref()) else {
+        return;
+    };
+    let mut net = start.net;
+    net.clk = !start.clk;
+    let mut before = start;
+    // The core's data bus is precharged high and only pulled low while a
+    // read drives it, from E until the read takes it in the middle of H:
+    // the read takes the AND of what the register showed in E to H.
+    let mut bus: Option<u8> = None;
+    for (n, line) in lines.iter().enumerate().skip(1) {
+        let Some(lcd) = line.lcd.as_ref() else {
+            return;
+        };
+        let place = format!("{name}:{}", n + 1);
+        // The clock's edge, unless the LCD's reset holds the clock's
+        // flip-flops.
+        let mut rose = false;
+        if before.clk == net.clk {
+            report.differ("LCD: a phase without an edge".to_owned(), place.clone());
+        } else if before.ppu_reset {
+            net.clk = before.clk;
+        } else {
+            rose = net.edge(before.mode0);
+        }
+        let mut level = net.int_stat(before.mode0);
+        rose |= lcd_write(
+            &mut net,
+            line,
+            &lines[n - 1],
+            before.mode0,
+            &mut level,
+            report,
+        );
+        if lcd.ppu_reset {
+            net.reset();
+        }
+        for now in [net.int_stat(before.mode0), net.int_stat(lcd.mode0)] {
+            // The second: mode 0, which rises after the edge's flip-flops.
+            rose |= now && !level;
+            level = now;
+        }
+        report.phases += 1;
+
+        let model_rose = line.rose & 2 != 0;
+        if model_rose {
+            report.saw("LCD: the STAT line rises");
+        }
+        if rose != model_rose {
+            report.differ(
+                format!("LCD, phase {}: the STAT line's rise", line.phase),
+                format!("{place} (rose {rose}, model {model_rose})"),
+            );
+        }
+        let mut model = lcd.net;
+        model.clk = before.clk;
+        let differ = lcd_differences(&net, &model);
+        if !differ.is_empty() {
+            report.differ(
+                format!("LCD, phase {}: {}", line.phase, differ.join(" ")),
+                place.clone(),
+            );
+            let (frame, line_parity, cpg_lx) = (net.frame, net.line_parity, net.cpg_lx);
+            net = model;
+            net.frame = frame;
+            net.line_parity = line_parity;
+            net.cpg_lx = cpg_lx;
+        }
+        let shown = net.read(line.addr, lcd.mode2, lcd.mode3);
+        bus = match (line.rd, line.phase) {
+            (true, 'e') => shown,
+            (true, 'f' | 'g' | 'h') => bus.zip(shown).map(|(a, b)| a & b),
+            _ => None,
+        };
+        if line.rd
+            && line.phase == 'h'
+            && let (Some(value), Some(taken)) = (bus, lcd.read)
+        {
+            report.saw(match line.addr {
+                0xFF41 => "LCD: a STAT read",
+                0xFF44 => "LCD: an LY read",
+                _ => "LCD: an LYC read",
+            });
+            if value != taken {
+                report.differ(
+                    format!("LCD: a read of {:04X}", line.addr),
+                    format!("{place} (reads {value:02X}, model {taken:02X})"),
+                );
+            }
+        }
+        if net.line_153 && !before.net.line_153 {
+            report.saw("LCD: line 153's LY reset");
+        }
+        if net.mode1 && !before.net.mode1 {
+            report.saw("LCD: VBlank starts");
+        }
+        before = lcd;
+    }
+}
+
 #[test]
 #[ignore = "needs traces of the model: hdl/trace-blocks.sh"]
 #[expect(
@@ -532,6 +761,7 @@ fn netlist_replay() {
         replay_timer(name, &lines, &mut report);
         replay_if(name, &lines, &mut report);
         replay_dma(name, &lines, &mut report);
+        replay_lcd(name, &lines, &mut report);
     }
 
     let summary = summary(traces.len(), &report).expect("a String takes any text");

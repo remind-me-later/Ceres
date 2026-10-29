@@ -35,7 +35,8 @@
 -- read OAM, or VRAM), and DIV when the divider does not count on (a write
 -- to DIV, STOP), its value in M-cycles; values in hexadecimal.
 --
--- BLOCKS gets the divider, the timer and IF at the end of every phase, from
+-- BLOCKS gets the divider, the timer, IF, OAM DMA and the line timing (the
+-- DMG's) at the end of every phase, from
 -- the CPU's first access on, for ceres-core's replay through its
 -- transcriptions of them (netlist_replay.rs): the phase that ends; the
 -- address, RD and WR, and the data bus; DIV's counter, TIMA, TMA and TAC;
@@ -45,8 +46,12 @@
 -- rose in the phase (also those that fell again before its end); OAM DMA's
 -- FF46, its flip-flops (requested, start_1, start_2, enabled, done, run)
 -- and its count, OAM's DMA write strobe, and the DMA's clock dma_phi (high
--- in A to D, and while the CPU is halted). Values in hexadecimal, bits as 0
--- or 1.
+-- in A to D, and while the CPU is halted); the clock as the phase's
+-- closing edge leaves it, the LCD's reset and modes 0, 2 and 3; the line
+-- timing's wuvu, vena, wosu, vclk, nype, line_153, first_line, mode1 and
+-- lyc_match, LX, LY, LYC and STAT's enables; and the byte a read takes, the
+-- core's data bus in the middle of phase H. Values in hexadecimal, bits as
+-- 0 or 1.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -96,6 +101,10 @@ architecture run of gameboy_tb is
 	signal so1, so2 : real;
 
 	signal booted : boolean := false;
+
+	-- The core's data bus in the middle of phase H, where a read takes it
+	-- (for BLOCKS).
+	signal read_in_h : std_logic_vector(7 downto 0) := (others => '0');
 
 	-- The time, in ms, for the messages.
 	impure function now_ms return string is
@@ -350,6 +359,22 @@ begin
 
 	-- The divider, the timer and IF at the end of every phase: sampled as the
 	-- next phase starts, before the flip-flops change (tco after the edge).
+	-- The byte a read takes: the core's data bus in the middle of phase H,
+	-- as the accesses' trace sees it.
+	read_taken : process
+		alias phase is << signal .gameboy_tb.u_gameboy.chip.u_chip.phase : phase_t >>;
+		alias db    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.db : std_logic_vector(7 downto 0) >>;
+	begin
+		if BLOCKS = "" then
+			wait;
+		end if;
+		loop
+			wait until phase = H;
+			wait for 60 ns;
+			read_in_h <= db;
+		end loop;
+	end process;
+
 	blocks_trace : process
 		alias phase       is << signal .gameboy_tb.u_gameboy.chip.u_chip.phase : phase_t >>;
 		alias data_phase  is << signal .gameboy_tb.u_gameboy.chip.u_chip.data_phase : std_ulogic >>;
@@ -385,6 +410,24 @@ begin
 		alias dma_count   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_dma.count : unsigned(7 downto 0) >>;
 		alias dma_write   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.dma_write : std_ulogic >>;
 		alias dma_phi     is << signal .gameboy_tb.u_gameboy.chip.u_chip.dma_phi : std_ulogic >>;
+		alias clk         is << signal .gameboy_tb.u_gameboy.chip.u_chip.clk : std_ulogic >>;
+		alias ppu_reset   is << signal .gameboy_tb.u_gameboy.chip.u_chip.ppu_reset : std_ulogic >>;
+		alias mode0       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mode0 : std_ulogic >>;
+		alias mode2       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mode2 : std_ulogic >>;
+		alias mode3       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mode3 : std_ulogic >>;
+		alias wuvu        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.wuvu_i : std_ulogic >>;
+		alias vena        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.vena : std_ulogic >>;
+		alias wosu        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.wosu_i : std_ulogic >>;
+		alias lx          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.lx_i : unsigned(6 downto 0) >>;
+		alias vclk        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.vclk_i : std_ulogic >>;
+		alias nype        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.nype : std_ulogic >>;
+		alias ly          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.ly_i : unsigned(7 downto 0) >>;
+		alias line_153    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.line_153 : std_ulogic >>;
+		alias first_line  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.first_line : std_ulogic >>;
+		alias mode1       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.mode1_i : std_ulogic >>;
+		alias lyc         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.lyc : std_ulogic_vector(7 downto 0) >>;
+		alias lyc_match   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.lyc_match : std_ulogic >>;
+		alias stat_enable is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.stat_enable : std_ulogic_vector(6 downto 3) >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := false;
@@ -429,7 +472,12 @@ begin
 					& ' ' & hx(flags) & ' ' & hx(read_value) & ' ' & hx(ie) & ' ' & hx(rose)
 					& ' ' & hx(dma_source) & ' ' & b01(dma_req) & b01(dma_start_1) & b01(dma_start_2)
 					& b01(dma_enabled) & b01(dma_done) & b01(dma_run) & ' ' & hx(std_ulogic_vector(dma_count))
-					& ' ' & b01(dma_write) & ' ' & b01(dma_phi));
+					& ' ' & b01(dma_write) & ' ' & b01(dma_phi)
+					& ' ' & b01(clk) & b01(ppu_reset) & b01(mode0) & b01(mode2) & b01(mode3)
+					& ' ' & b01(wuvu) & b01(vena) & b01(wosu) & b01(vclk) & b01(nype) & b01(line_153)
+					& b01(first_line) & b01(mode1) & b01(lyc_match)
+					& ' ' & hx(std_ulogic_vector(lx)) & ' ' & hx(std_ulogic_vector(ly)) & ' ' & hx(lyc)
+					& ' ' & hx(stat_enable & "000") & ' ' & hx(read_in_h));
 				writeline(f, l);
 			end if;
 			ended := phase;

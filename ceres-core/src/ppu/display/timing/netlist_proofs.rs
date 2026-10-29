@@ -11,16 +11,37 @@
 //! `related` matches, a half dot raises the STAT interrupt's line on both
 //! sides or on neither, and leaves them related.
 //!
-//! What it does not cover yet: the CPU's reads and writes, the LCD being
-//! turned on and off, the HBlank source (render.vhd's mode 0: its enable is
-//! held off here), and the resync of ceres's clock by the pixel pipeline at
-//! each line's end (`Ppu::timing_line_end`).
+//! The CPU's phases are the clock's edges: D is `h = 0` (mod 8), E is
+//! `h = 1`, H `h = 4`. Ceres makes its access after the half dot at
+//! `h = 0` (from the end of the first line after the LCD is turned on, in
+//! which its clock runs 2 half dots off until the pixel pipeline resyncs
+//! it) and then runs its M-cycle's eight half dots; in the netlist the
+//! write's latches open in E (taking the precharged bus first: STAT's
+//! write glitch), and a read takes the core's data bus in the middle of H.
+//! That bus is precharged and only pulled low while the read drives it,
+//! from E on: a read gives the AND of what the register showed in E to H,
+//! so that a bit rising at H's edge is not seen and one falling is. The
+//! rises at ceres's access and in its first half dot are the netlist's in
+//! E. `netlist_lcd_access` proves an M-cycle with any access to STAT, LY or
+//! LYC alike on both sides: the byte a read gives (STAT's flag and enables;
+//! its mode bits are the scan's and the pixels', not this block's), and the
+//! T-cycle of each rise, as IF sees it (`interrupts/netlist_proofs.rs`'s
+//! mapping). By the half dot, an LYC write raises ceres's line one early,
+//! within the same T-cycle: ceres compares the new LYC as it lands, the
+//! netlist at its next sample. Where the trace replay (`crate::netlist_replay`)
+//! measured it: the access mapping and the reads' AND match the model's
+//! traces of 169 gbmicrotest ROMs.
+//!
+//! What it does not cover yet: STAT's mode bits, the LCD being turned on
+//! and off, the HBlank source (render.vhd's mode 0: its enable is held off
+//! here), and the resync of ceres's clock by the pixel pipeline at each
+//! line's end (`Ppu::timing_line_end`).
 
 use super::{
-    DMG_PHASES, LAST_LINE, LAST_VISIBLE_LINE, LINE_END_H, LINE_H, LcdTiming, STAT_ENABLES,
-    VBLANK_H, netlist::NetLcd,
+    DMG_DELAYS, DMG_PHASES, LAST_LINE, LAST_VISIBLE_LINE, LINE_END_H, LINE_H, LcdTiming,
+    STAT_ENABLES, VBLANK_H, netlist::NetLcd,
 };
-use crate::ppu::STAT_IF_HBLANK_B;
+use crate::ppu::{STAT_IF_HBLANK_B, STAT_LYC_B};
 
 /// LY as the comparator sees it, at half dot `h` of `line`: the next line's
 /// from the line's end, 0 through line 153 from its fourth half dot.
@@ -156,5 +177,155 @@ fn netlist_lcd_half_dot() {
     kani::cover!(
         ceres_rose && t.h & 7 == 4 && t.h != VBLANK_H,
         "LY = LYC raises the line"
+    );
+}
+
+/// A CPU access to the line timing's registers.
+#[derive(Clone, Copy)]
+enum Access {
+    None,
+    Read(u16),
+    Write(u16, u8),
+}
+
+/// Any access to STAT, LY or LYC (a write to LY is not this block's), with
+/// HBlank's enable held off.
+fn any_access() -> Access {
+    let addr = match kani::any::<u8>() % 3 {
+        0 => 0xFF41,
+        1 => 0xFF44,
+        _ => 0xFF45,
+    };
+    match kani::any::<u8>() % 3 {
+        0 => Access::None,
+        1 => Access::Read(addr),
+        _ => {
+            let data: u8 = kani::any();
+            kani::assume(addr != 0xFF44 && (addr != 0xFF41 || data & STAT_IF_HBLANK_B == 0));
+            Access::Write(addr, data)
+        }
+    }
+}
+
+/// STAT's bits that this block drives: the LY = LYC flag and the enables.
+const STAT_OWN: u8 = STAT_ENABLES | STAT_LYC_B;
+
+/// Ceres's M-cycle: the access, then eight half dots. What a read gives,
+/// and the rises of the interrupt's line in each half dot (one at the
+/// access counts in the first).
+fn ceres_m_cycle(t: &mut LcdTiming, access: Access) -> (Option<u8>, [bool; 8]) {
+    let mut at_access = false;
+    let read = match access {
+        Access::None => None,
+        Access::Read(0xFF41) => Some(t.read_stat(t.enables, DMG_DELAYS, false) & STAT_OWN),
+        Access::Read(0xFF44) => Some(t.read_ly(DMG_DELAYS)),
+        Access::Read(_) => Some(t.lyc),
+        Access::Write(0xFF41, data) => {
+            at_access = t.write_stat(data, DMG_DELAYS);
+            None
+        }
+        Access::Write(_, data) => {
+            t.write_lyc(data, DMG_DELAYS);
+            None
+        }
+    };
+    let mut rose = [false; 8];
+    for slot in &mut rose {
+        *slot = t.unit();
+    }
+    rose[0] |= at_access;
+    (read, rose)
+}
+
+/// The netlist's M-cycle from D's edge: E's edge, where a write opens the
+/// latch, which takes the precharged bus (FF) and then the byte; then the
+/// edges F to D. A read gives the AND of what the register shows after E's
+/// edge to H's.
+fn net_m_cycle(net: &mut NetLcd, access: Access) -> (Option<u8>, [bool; 8]) {
+    let mut rose = [false; 8];
+    let mut bus: Option<u8> = None;
+    for (k, slot) in rose.iter_mut().enumerate() {
+        *slot = net.edge(false);
+        if k == 0 {
+            if let Access::Write(addr, data) = access {
+                let mut level = net.int_stat(false);
+                for byte in [0xFF, data] {
+                    if addr == 0xFF41 {
+                        net.stat_enable = byte & STAT_ENABLES;
+                    } else {
+                        net.lyc = byte;
+                    }
+                    let now = net.int_stat(false);
+                    *slot |= now && !level;
+                    level = now;
+                }
+            }
+        }
+        if k <= 3 {
+            // E to H: the bus that the read drives.
+            if let Access::Read(addr) = access {
+                let shown = net
+                    .read(addr, false, false)
+                    .map(|b| if addr == 0xFF41 { b & STAT_OWN } else { b });
+                bus = if k == 0 {
+                    shown
+                } else {
+                    bus.zip(shown).map(|(a, b)| a & b)
+                };
+            }
+        }
+    }
+    (bus, rose)
+}
+
+/// An M-cycle with any access to STAT, LY or LYC: the same byte read, the
+/// same rises of the interrupt's line in the same half dots, and related
+/// states after it.
+#[kani::proof]
+#[kani::unwind(10)]
+fn netlist_lcd_access() {
+    let mut t = any_ceres();
+    kani::assume(t.h & 7 == 0);
+    // STAT's write glitch enables HBlank's source for a moment: until it
+    // joins the proof (render.vhd's mode 0), it is low on both sides.
+    t.hblank = false;
+    let mut net = net_for(&t);
+    kani::assume(related(&net, &t));
+    let access = any_access();
+    let (ceres_read, ceres_rose) = ceres_m_cycle(&mut t, access);
+    let (net_read, net_rose) = net_m_cycle(&mut net, access);
+    assert!(ceres_read == net_read, "a read differs");
+    // IF sees the rises by T-cycle, as `interrupts/netlist_proofs.rs` maps
+    // them: ceres's first T-cycle (the access and its first two half dots)
+    // is the netlist's E to G, its second H, its last two A to D.
+    let ceres_by_t = [
+        ceres_rose[0] || ceres_rose[1],
+        ceres_rose[2] || ceres_rose[3],
+        ceres_rose[4..].contains(&true),
+    ];
+    let net_by_t = [
+        net_rose[0] || net_rose[1] || net_rose[2],
+        net_rose[3],
+        net_rose[4..].contains(&true),
+    ];
+    assert!(
+        ceres_by_t == net_by_t,
+        "the interrupt's line rises in another T-cycle"
+    );
+    // Within the second, an LYC write raises ceres's line a half dot before
+    // the netlist's sample at H: ceres's comparison takes the new LYC at
+    // once.
+    kani::cover!(
+        ceres_rose[2] && !net_rose[2] && net_rose[3],
+        "an LYC write raises ceres's line a half dot early"
+    );
+    assert!(related(&net, &t), "the states part");
+    kani::cover!(
+        matches!(access, Access::Write(0xFF41, _)) && ceres_rose[0],
+        "a STAT write's glitch raises the line"
+    );
+    kani::cover!(
+        matches!(access, Access::Read(0xFF41)) && ceres_read.is_some_and(|b| b & STAT_LYC_B != 0),
+        "a STAT read sees LY = LYC"
     );
 }

@@ -11,9 +11,15 @@
 //! each, since IF takes any of its rises, even one that falls again later
 //! in the edge.
 //!
-//! Left out for now: the CPU's reads and writes (LY, LYC, STAT), the LCD's
-//! being turned on and off (`ppu_reset`), and the HBlank source, which is
-//! render.vhd's mode 0.
+//! The CPU's writes reach LYC's and the enables' latches, which follow the
+//! data bus while the write strobe is up (as it opens, the bus is still
+//! precharged: FF, STAT's write glitch); `reset` is the LCD turned off,
+//! `read` what a read of STAT, LY or LYC drives at a moment. The core's
+//! data bus is precharged and only pulled low while a read drives it, from
+//! E until the read takes it in the middle of H: a read takes the AND of
+//! what `read` shows in E to H. The HBlank source is render.vhd's mode 0,
+//! an input. `crate::netlist_replay` checks all of it against the model's
+//! traces.
 
 // Some of it only the proofs use, which other builds leave out.
 #![cfg_attr(not(kani), allow(dead_code))]
@@ -27,40 +33,40 @@ use crate::ppu::{STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_
 /// The netlist's line timing, between edges of the PPU's clock.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
-pub(super) struct NetLcd {
+pub(crate) struct NetLcd {
     /// The PPU's clock, as its last edge left it.
-    pub(super) clk: bool,
+    pub(crate) clk: bool,
     /// WUVU, VENA (hclk), WOSU: the dividers.
-    pub(super) wuvu: bool,
-    pub(super) vena: bool,
-    pub(super) wosu: bool,
+    pub(crate) wuvu: bool,
+    pub(crate) vena: bool,
+    pub(crate) wosu: bool,
     /// SAXO..TYRY: LX, the M-cycle in the line.
-    pub(super) lx: u8,
+    pub(crate) lx: u8,
     /// RUTU: the line's end (vclk).
-    pub(super) vclk: bool,
+    pub(crate) vclk: bool,
     /// NYPE: vclk, half an hclk period later.
-    pub(super) nype: bool,
+    pub(crate) nype: bool,
     /// MUWY..LAFO: LY.
-    pub(super) ly: u8,
+    pub(crate) ly: u8,
     /// MYTA, NOKO: line 153 (LY held at 0), the first line.
-    pub(super) line_153: bool,
-    pub(super) first_line: bool,
+    pub(crate) line_153: bool,
+    pub(crate) first_line: bool,
     /// POPU: VBlank.
-    pub(super) mode1: bool,
+    pub(crate) mode1: bool,
     /// The LCD's pins' flip-flops: the frame's and the line's polarity, CPG.
-    pub(super) frame: bool,
-    pub(super) line_parity: bool,
-    pub(super) cpg_lx: bool,
+    pub(crate) frame: bool,
+    pub(crate) line_parity: bool,
+    pub(crate) cpg_lx: bool,
     /// LYC's latches and ROPO, LY = LYC as last sampled.
-    pub(super) lyc: u8,
-    pub(super) lyc_match: bool,
+    pub(crate) lyc: u8,
+    pub(crate) lyc_match: bool,
     /// STAT's enables (its bits 3 to 6).
-    pub(super) stat_enable: u8,
+    pub(crate) stat_enable: u8,
 }
 
 impl NetLcd {
     /// SUKO: the STAT interrupt's line, with the HBlank source `mode0`.
-    pub(super) const fn int_stat(&self, mode0: bool) -> bool {
+    pub(crate) const fn int_stat(&self, mode0: bool) -> bool {
         (self.stat_enable & STAT_IF_LYC_B != 0 && self.lyc_match)
             || (self.stat_enable & STAT_IF_OAM_B != 0 && self.vclk && !self.mode1)
             || (self.stat_enable & STAT_IF_VBLANK_B != 0 && self.mode1)
@@ -69,7 +75,7 @@ impl NetLcd {
 
     /// The next edge of the PPU's clock: whether the STAT interrupt's line
     /// rose in it.
-    pub(super) const fn edge(&mut self, mode0: bool) -> bool {
+    pub(crate) const fn edge(&mut self, mode0: bool) -> bool {
         let mut level = self.int_stat(mode0);
         let mut rose = false;
         self.clk = !self.clk;
@@ -140,6 +146,44 @@ impl NetLcd {
         }
         Self::stage(self.int_stat(mode0), &mut level, &mut rose);
         rose
+    }
+
+    /// The LCD's reset (`ppu_reset`, LCDC bit 7 clear) holds the clock's
+    /// flip-flops at 0; LYC, the enables and LY = LYC's flag keep their
+    /// values (only the chip's reset clears those).
+    pub(crate) const fn reset(&mut self) {
+        self.wuvu = false;
+        self.vena = false;
+        self.wosu = false;
+        self.lx = 0;
+        self.vclk = false;
+        self.nype = false;
+        self.ly = 0;
+        self.line_153 = false;
+        self.first_line = false;
+        self.mode1 = false;
+        self.frame = false;
+        self.line_parity = false;
+        self.cpg_lx = false;
+    }
+
+    /// What a read of STAT, LY or LYC drives, with the scan's and the
+    /// pixels' modes (`mode2`, `mode3`, from `oam_scan.vhd` and `render.vhd`).
+    /// STAT's bit 7 is not driven: the bus keeper holds it high.
+    // @hw die: SADU TEBY, XATY WUGA, RUPO SEGO; PUZO POFO SASY POTE;
+    // VEGA..WEZE; RETU..PUFY
+    pub(crate) const fn read(&self, addr: u16, mode2: bool, mode3: bool) -> Option<u8> {
+        match addr {
+            0xFF41 => Some(
+                0x80 | self.stat_enable
+                    | if self.lyc_match { 4 } else { 0 }
+                    | if mode2 || mode3 { 2 } else { 0 }
+                    | if mode3 || self.mode1 { 1 } else { 0 },
+            ),
+            0xFF44 => Some(self.ly),
+            0xFF45 => Some(self.lyc),
+            _ => None,
+        }
     }
 
     /// The line after a stage of an edge: a rise counts.
