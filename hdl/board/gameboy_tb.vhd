@@ -37,8 +37,8 @@
 --
 -- BLOCKS gets the divider, the timer, IF, OAM DMA, the line timing and the
 -- OAM scan (the DMG's) at the end of every phase, from
--- the CPU's first access on, for ceres-core's replay through its
--- transcriptions of them (netlist_replay.rs): the phase that ends; the
+-- the CPU's first access on, for the replay through ceres-netlist's
+-- transcriptions of them (its tests/replay.rs): the phase that ends; the
 -- address, RD and WR, and the data bus; DIV's counter, TIMA, TMA and TAC;
 -- the timer's overflow flip-flops (int_timer, bit7_before), its clock and
 -- its write strobes of TMA and TAC; the interrupt requests, the

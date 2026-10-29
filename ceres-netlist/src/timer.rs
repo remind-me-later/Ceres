@@ -1,24 +1,21 @@
-//! The netlist's divider and timer, transcribed from `hdl/rtl/divider.vhd`
-//! and `hdl/rtl/timer.vhd` phase by phase, for the proofs against ceres
-//! (`netlist_proofs.rs`) and for the replay of the model's traces
-//! (`crate::netlist_replay`), which checks the transcription.
+//! The netlist's divider and timer, phase by phase.
+//!
+//! Transcribed from `hdl/rtl/divider.vhd` and `hdl/rtl/timer.vhd`, for
+//! ceres-core's proofs against ceres (its `timing/netlist_proofs.rs`) and
+//! for the replay of the model's traces (`tests/replay.rs`), which checks
+//! the transcription.
 //!
 //! Eight phases, A to H, make an M-cycle: the counter and the overflow
 //! flip-flops change at the start of A, the CPU writes in E to G and TIMA
 //! takes the data bus in E and F, and a read takes what the timer drives at
 //! the end of H.
 
-// Some of it only the proofs use, which other builds leave out.
-#![cfg_attr(not(kani), allow(dead_code))]
-#![expect(
-    clippy::field_scoped_visibility_modifiers,
-    reason = "the proofs and the replay set and compare the flip-flops one by one"
-)]
-
-use super::timer::{TAC_CLOCK, TAC_ENABLE_B};
+/// TAC: the timer's enable, and the select of its clock.
+const TAC_ENABLE_B: u8 = 0x04;
+const TAC_CLOCK: u8 = 0x03;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Reg {
+pub enum Reg {
     Div,
     Tima,
     Tma,
@@ -26,14 +23,14 @@ pub(crate) enum Reg {
 }
 
 #[derive(Clone, Copy)]
-pub(crate) enum Access {
+pub enum Access {
     None,
     Read(Reg),
     Write(Reg, u8),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum Phase {
+pub enum Phase {
     B,
     C,
     D,
@@ -46,33 +43,34 @@ pub(crate) enum Phase {
 /// The netlist's divider and timer, between phases.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
-pub(crate) struct NetTimer {
+pub struct NetTimer {
     /// The divider: M-cycles.
-    pub(crate) count: u16,
-    pub(crate) tima: u8,
-    pub(crate) tma: u8,
+    pub count: u16,
+    pub tima: u8,
+    pub tma: u8,
     /// TAC's three flip-flops.
-    pub(crate) tac: u8,
+    pub tac: u8,
     /// NYDU, MOBA: TIMA overflowed, reload it and request the interrupt.
-    pub(crate) int_timer: bool,
+    pub int_timer: bool,
     /// TIMA's bit 7 at the last A edge.
-    pub(crate) bit7_before: bool,
+    pub bit7_before: bool,
     /// The timer's clock as it stands.
-    pub(crate) timer_clock: bool,
+    pub timer_clock: bool,
     /// The write strobes as they stood in the phase before.
-    pub(crate) write_tma: bool,
-    pub(crate) write_tac: bool,
+    pub write_tma: bool,
+    pub write_tac: bool,
     /// The data bus during the write, which TMA and TAC take as it ends.
-    pub(crate) latched_data: u8,
+    pub latched_data: u8,
     /// Whether enabling the timer while its select changes counts, as in
     /// dmg-sim (`doc/hardware-tests.md`). The DMG that
     /// gbmicrotest was checked on does not count.
     // @fact timer-enable-race
-    pub(crate) enable_race_counts: bool,
+    pub enable_race_counts: bool,
 }
 
 impl NetTimer {
-    pub(crate) const fn clock_of(tac: u8, select: u8, count: u16) -> bool {
+    #[must_use]
+    pub const fn clock_of(tac: u8, select: u8, count: u16) -> bool {
         let bit = match select & TAC_CLOCK {
             0 => 7,
             1 => 1,
@@ -105,7 +103,7 @@ impl NetTimer {
 
     /// One phase from B to H, with the CPU's access.
     #[expect(clippy::similar_names, reason = "TMA's and TAC's write strobes")]
-    pub(crate) fn phase(&mut self, phase: Phase, access: Access) {
+    pub fn phase(&mut self, phase: Phase, access: Access) {
         let (reg, data) = match access {
             Access::Write(reg, data) if (Phase::E..=Phase::G).contains(&phase) => (Some(reg), data),
             _ => (None, 0),
@@ -145,7 +143,7 @@ impl NetTimer {
 
     /// The A edge: the counter counts and the overflow flip-flops take TIMA's
     /// bit 7, then TIMA loads or counts (a delta cycle later).
-    pub(crate) const fn edge_a(&mut self) {
+    pub const fn edge_a(&mut self) {
         let load = self.load(false, false);
         let overflow = self.bit7_before && self.tima & 0x80 == 0;
         if !load {
@@ -158,7 +156,8 @@ impl NetTimer {
     }
 
     #[expect(clippy::cast_possible_truncation, reason = "DIV shows bits 6 to 13")]
-    pub(crate) const fn read(&self, reg: Reg) -> u8 {
+    #[must_use]
+    pub const fn read(&self, reg: Reg) -> u8 {
         match reg {
             Reg::Div => (self.count >> 6) as u8,
             Reg::Tima => self.tima,
@@ -169,7 +168,7 @@ impl NetTimer {
 
     /// An M-cycle: phases B to H with the access, then the next A edge.
     /// Returns what a read reads and whether the interrupt was requested.
-    pub(crate) fn m_cycle(&mut self, access: Access) -> (Option<u8>, bool) {
+    pub fn m_cycle(&mut self, access: Access) -> (Option<u8>, bool) {
         for phase in [
             Phase::B,
             Phase::C,
@@ -193,7 +192,8 @@ impl NetTimer {
     /// Whether phases B to D leave the timer as it is: then the M-cycle can
     /// as well be cut at the start of E, where ceres's begins, as at the
     /// start of B.
-    pub(crate) fn quiet_until_e(&self, access: Access) -> bool {
+    #[must_use]
+    pub fn quiet_until_e(&self, access: Access) -> bool {
         let mut net = *self;
         for phase in [Phase::B, Phase::C, Phase::D] {
             net.phase(phase, access);

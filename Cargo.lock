@@ -668,6 +668,9 @@ dependencies = [
 [[package]]
 name = "ceres-core"
 version = "0.1.0"
+dependencies = [
+ "ceres-netlist",
+]
 
 [[package]]
 name = "ceres-egui"
@@ -694,6 +697,10 @@ dependencies = [
  "serde",
  "serde_json",
 ]
+
+[[package]]
+name = "ceres-netlist"
+version = "0.1.0"
 
 [[package]]
 name = "ceres-std"

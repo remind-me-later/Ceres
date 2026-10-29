@@ -26,7 +26,7 @@ pub enum Evidence {
     /// A harness proves it (`@discharges <id>`).
     Proved,
     /// A transcription of the readable model, which the replay of the
-    /// model's traces checks (ceres-core's `netlist_replay`).
+    /// model's traces checks (ceres-netlist's `netlist_replay`).
     Replayed,
     /// Measured: on the model's traces, on ceres's runs or on hardware.
     Measured,

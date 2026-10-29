@@ -266,7 +266,7 @@ follows the netlist in all three (facts `dma-oam-write-after-start` and
 
 ## Ceres's transcription of the line timing
 
-`NetLcd` (`ceres-core/src/ppu/display/timing/netlist.rs`) transcribes
+`NetLcd` (`ceres-netlist/src/lcd_timing.rs`) transcribes
 `lcd_timing.vhd`'s DMG part edge by edge: the clock's dividers, LX, the
 line's end, LY and its reset in line 153, VBlank, LY = LYC's sample, the
 latches of LYC and STAT's enables, and the STAT interrupt's line. The
@@ -323,7 +323,7 @@ are not proved yet.
 
 ## Ceres's transcription of the OAM scan
 
-`NetScan` (`ceres-core/src/ppu/display/objects/netlist.rs`) transcribes
+`NetScan` (`ceres-netlist/src/oam_scan.rs`) transcribes
 `oam_scan.vhd` edge by edge, on `NetLcd`'s clocks: the scan's start at
 the line's end, the sprite index, the stop that starts mode 3, the Y
 comparator, and the count of saved sprites that picks the slot of each

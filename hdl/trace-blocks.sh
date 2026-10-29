@@ -12,11 +12,11 @@
 # first access on. TEST ends the run at a test ROM's result, as in
 # compare-ceres.sh. Then
 #
-#   cargo test -p ceres-core --release netlist_replay -- --ignored
+#   cargo test -p ceres-netlist --release --test replay -- --ignored
 #
-# replays every trace in build/blocks through ceres-core's NetTimer, NetIf,
-# NetDma, NetLcd and NetScan (src/netlist_replay.rs) and reports the phases
-# where one parts from the model.
+# replays every trace in build/blocks through ceres-netlist's NetTimer,
+# NetIf, NetDma, NetLcd, NetScan and NetOamLatches (its tests/replay.rs)
+# and reports the phases where one parts from the model.
 
 set -eu
 

@@ -1,36 +1,35 @@
 //! Kani proofs that ceres's line timing is the netlist's, on the DMG
 //! (`cargo kani -p ceres-core --harness netlist_lcd`).
 //!
-//! `NetLcd` (`netlist.rs`) transcribes `hdl/rtl/lcd_timing.vhd` edge by
-//! edge; ceres's `LcdTiming::unit` advances a half dot, which is an edge.
-//! Ceres's half dot `h` names the netlist's dividers: hclk rises at
-//! `h = 4` (mod 8), where LY = LYC is sampled and nype follows vclk, and
-//! falls at `h = 0` (mod 8), where vclk follows LX; the line's end (vclk,
-//! ceres's `line_end`) rises at 904, so that LY changes there and VBlank
-//! at 908. The proof is a bisimulation: from any pair of states that
-//! `related` matches, a half dot raises the STAT interrupt's line on both
-//! sides or on neither, and leaves them related.
+//! `NetLcd` (`ceres_netlist::lcd_timing`) transcribes `hdl/rtl/lcd_timing.vhd`
+//! edge by edge; ceres's `LcdTiming::unit` advances a half dot, which is an
+//! edge. Ceres's half dot `h` names the netlist's dividers: hclk rises at `h =
+//! 4` (mod 8), where LY = LYC is sampled and nype follows vclk, and falls at `h
+//! = 0` (mod 8), where vclk follows LX; the line's end (vclk, ceres's
+//! `line_end`) rises at 904, so that LY changes there and VBlank at 908. The
+//! proof is a bisimulation: from any pair of states that `related` matches, a
+//! half dot raises the STAT interrupt's line on both sides or on neither, and
+//! leaves them related.
 //!
-//! The CPU's phases are the clock's edges: D is `h = 0` (mod 8), E is
-//! `h = 1`, H `h = 4`. Ceres makes its access after the half dot at
-//! `h = 0` (from the end of the first line after the LCD is turned on, in
-//! which its clock runs 2 half dots off until the pixel pipeline resyncs
-//! it) and then runs its M-cycle's eight half dots; in the netlist the
-//! write's latches open in E (taking the precharged bus first: STAT's
-//! write glitch), and a read takes the core's data bus in the middle of H.
-//! That bus is precharged and only pulled low while the read drives it,
-//! from E on: a read gives the AND of what the register showed in E to H,
-//! so that a bit rising at H's edge is not seen and one falling is. The
-//! rises at ceres's access and in its first half dot are the netlist's in
-//! E. `netlist_lcd_access` proves an M-cycle with any access to STAT, LY or
-//! LYC alike on both sides: the byte a read gives (STAT's flag and enables;
-//! its mode bits are the scan's and the pixels', not this block's), and the
-//! T-cycle of each rise, as IF sees it (`interrupts/netlist_proofs.rs`'s
-//! mapping). By the half dot, an LYC write raises ceres's line one early,
-//! within the same T-cycle: ceres compares the new LYC as it lands, the
-//! netlist at its next sample. Where the trace replay (`crate::netlist_replay`)
-//! measured it: the access mapping and the reads' AND match the model's
-//! traces of 169 gbmicrotest ROMs.
+//! The CPU's phases are the clock's edges: D is `h = 0` (mod 8), E is `h = 1`,
+//! H `h = 4`. Ceres makes its access after the half dot at `h = 0` (from the
+//! end of the first line after the LCD is turned on, in which its clock runs 2
+//! half dots off until the pixel pipeline resyncs it) and then runs its
+//! M-cycle's eight half dots; in the netlist the write's latches open in E
+//! (taking the precharged bus first: STAT's write glitch), and a read takes the
+//! core's data bus in the middle of H. That bus is precharged and only pulled
+//! low while the read drives it, from E on: a read gives the AND of what the
+//! register showed in E to H, so that a bit rising at H's edge is not seen and
+//! one falling is. The rises at ceres's access and in its first half dot are
+//! the netlist's in E. `netlist_lcd_access` proves an M-cycle with any access
+//! to STAT, LY or LYC alike on both sides: the byte a read gives (STAT's flag
+//! and enables; its mode bits are the scan's and the pixels', not this
+//! block's), and the T-cycle of each rise, as IF sees it
+//! (`interrupts/netlist_proofs.rs`'s mapping). By the half dot, an LYC write
+//! raises ceres's line one early, within the same T-cycle: ceres compares the
+//! new LYC as it lands, the netlist at its next sample. Where the trace replay
+//! (ceres-netlist's `tests/replay.rs`) measured it: the access mapping and the
+//! reads' AND match the model's traces of 169 gbmicrotest ROMs.
 //!
 //! The LCD turned off and on: ceres's LCDC write lands 2 half dots before
 //! its access (SameBoy's `cycle_write`), the netlist's latch opens in E.
@@ -53,9 +52,10 @@
 
 use super::{
     DMG_DELAYS, DMG_PHASES, LAST_LINE, LAST_VISIBLE_LINE, LCD_OFF_LATE, LINE_END_H, LINE_H,
-    LcdTiming, STAT_ENABLES, VBLANK_H, netlist::NetLcd,
+    LcdTiming, STAT_ENABLES, VBLANK_H,
 };
 use crate::ppu::{STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_LYC_B};
+use ceres_netlist::lcd_timing::NetLcd;
 
 /// LY as the comparator sees it, at half dot `h` of `line`: the next line's
 /// from the line's end, 0 through line 153 from its fourth half dot.

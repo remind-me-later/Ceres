@@ -13,6 +13,11 @@ default = ["game_genie"]
 debug = []
 game_genie = []
 
+# The netlist's transcriptions, which the Kani proofs hold ceres to; other
+# builds do not need them.
+[target.'cfg(kani)'.dependencies]
+ceres-netlist = { path = "../ceres-netlist" }
+
 [lints.clippy]
 absolute_paths = "warn"
 alloc_instead_of_core = "warn"

@@ -383,23 +383,21 @@ better oracle, and the translation had to follow every change to dmg-sim.
 ### Checking ceres's transcriptions of it
 
 ceres-core's proofs against the netlist (`cargo kani -p ceres-core`) rest
-on Rust transcriptions of some of the model's blocks: `NetTimer`
-(`ceres-core/src/timing/netlist.rs`, of `divider.vhd` and `timer.vhd`),
-`NetIf` (`ceres-core/src/interrupts/netlist.rs`, of `interrupts.vhd` and
-the request latch of `sm83_interrupts.vhd`) and `NetDma`
-(`ceres-core/src/memory/netlist.rs`, of `dma.vhd`, clocked by `dma_phi`,
-which stops while the CPU is halted), `NetLcd`
-(`ceres-core/src/ppu/display/timing/netlist.rs`, of `lcd_timing.vhd`'s
-line clock, LY, VBlank, LY = LYC, the latches of LYC and STAT's enables,
-and the STAT interrupt line, edge by edge; the first block of the PPU) and
-`NetScan` (`ceres-core/src/ppu/display/objects/netlist.rs`, of
-`oam_scan.vhd`: the scan's start and stop, the sprite index, the Y
-comparator and the save strobes, on `NetLcd`'s clocks; and
-`NetOamLatches`, of `oam.vhd`'s two stages of latches of the Y, which
-OAM DMA holds).
+on Rust transcriptions of some of the model's blocks, in the crate
+`ceres-netlist` (which ceres-core uses under Kani only, and which takes
+nothing from ceres): `NetTimer` (`timer`, of `divider.vhd` and
+`timer.vhd`), `NetIf` (`interrupts`, of `interrupts.vhd` and the request
+latch of `sm83_interrupts.vhd`), `NetDma` (`dma`, of `dma.vhd`, clocked by
+`dma_phi`, which stops while the CPU is halted), `NetLcd` (`lcd_timing`,
+of `lcd_timing.vhd`'s line clock, LY, VBlank, LY = LYC, the latches of LYC
+and STAT's enables, and the STAT interrupt line, edge by edge; the first
+block of the PPU), `NetScan` (`oam_scan`, of `oam_scan.vhd`: the scan's
+start and stop, the sprite index, the Y comparator and the save strobes,
+on `NetLcd`'s clocks) and `NetOamLatches` (`oam`, of `oam.vhd`'s two
+stages of latches of the Y, which OAM DMA holds).
 `trace-blocks.sh` records those
 blocks at the end of every phase while the model runs a ROM (the testbench's
-`BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in
+`BLOCKS`), and ceres-netlist's test `netlist_replay` replays every trace in
 `build/blocks` through the transcriptions, phase by phase, with the model's
 accesses and interrupt requests, and lists where a transcription's state
 parts from the model's, and how often the traces exercised each rule:
@@ -407,7 +405,7 @@ parts from the model's, and how often the traces exercised each rule:
 ```sh
 ls ../external/test-roms/gbmicrotest/timer_*.gb | sed 's|^\.\./||' |
 	TEST=gbmicrotest xargs -P 4 -I{} ./trace-blocks.sh {} 0.1
-cargo test -p ceres-core --release netlist_replay -- --ignored --nocapture
+cargo test -p ceres-netlist --release --test replay -- --ignored --nocapture
 ```
 
 A request that rises and falls within a phase (the STAT write's glitch)

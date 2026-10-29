@@ -1,7 +1,7 @@
 //! Kani proofs that ceres's OAM DMA is the netlist's, on the DMG
 //! (`cargo kani -p ceres-core --harness netlist_dma`).
 //!
-//! `NetDma` (`memory/netlist.rs`) transcribes `hdl/rtl/dma.vhd` phase by
+//! `NetDma` (`ceres_netlist::dma`) transcribes `hdl/rtl/dma.vhd` phase by
 //! phase. Ceres's M-cycle boundary is the start of the netlist's E, as for
 //! IF (`interrupts/netlist_proofs.rs`): the CPU writes or reads FF46 there,
 //! and the DMA then runs the M-cycle's four T-cycles, in one run (as when
@@ -17,7 +17,7 @@
 //! runs (a restart) is one of the accesses.
 
 use super::{Dma, DmaPhase, DmaStep};
-use crate::memory::netlist::{NetDma, Phase};
+use ceres_netlist::dma::{NetDma, Phase};
 
 #[derive(Clone, Copy)]
 enum Access {

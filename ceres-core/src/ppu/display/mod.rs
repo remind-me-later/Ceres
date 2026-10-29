@@ -26,11 +26,6 @@ mod pixels;
 mod stat;
 mod state;
 mod timing;
-#[cfg(test)]
-pub(crate) use {
-    objects::netlist::{Clocks as ScanClocks, NetOamLatches, NetScan, OamInputs},
-    timing::netlist::NetLcd,
-};
 mod window;
 
 use {

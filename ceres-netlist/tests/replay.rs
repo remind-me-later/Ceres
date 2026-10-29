@@ -2,8 +2,8 @@
 //! DMA, the line timing and the OAM scan (`hdl/trace-blocks.sh`, in
 //! `hdl/build/blocks`) through their transcriptions, `NetTimer`, `NetIf`,
 //! `NetDma`, `NetLcd` and `NetScan`, phase by phase, and reports where a
-//! transcription parts from the model. The proofs against ceres
-//! (`timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
+//! transcription parts from the model. ceres-core's proofs against ceres
+//! (its `timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
 //! `memory/dma/netlist_proofs.rs`, `ppu/display/timing/netlist_proofs.rs`,
 //! `ppu/display/objects/netlist_proofs.rs`, `netlist_proofs.rs`) rest on
 //! these transcriptions; this checks them.
@@ -14,14 +14,16 @@
 //! of that phase. After a difference the transcription takes the model's
 //! state again, so that one run lists every kind of difference.
 //!
-//! `cargo test -p ceres-core --release netlist_replay -- --ignored`
+//! `cargo test -p ceres-netlist --release --test replay -- --ignored --nocapture`
 
 use {
-    crate::{
-        interrupts::netlist::{NetIf, lowest},
-        memory::netlist::{NetDma, Phase as DmaPhase},
-        ppu::{NetLcd, NetOamLatches, NetScan, OamInputs, ScanClocks},
-        timing::netlist::{Access, NetTimer, Phase, Reg},
+    ceres_netlist::{
+        dma::{NetDma, Phase as DmaPhase},
+        interrupts::{NetIf, lowest},
+        lcd_timing::NetLcd,
+        oam::{NetOamLatches, OamInputs},
+        oam_scan::{Clocks as ScanClocks, NetScan},
+        timer::{Access, NetTimer, Phase, Reg},
     },
     std::{
         collections::BTreeMap,
@@ -111,6 +113,10 @@ struct OamLine {
 }
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
+#[expect(
+    clippy::cognitive_complexity,
+    reason = "a flat match over the trace's fields, in their order"
+)]
 fn parse(text: &str) -> Option<Line> {
     let fields: Vec<&str> = text.split_whitespace().collect();
     let &[

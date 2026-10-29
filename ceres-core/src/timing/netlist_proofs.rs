@@ -1,7 +1,7 @@
 //! Kani proofs that ceres's timer is the netlist's, on the DMG
 //! (`cargo kani -p ceres-core --harness netlist`).
 //!
-//! `NetTimer` (`netlist.rs`) transcribes `hdl/rtl/divider.vhd` and
+//! `NetTimer` (`ceres_netlist::timer`) transcribes `hdl/rtl/divider.vhd` and
 //! `hdl/rtl/timer.vhd` phase by phase.
 //!
 //! Ceres makes a CPU access at the start of its M-cycle and then runs its
@@ -12,9 +12,9 @@
 //! that `related` matches, an M-cycle with any access to FF04-FF07 gives the
 //! same read and the same interrupt on both sides, and leaves them related.
 
-pub(crate) use super::netlist::{Access, NetTimer, Reg};
 use super::timer::{Clock, TimerHost};
 use crate::interrupts::Interrupts;
+pub(crate) use ceres_netlist::timer::{Access, NetTimer, Reg};
 
 /// A DMG in single speed that counts the timer interrupts, and requests them
 /// in IF as the machine does.

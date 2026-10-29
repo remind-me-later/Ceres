@@ -1,6 +1,8 @@
-//! The netlist's OAM DMA, transcribed from `hdl/rtl/dma.vhd` phase by
-//! phase, for the proofs against ceres and for the replay of the model's
-//! traces (`crate::netlist_replay`), which checks the transcription.
+//! The netlist's OAM DMA, phase by phase.
+//!
+//! Transcribed from `hdl/rtl/dma.vhd`, for ceres-core's proofs against
+//! ceres and for the replay of the model's traces (`tests/replay.rs`),
+//! which checks the transcription.
 //!
 //! The DMA's clock (`dma_phi`) is high in phases A to D: its flip-flops take
 //! their inputs as it rises, at the start of A, or as it falls, at the start
@@ -9,16 +11,9 @@
 //! `maka` (`clk_t4` half a clock later) are low: E, F and half of G
 //! (`hdl/rtl/oam.vhd`).
 
-// Some of it only the proofs use, which other builds leave out.
-#![cfg_attr(not(kani), allow(dead_code))]
-#![expect(
-    clippy::field_scoped_visibility_modifiers,
-    reason = "the proofs and the replay set and compare the flip-flops one by one"
-)]
-
 /// The phases, in their order from A.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub(crate) enum Phase {
+pub enum Phase {
     A,
     B,
     C,
@@ -32,22 +27,22 @@ pub(crate) enum Phase {
 /// The netlist's OAM DMA, between phases.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
-pub(crate) struct NetDma {
+pub struct NetDma {
     /// FF46: a latch, open while the CPU writes it.
-    pub(crate) source: u8,
+    pub source: u8,
     /// LYXE: a write asked for a transfer.
-    pub(crate) requested: bool,
+    pub requested: bool,
     /// LUVY, LENE: the start, through a flip-flop on each edge of `dma_phi`.
-    pub(crate) start_1: bool,
-    pub(crate) start_2: bool,
+    pub start_1: bool,
+    pub start_2: bool,
     /// LOKY LARA: the transfer is on, from its start to its last byte.
-    pub(crate) enabled: bool,
+    pub enabled: bool,
     /// The low byte of the address.
-    pub(crate) count: u8,
+    pub count: u8,
     /// MYTE: the last byte's address showed.
-    pub(crate) done: bool,
+    pub done: bool,
     /// MATU: a byte is copied in this M-cycle.
-    pub(crate) run: bool,
+    pub run: bool,
 }
 
 impl NetDma {
@@ -58,7 +53,7 @@ impl NetDma {
 
     /// The latches, after the flip-flops changed and while the CPU writes
     /// FF46 (`write`) or not.
-    pub(crate) const fn settle(&mut self, write: Option<u8>) {
+    pub const fn settle(&mut self, write: Option<u8>) {
         if let Some(val) = write {
             self.source = val;
         }
@@ -75,7 +70,7 @@ impl NetDma {
 
     /// One phase, with what the CPU writes to FF46 in it, while the CPU
     /// runs: a rising `dma_phi` starts A, a falling one starts E.
-    pub(crate) const fn phase(&mut self, phase: Phase, write: Option<u8>) {
+    pub const fn phase(&mut self, phase: Phase, write: Option<u8>) {
         match phase {
             Phase::A => self.rise(write.is_some()),
             Phase::E => self.fall(),
@@ -86,7 +81,7 @@ impl NetDma {
 
     /// `dma_phi` rises, while the CPU writes FF46 (`writing`) or not: the
     /// flip-flops clocked by it take their inputs.
-    pub(crate) const fn rise(&mut self, writing: bool) {
+    pub const fn rise(&mut self, writing: bool) {
         let was = *self;
         self.start_1 = was.requested && !writing;
         if was.enabled && !was.start_2 {
@@ -96,7 +91,7 @@ impl NetDma {
     }
 
     /// `dma_phi` falls.
-    pub(crate) const fn fall(&mut self) {
+    pub const fn fall(&mut self) {
         let was = *self;
         self.start_2 = was.start_1;
         self.done = !was.start_2 && Self::last(was.count);
@@ -104,7 +99,8 @@ impl NetDma {
 
     /// The OAM byte the DMA writes in this M-cycle, and the address it
     /// copies from, as the write ends (in G): the state after phase G.
-    pub(crate) const fn oam_write(self) -> Option<(u16, u8)> {
+    #[must_use]
+    pub const fn oam_write(self) -> Option<(u16, u8)> {
         if self.run {
             Some((u16::from_le_bytes([self.count, self.source]), self.count))
         } else {

@@ -1,0 +1,10 @@
+[package]
+name = "ceres-netlist"
+version.workspace = true
+edition.workspace = true
+description = "Rust transcriptions of the readable Game Boy netlist model's blocks (hdl/rtl)"
+repository.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true

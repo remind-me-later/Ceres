@@ -1,6 +1,8 @@
-//! The netlist's line timing, transcribed from the DMG's part of
-//! `hdl/rtl/lcd_timing.vhd` edge by edge, for the proofs against ceres
-//! (`netlist_proofs.rs`).
+//! The netlist's line timing, edge by edge.
+//!
+//! Transcribed from the DMG's part of `hdl/rtl/lcd_timing.vhd`, for
+//! ceres-core's proofs against ceres (its
+//! `ppu/display/timing/netlist_proofs.rs`).
 //!
 //! The PPU's clock is the chip's, a dot a period: an edge is a half dot. Its
 //! falling edges clock `wuvu` and `vena`, which halve it twice into hclk (an
@@ -18,55 +20,54 @@
 //! data bus is precharged and only pulled low while a read drives it, from
 //! E until the read takes it in the middle of H: a read takes the AND of
 //! what `read` shows in E to H. The HBlank source is render.vhd's mode 0,
-//! an input. `crate::netlist_replay` checks all of it against the model's
+//! an input. `tests/replay.rs` checks all of it against the model's
 //! traces.
 
-// Some of it only the proofs use, which other builds leave out.
-#![cfg_attr(not(kani), allow(dead_code))]
-#![expect(
-    clippy::field_scoped_visibility_modifiers,
-    reason = "the proofs set and compare the flip-flops one by one"
-)]
-
-use crate::ppu::{STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B};
+/// STAT's enables of the interrupt's sources: HBlank, VBlank, OAM (the
+/// line's end) and LY = LYC.
+const STAT_IF_HBLANK_B: u8 = 0x08;
+const STAT_IF_VBLANK_B: u8 = 0x10;
+const STAT_IF_OAM_B: u8 = 0x20;
+const STAT_IF_LYC_B: u8 = 0x40;
 
 /// The netlist's line timing, between edges of the PPU's clock.
 #[derive(Clone, Copy, PartialEq, Eq)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
-pub(crate) struct NetLcd {
+pub struct NetLcd {
     /// The PPU's clock, as its last edge left it.
-    pub(crate) clk: bool,
+    pub clk: bool,
     /// WUVU, VENA (hclk), WOSU: the dividers.
-    pub(crate) wuvu: bool,
-    pub(crate) vena: bool,
-    pub(crate) wosu: bool,
+    pub wuvu: bool,
+    pub vena: bool,
+    pub wosu: bool,
     /// SAXO..TYRY: LX, the M-cycle in the line.
-    pub(crate) lx: u8,
+    pub lx: u8,
     /// RUTU: the line's end (vclk).
-    pub(crate) vclk: bool,
+    pub vclk: bool,
     /// NYPE: vclk, half an hclk period later.
-    pub(crate) nype: bool,
+    pub nype: bool,
     /// MUWY..LAFO: LY.
-    pub(crate) ly: u8,
+    pub ly: u8,
     /// MYTA, NOKO: line 153 (LY held at 0), the first line.
-    pub(crate) line_153: bool,
-    pub(crate) first_line: bool,
+    pub line_153: bool,
+    pub first_line: bool,
     /// POPU: VBlank.
-    pub(crate) mode1: bool,
+    pub mode1: bool,
     /// The LCD's pins' flip-flops: the frame's and the line's polarity, CPG.
-    pub(crate) frame: bool,
-    pub(crate) line_parity: bool,
-    pub(crate) cpg_lx: bool,
+    pub frame: bool,
+    pub line_parity: bool,
+    pub cpg_lx: bool,
     /// LYC's latches and ROPO, LY = LYC as last sampled.
-    pub(crate) lyc: u8,
-    pub(crate) lyc_match: bool,
+    pub lyc: u8,
+    pub lyc_match: bool,
     /// STAT's enables (its bits 3 to 6).
-    pub(crate) stat_enable: u8,
+    pub stat_enable: u8,
 }
 
 impl NetLcd {
     /// SUKO: the STAT interrupt's line, with the HBlank source `mode0`.
-    pub(crate) const fn int_stat(&self, mode0: bool) -> bool {
+    #[must_use]
+    pub const fn int_stat(&self, mode0: bool) -> bool {
         (self.stat_enable & STAT_IF_LYC_B != 0 && self.lyc_match)
             || (self.stat_enable & STAT_IF_OAM_B != 0 && self.vclk && !self.mode1)
             || (self.stat_enable & STAT_IF_VBLANK_B != 0 && self.mode1)
@@ -75,7 +76,7 @@ impl NetLcd {
 
     /// The next edge of the PPU's clock: whether the STAT interrupt's line
     /// rose in it.
-    pub(crate) const fn edge(&mut self, mode0: bool) -> bool {
+    pub const fn edge(&mut self, mode0: bool) -> bool {
         let mut level = self.int_stat(mode0);
         let mut rose = false;
         self.clk = !self.clk;
@@ -151,7 +152,7 @@ impl NetLcd {
     /// The LCD's reset (`ppu_reset`, LCDC bit 7 clear) holds the clock's
     /// flip-flops at 0; LYC, the enables and LY = LYC's flag keep their
     /// values (only the chip's reset clears those).
-    pub(crate) const fn reset(&mut self) {
+    pub const fn reset(&mut self) {
         self.wuvu = false;
         self.vena = false;
         self.wosu = false;
@@ -172,7 +173,8 @@ impl NetLcd {
     /// STAT's bit 7 is not driven: the bus keeper holds it high.
     // @hw die: SADU TEBY, XATY WUGA, RUPO SEGO; PUZO POFO SASY POTE;
     // VEGA..WEZE; RETU..PUFY
-    pub(crate) const fn read(&self, addr: u16, mode2: bool, mode3: bool) -> Option<u8> {
+    #[must_use]
+    pub const fn read(&self, addr: u16, mode2: bool, mode3: bool) -> Option<u8> {
         match addr {
             0xFF41 => Some(
                 0x80 | self.stat_enable

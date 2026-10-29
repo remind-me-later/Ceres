@@ -2,35 +2,33 @@
 //! OAM scan saves, on the DMG (`cargo kani -p ceres-core --harness
 //! netlist_scan`).
 //!
-//! `NetScan` (`netlist.rs`) transcribes `hdl/rtl/oam_scan.vhd` edge by
-//! edge. `netlist_scan_y_match` proves its comparator, the sum of Y and LY's
-//! complement, the same as ceres's `on_line` for every Y, line and height.
-//! `netlist_scan_selection` runs a whole scan on the netlist's clocks (as
-//! the line timing's proof relates them to ceres's half dot: `wuvu` is
-//! `h & 2`, `wosu` `(h + 1) & 2`, vclk from `h = 904`) with any Ys, from
-//! the line's end to mode 3, and with a write of LCDC bit 2 in any M-cycle
-//! around it: it saves the first ten sprites on the line, in index order,
-//! one slot each, with the height ceres's search reads for each. The
-//! comparator sees each sprite's Y a window late, from OAM's second
-//! latches, and the sprite store takes the index from a latch of its own:
-//! sprite i is saved at half dots `4 * i - 1` and `4 * i`, ceres reads it at
-//! `4 * i - 3`, and a write for the access at `8 * m` lands in the netlist
-//! at `8 * m + 1`, in ceres at `8 * m - 2`, so both give sprite i the new
-//! height from `i = 2 * m + 1` on. A save never sees half a write.
-//! `netlist_scan_dma` runs a whole scan while an OAM DMA runs from any
-//! M-cycle to any later one, with the CPU halted in any of them, with OAM's
-//! two stages of latches (`NetOamLatches`): the DMA closes the first, which
-//! keep the last Y the scan read, and the scan goes on comparing it; ceres's
-//! search keeps its `y_bus` (`ObjectSearch::latch`) for the reads its DMA
-//! hides (`Dma::runs`, which the DMA's proof shows is the netlist's
-//! run, a restart included). Both see the same Y for every sprite, from any
-//! Y the latches hold as the scan starts, and the netlist saves the sprites
-//! ceres finds. The DMA's run changes at the A edge, `8 * m + 5`, where
-//! ceres steps its DMA (the DMA proof's mapping); ceres's read of sprite
-//! `2 * m + 2`, at that half dot, comes before the step.
-//! `netlist_scan_consider` proves a step of ceres's search, which keeps a
-//! sprite when it is on the line and the list has room: sprite after
-//! sprite, it keeps the same ten.
+//! `NetScan` (`ceres_netlist::oam_scan`) transcribes `hdl/rtl/oam_scan.vhd`
+//! edge by edge. `netlist_scan_y_match` proves its comparator, the sum of Y and
+//! LY's complement, the same as ceres's `on_line` for every Y, line and height.
+//! `netlist_scan_selection` runs a whole scan on the netlist's clocks (as the
+//! line timing's proof relates them to ceres's half dot: `wuvu` is `h & 2`,
+//! `wosu` `(h + 1) & 2`, vclk from `h = 904`) with any Ys, from the line's end
+//! to mode 3, and with a write of LCDC bit 2 in any M-cycle around it: it saves
+//! the first ten sprites on the line, in index order, one slot each, with the
+//! height ceres's search reads for each. The comparator sees each sprite's Y a
+//! window late, from OAM's second latches, and the sprite store takes the index
+//! from a latch of its own: sprite i is saved at half dots `4 * i - 1` and `4 *
+//! i`, ceres reads it at `4 * i - 3`, and a write for the access at `8 * m`
+//! lands in the netlist at `8 * m + 1`, in ceres at `8 * m - 2`, so both give
+//! sprite i the new height from `i = 2 * m + 1` on. A save never sees half a
+//! write. `netlist_scan_dma` runs a whole scan while an OAM DMA runs from any
+//! M-cycle to any later one, with the CPU halted in any of them, with OAM's two
+//! stages of latches (`NetOamLatches`): the DMA closes the first, which keep
+//! the last Y the scan read, and the scan goes on comparing it; ceres's search
+//! keeps its `y_bus` (`ObjectSearch::latch`) for the reads its DMA hides
+//! (`Dma::runs`, which the DMA's proof shows is the netlist's run, a restart
+//! included). Both see the same Y for every sprite, from any Y the latches hold
+//! as the scan starts, and the netlist saves the sprites ceres finds. The DMA's
+//! run changes at the A edge, `8 * m + 5`, where ceres steps its DMA (the DMA
+//! proof's mapping); ceres's read of sprite `2 * m + 2`, at that half dot,
+//! comes before the step. `netlist_scan_consider` proves a step of ceres's
+//! search, which keeps a sprite when it is on the line and the list has room:
+//! sprite after sprite, it keeps the same ten.
 //!
 //! What it does not cover yet: the half dot of each of ceres's reads, and
 //! of its DMA's steps against them, which are measured (its state machine
@@ -41,10 +39,10 @@
 //! and the order of the sprites for the fetch (the sprite store's and
 //! render's).
 
-use super::{
-    Entry, MAX_OBJECTS_PER_LINE, ObjectSearch,
-    netlist::{Clocks, NetOamLatches, NetScan, OamInputs, SLOTS},
-    on_line,
+use super::{Entry, MAX_OBJECTS_PER_LINE, ObjectSearch, on_line};
+use ceres_netlist::{
+    oam::{NetOamLatches, OamInputs},
+    oam_scan::{Clocks, NetScan, SLOTS},
 };
 
 /// The visible lines, which a scan precedes.

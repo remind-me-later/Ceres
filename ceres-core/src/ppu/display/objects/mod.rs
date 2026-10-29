@@ -1,8 +1,6 @@
 //! Objects: the mode 2 search for the objects on the line and the state of
 //! the object fetch in mode 3.
 
-#[cfg(any(kani, test))]
-pub(super) mod netlist;
 #[cfg(kani)]
 mod netlist_proofs;
 

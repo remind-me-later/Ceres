@@ -233,7 +233,14 @@ pub fn load(root: &Path) -> Result<Facts> {
 }
 
 /// The directories searched for `@fact` tags, and the ones skipped in them.
-const TAGGED: [&str; 5] = ["ceres-core", "ceres-std", "ceres-test-runner", "hdl", "doc"];
+const TAGGED: [&str; 6] = [
+    "ceres-core",
+    "ceres-netlist",
+    "ceres-std",
+    "ceres-test-runner",
+    "hdl",
+    "doc",
+];
 const UNTAGGED: [&str; 4] = ["target", "build", "external", ".git"];
 const TAGGED_EXTENSIONS: [&str; 6] = ["rs", "vhd", "asm", "sh", "md", "txt"];
 

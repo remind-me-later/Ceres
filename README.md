@@ -113,6 +113,10 @@ upstream.
 - `ceres-winit` contains the `winit` frontend.
 - `ceres-egui` contains the `egui` frontend.
 - `ceres-gtk` contains the `gtk` frontend.
+- `ceres-netlist` contains Rust transcriptions of the blocks of the readable
+  netlist model (`hdl/rtl`), which ceres-core's Kani proofs hold ceres to,
+  checked against the model's traces (see
+  [hdl/README.md](hdl/README.md#checking-ceress-transcriptions-of-it)).
 - `hdl` runs test ROMs on dmg-sim, the gate-level simulation of the DMG-CPU B
   netlist, as the reference for how the hardware behaves (see
   [hdl/README.md](hdl/README.md)).

@@ -1,8 +1,8 @@
 //! Kani proofs that ceres's IF is the netlist's
 //! (`cargo kani -p ceres-core --harness netlist_if`).
 //!
-//! `NetIf` (`netlist.rs`) transcribes `hdl/rtl/interrupts.vhd`, and the
-//! latch of the requests and the acknowledge of
+//! `NetIf` (`ceres_netlist::interrupts`) transcribes `hdl/rtl/interrupts.vhd`,
+//! and the latch of the requests and the acknowledge of
 //! `hdl/rtl/sm83_interrupts.vhd`, phase by phase.
 //!
 //! Ceres's M-cycle boundary is the start of the netlist's E: a read there
@@ -21,11 +21,9 @@
 //! an M-cycle with any access and any rises of the sources gives the same
 //! read, the same interrupt taken, and equal IF after.
 
-pub(crate) use super::netlist::{A, Access, NetIf, TIMER, lowest};
-use super::{
-    INT_MASK, Interrupts,
-    netlist::{PHASES, t_cycle},
-};
+use super::{INT_MASK, Interrupts};
+pub(crate) use ceres_netlist::interrupts::{A, Access, NetIf, TIMER, lowest};
+use ceres_netlist::interrupts::{PHASES, t_cycle};
 
 pub(crate) fn any_access() -> Access {
     match kani::any::<u8>() & 3 {

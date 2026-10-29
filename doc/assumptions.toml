@@ -13,7 +13,7 @@
 #
 # - title: the assumption, in a line.
 # - evidence: proved (a harness discharges it), replayed (a transcription,
-#   which ceres-core's netlist_replay checks against the model's traces),
+#   which ceres-netlist's netlist_replay checks against the model's traces),
 #   measured (on the model's traces, ceres's runs or hardware), fact (ceres
 #   departs from the netlist there, as the facts record) or open (not known
 #   yet: the proofs leave the case out).

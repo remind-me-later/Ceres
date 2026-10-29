@@ -1,5 +1,3 @@
-#[cfg(any(kani, test))]
-pub(crate) mod netlist;
 #[cfg(kani)]
 pub(crate) mod netlist_proofs;
 
