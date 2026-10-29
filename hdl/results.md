@@ -305,9 +305,21 @@ half dots ahead (before the sample), LY 4 (after line 153's reset), and the
 flag only while LY still equals LYC, and its DMG reads see VBlank only from
 line 144. One difference is left, below what the CPU can see: an LYC write
 raises ceres's line a half dot before the netlist's sample at H, within
-the same T-cycle. STAT's mode bits, the HBlank source, the LCD turned on
-and off and ceres's resync of its clock at each line's end are not proved
-yet.
+the same T-cycle.
+
+Turning the LCD off and on is proved too. Ceres's LCDC write lands 2 half
+dots before its access (SameBoy's `cycle_write` for the DMG's LCDC), the
+netlist's latch opens in E. Off, ceres runs 3 half dots before its reset,
+to E: the same. On, ceres starts its clock at once, 2 half dots ahead of
+the netlist's, whose line 0 begins at D; the pixel pipeline resyncs it at
+the line's end, the only line where the resync moves it (from 895 to 893;
+on every other line ceres's clock is at 893 already). One difference: with
+LYC 0, its enable on and the flag clear, ceres raises the STAT line in the
+M-cycle before the write's, the netlist at H, after its first sample.
+`check/lcd_on_lyc0.asm` shows the CPU cannot see it: both enter the
+handler after the same instruction, as in that M-cycle the CPU is writing
+LCDC. STAT's mode bits and the HBlank source (the OAM scan's and render's)
+are not proved yet.
 
 ## The model's races
 

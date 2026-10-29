@@ -452,19 +452,7 @@ impl Ppu {
         } else {
             CGB_C_PHASES
         };
-        let t = &mut self.d.timing;
-        t.phases = phases;
-        t.on = true;
-        t.first_line = true;
-        t.line = 0;
-        t.h = 0;
-        t.ly = 0;
-        t.line_end = false;
-        t.vblank = false;
-        t.hblank = false;
-        t.hblank_pending = false;
-        t.ly_match = t.lyc == 0;
-        if t.update_line() {
+        if self.d.timing.turn_on(phases) {
             ints.request_lcd();
         }
     }
@@ -481,14 +469,7 @@ impl Ppu {
             self.timing_unit(ints);
             late -= 1;
         }
-        let t = &mut self.d.timing;
-        t.on = false;
-        t.ly = 0;
-        t.line_end = false;
-        t.vblank = false;
-        t.hblank = false;
-        t.hblank_pending = false;
-        t.update_line();
+        self.d.timing.turn_off();
     }
 
     /// Resyncs the clock with the pixel pipeline at a line end.
@@ -519,6 +500,35 @@ impl Ppu {
 }
 
 impl LcdTiming {
+    /// The LCD was turned on: the line clock starts at line 0, and LY=LYC
+    /// compares LY 0 at once. `true` if the interrupt rises.
+    const fn turn_on(&mut self, phases: Phases) -> bool {
+        self.phases = phases;
+        self.on = true;
+        self.first_line = true;
+        self.line = 0;
+        self.h = 0;
+        self.ly = 0;
+        self.line_end = false;
+        self.vblank = false;
+        self.hblank = false;
+        self.hblank_pending = false;
+        self.ly_match = self.lyc == 0;
+        self.update_line()
+    }
+
+    /// The LCD was turned off (after `LCD_OFF_LATE` half dots): LY=LYC keeps
+    /// its last value.
+    const fn turn_off(&mut self) {
+        self.on = false;
+        self.ly = 0;
+        self.line_end = false;
+        self.vblank = false;
+        self.hblank = false;
+        self.hblank_pending = false;
+        self.update_line();
+    }
+
     /// LY as a CPU read sees it. On the CGB a read in the half dot where LY
     /// changes sees the counter rippling: the bits that fall have fallen,
     /// the one that rises has not risen yet.

@@ -50,6 +50,7 @@ CPU_ROM   := $(BUILD)/cpu.gb
 SPRITES_ROM := $(BUILD)/sprites.gb
 STAT_ROM  := $(BUILD)/stat_vblank_end.gb
 STAT_DIPS_ROM := $(BUILD)/stat_dips.gb
+LCD_ON_LYC0_ROM := $(BUILD)/lcd_on_lyc0.gb
 LCD_OFF_ROM := $(BUILD)/lcd_off_line_start.gb
 WINDOW_ROM := $(BUILD)/window_line0_sprite.gb
 
@@ -57,7 +58,7 @@ abs = $(abspath $(1))
 
 .PHONY: all run phases smoke model run-model check clean
 
-all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(TINYBOOT_CGB) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(STAT_DIPS_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM)
+all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(TINYBOOT_CGB) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(STAT_DIPS_ROM) $(LCD_ON_LYC0_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM)
 
 # A boot ROM that only turns the LCD on and goes to 0100, for the checks
 # of the readable model, which do not need the boot ROM's timing:
@@ -90,7 +91,9 @@ $(TINYBOOT_CGB): boot/tinyboot_cgb.asm
 # of VBlank, of the LCD turned off as a line begins and of the window on line
 # 0, for compare-ceres.sh (check/stat_vblank_end.asm,
 # check/lcd_off_line_start.asm, check/window_line0_sprite.asm), and of IF's
-# STAT flag at VBlank's end and start, for run-tests.sh (check/stat_dips.asm).
+# STAT flag at VBlank's end and start, for run-tests.sh (check/stat_dips.asm),
+# and of the LCD turned on with LYC 0, for compare-ceres.sh
+# (check/lcd_on_lyc0.asm).
 $(BUILD)/%.gb: check/%.asm
 	mkdir -p $(BUILD)
 	rgbasm -o $(BUILD)/$*.o $<
