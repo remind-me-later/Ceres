@@ -174,7 +174,7 @@ note = "OAM is free for 1 ns between the scan's end and mode 3 (mode3_i in hdl/r
 
 [lcdc-write-latch-delay]
 title = "A write to LCDC reaches the PPU a moment after the CPU's strobe"
-models = ["dmg"]
+models = ["dmg", "cgb"]
 netlist = "same"
 hardware = "same"
 race = "width"
@@ -196,7 +196,7 @@ note = "Flip-flops half a dot or more apart, read from render.vhd; the CPU can s
 
 [stat-or-at-vblank-end]
 title = "STAT's mode 1 source falls as the mode 2 source rises: no interrupt"
-models = ["dmg"]
+models = ["dmg", "cgb"]
 netlist = "same"
 hardware = "same"
 race = "width"
@@ -205,7 +205,7 @@ note = "A static hazard of the OR of the sources: on the die mode 1 raises the m
 
 [stat-or-at-vblank-start]
 title = "STAT's LY = LYC source falls as the mode 1 source rises at line 144: an interrupt"
-models = ["dmg"]
+models = ["dmg", "cgb"]
 netlist = "same"
 hardware = "same"
 race = "width"

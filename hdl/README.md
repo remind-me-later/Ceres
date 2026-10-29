@@ -464,3 +464,11 @@ is applied (`rtl/` has it, tagged `@rule <id>`), proposed (ceres does it
 and passes the tests, `rtl/` not yet) or missing (nothing known passes).
 A rule is shown needed the way a race's verdict is: the model without it
 fails a hardware test. `./knowledge.sh rules` lists them.
+
+A rule names the models it is for, as the facts do. One found on the DMG
+is the CGB's too where the CGB model (branch `hdl_cgb`) keeps it and no
+CGB test contradicts it, since the CGB follows the DMG where nothing else
+is known. `MODELS` in `knowledge.sh` says which model `rtl/` is (`dmg`
+here): the checks hold `rtl/` to the rules for it, and `./knowledge.sh
+borrowed-rules` lists those of its rules that no fact about it shows, the
+ones it takes from another model.

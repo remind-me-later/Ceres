@@ -237,6 +237,15 @@ fn rule_tables(dir: &Path) {
             .flat_map(move |(id, r)| list(r).iter().map(move |v| vec![id.clone(), v.clone()]))
             .collect::<Vec<_>>()
     };
+    table(
+        dir,
+        "rule_model",
+        rules.iter().flat_map(|(id, r)| {
+            r.models
+                .iter()
+                .map(move |m| vec![id.clone(), m.name().to_owned()])
+        }),
+    );
     table(dir, "rule_fact", each_rule(|r| &r.facts));
     table(dir, "rule_race", each_rule(|r| &r.races));
 }
