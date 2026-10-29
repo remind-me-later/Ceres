@@ -33,13 +33,9 @@ build() {
 	awk -v TABLE=delay -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/delay.tsv"
 	awk -v TABLE=signal -f knowledge/rtl.awk rtl/*.vhd | sort -u >"$TABLES/signal.tsv"
 	awk -v TABLE=hw -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/hw_tag.tsv"
-	set -- build/runts/reports/*.txt
-	if [ -e "$1" ]; then
-		awk -f oracle/runts.awk "$TABLES/instance.tsv" "$@" |
-			awk -F '\t' -v OFS='\t' '{ $6 = $6 / 1e6; $7 = $7 / 1e12; print }' >"$TABLES/runt.tsv"
-	else
-		: >"$TABLES/runt.tsv"
-	fi
+	mkdir -p build/runts/reports
+	find build/runts/reports -name '*.txt' -exec awk -f oracle/runts.awk "$TABLES/instance.tsv" {} + |
+		awk -F '\t' -v OFS='\t' '{ $6 = $6 / 1e6; $7 = $7 / 1e12; print }' >"$TABLES/runt.tsv"
 	cargo run -q --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner --example facts -- tsv "$TABLES"
 
 	rm -f "$DB.new"

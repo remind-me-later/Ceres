@@ -265,7 +265,9 @@ follows the netlist in all three (facts `dma-oam-write-after-start` and
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses
-under 10 ns at 49 signals that control storage. Each pulse, and each delay
+under 10 ns at 35 signals that control storage, and over Mooneye's 54 DMG
+tests, Mealybug's 32 ROMs and Gambatte's 1747 DMG ROMs (from tinyboot, 24
+hours) at 22 more: 57 in all. Each pulse, and each delay
 of `rtl/` (its `after` clauses), was then given a verdict in
 [races.toml](races.toml) by a variant of the model: a pulse filtered where
 it is taken (an inertial delay a little longer than the pulse), a delay set
@@ -273,17 +275,19 @@ to 0 and to twice its value or more. The ROMs that show the pulse (86
 gbmicrotest ROMs for a delay, with Gambatte's 23 `late_sizechange` ROMs for
 LCDC's) ran on the variant, and their bus traces, frames and results were
 compared with the model's. Where a filter also delays the signal, a variant
-that only delays it (a `transport` delay) tells the two apart.
+that only delays it (a `transport` delay) tells the two apart; for the
+pulses of the second sweep, the 225 ROMs that show them ran on both, with
+the sound channels' outputs compared too.
 `./knowledge.sh check` now finds no delay, and no pulse under 10 ns, without
 a verdict, and no fact on a width race without its race.
 
 | Verdict | Races                                                        |
 | ------- | ------------------------------------------------------------ |
-| order   | 10: the flip-flops' tco, the CPU's bus timings (scaled by 0.8 and 1.2), the VRAM address drivers, the fetcher's flags and cycles at a fetch start or window start, the sprite load, OAM's read strobes, the interrupt boundary, the noise channel's volume ripple |
-| width   | 9: the cartridge address latches, LCDC's latch delay, the OAM write between the scan and mode 3, mode 0 after the LY = LYC flag, STAT's mode 2 into mode 3, STAT's OR at VBlank's end, the tile register at a window start, the timer's clock at a TAC write, a BGP or WX write against the pixel clock |
+| order   | 17: the flip-flops' tco, the CPU's bus timings (scaled by 0.8 and 1.2), the VRAM address drivers, the fetcher's flags and cycles at a fetch start or window start, the window's start flag, the sprite load, the sprite store's priority, OAM's read strobes and precharge, the interrupt boundary, the sound channels' volume ripple, frequency counter reload, envelope tick and length expiry, channel 1's load and stop |
+| width   | 10: the cartridge address latches, LCDC's latch delay, the OAM write between the scan and mode 3, mode 0 after the LY = LYC flag, STAT's mode 2 into mode 3, STAT's OR at VBlank's start and at its end, the tile register at a window start, the timer's clock at a TAC write, a BGP or WX write against the pixel clock |
 
-Two of the width races are new facts, both on hardware tests that the model
-and ceres pass:
+Three of the width races are new facts, all on hardware tests that the
+model and ceres pass:
 
 - `lcdc-write-latch-delay`: LCDC's latch opens 3 ns after the CPU's strobe.
   With it opened at once, Gambatte's `late_sizechange2_sp00_2`,
@@ -295,6 +299,17 @@ and ceres pass:
   and mode 3, and `oam_write_l1_c` writes in it. With no gap, or with OAM's
   `free` flag or write strobes filtered, the write is lost; with the data
   drivers at 3 ns instead of 1, it writes `FF`.
+- `stat-or-at-vblank-start`: at line 144, LY = LYC's flag (one flip-flop
+  after hclk) falls 1 ns before mode 1 (two flip-flops after it) rises, and
+  IF's flag takes the rise of STAT's line after the dip. With the request
+  filtered, 7 of Gambatte's `lycint143_m1irq`, `lycint_m1intirq` and
+  `m1irq` ROMs miss the DMG-08's interrupt. At VBlank's end the DMG takes
+  no such dip (`stat-or-at-vblank-end`).
+
+Most of the second sweep's pulses come from the sound channels, and end
+themselves: a counter's overflow reloads it, an envelope's tick resets
+itself, the last count of a length expires it and stops its clock. Channel
+1's pulses show in every ROM from tinyboot, which plays the boot sound.
 
 The BGP and WX writes of `bgp-write-in-mode-3` and
 `window-start-wx-written-every-line`, where the netlist draws a pixel off

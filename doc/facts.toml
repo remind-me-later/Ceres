@@ -203,6 +203,23 @@ race = "width"
 tests = ["gambatte/lcdirq_precedence/m2irq_ly00_lcdstat30_dmg08_cgb04c_out0.gbc"]
 note = "A static hazard of the OR of the sources; the model computes the two in one expression."
 
+[stat-or-at-vblank-start]
+title = "STAT's LY = LYC source falls as the mode 1 source rises at line 144: an interrupt"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = [
+  "gambatte/lcdirq_precedence/m1irq_lcdstat50_lyc8f_dmg08_cgb04c_out3.gbc",
+  "gambatte/m1/lycint143_m1irq_2_dmg08_cgb04c_out3.gbc",
+  "gambatte/m1/lycint143_m1irq_ifw_1_dmg08_cgb04c_out3.gbc",
+  "gambatte/m1/lycint143_m1irq_late_retrigger_1_dmg08_cgb04c_out3.gbc",
+  "gambatte/m1/lycint_m1intirq_1_dmg08_cgb04c_out3.gbc",
+  "gambatte/m1/lycint_m1intirq_2_dmg08_cgb04c_out1.gbc",
+  "gambatte/m1/m1irq_m2enable_lyc_3_dmg08_cgb04c_out3.gbc",
+]
+note = "The flag is one flip-flop after hclk, mode 1 two: the OR of the sources drops for one flip-flop's delay, and IF's flag takes its second rise. At VBlank's end the same kind of dip does not set it (stat-or-at-vblank-end)."
+
 [mode-0-rises-after-lyc-flag]
 title = "Mode 0 rises 14 ns after its compare, after LY = LYC's flag has changed"
 models = ["dmg"]

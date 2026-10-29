@@ -396,7 +396,11 @@ ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
 ./find-runts.sh -s
 ```
 
-The 513 gbmicrotest ROMs take 24 minutes at six at a time.
+The 513 gbmicrotest ROMs take 24 minutes at six at a time. Each report is
+`build/runts/reports/<ROM>.txt`, the ROM's path under `external/test-roms`
+(Gambatte's suites reuse names). `BOOT=tiny` runs `build/tinyboot.bin` with
+the VRAM zeroed, as `run-gambatte.sh` does, for Mooneye (`TEST=mooneye`,
+2 s), Mealybug (0.4 s) and Gambatte (0.29 s).
 [races.toml](races.toml) gives each race found, and each delay of `rtl/`,
 a verdict: order, if any delays that keep the order of the signals give
 the same outcome, or width, if the die's physics decides (the `race` of
