@@ -178,6 +178,20 @@ impl Ppu {
         self.oam.read(addr)
     }
 
+    /// OAM as the sprite fetch reads a sprite's tile and attributes. On the
+    /// DMG, while a DMA runs, OAM's latches take the DMA's data lines, which
+    /// carry the byte it copies, as the even byte and the odd one (the
+    /// netlist's `oam.vhd`). They close two dots after this read, after the
+    /// DMA's step in the chunk the PPU is running: the byte is the one the
+    /// DMA has copied by the chunk's end.
+    // @fact oam-fetch-during-dma
+    pub(super) fn oam_read_fetch(&self, addr: u16) -> u8 {
+        if !self.is_cgb_hardware() && !self.d.bus.oam_ppu_blocked && self.d.bus.dma_runs_next {
+            return self.d.bus.dma_byte_next.unwrap_or(self.d.bus.dma_byte);
+        }
+        self.oam_read(addr)
+    }
+
     /// SameBoy's `GB_read_oam`: the 160 bytes, then the unusable area.
     pub(super) fn oam_read_row(&self, addr: u8) -> u8 {
         if addr < Oam::SIZE {
@@ -191,22 +205,41 @@ impl Ppu {
     /// ahead of it, by two T-cycles in single speed, by a whole M-cycle in
     /// double speed.
     const fn search_dma_phase(&self) -> DmaPhase {
-        let lead = if self.double_speed { 3 } else { 2 };
-        if self.is_cgb_hardware() && self.d.bus.chunk_left <= lead {
+        if self.search_sees_dma_ahead() {
             self.d.bus.dma_phase_next
         } else {
             self.d.bus.dma_phase
         }
     }
 
-    /// A DMA has written its first byte and the CPU runs: the object search
-    /// does not read OAM until the transfer ends, and every entry sees what
-    /// the latches hold (on the DMG-CPU B's netlist, the scan's latches stay
-    /// closed while the DMA runs).
+    /// Whether the DMA runs, as the object search sees it (see
+    /// `search_dma_phase`).
+    const fn search_dma_runs(&self) -> bool {
+        if self.search_sees_dma_ahead() {
+            self.d.bus.dma_runs_next
+        } else {
+            self.d.bus.dma_runs
+        }
+    }
+
+    const fn search_sees_dma_ahead(&self) -> bool {
+        let lead = if self.double_speed { 3 } else { 2 };
+        self.is_cgb_hardware() && self.d.bus.chunk_left <= lead
+    }
+
+    /// A DMA runs (it has written its first byte, or was restarted while it
+    /// ran): the object search does not read OAM until the transfer ends,
+    /// and every entry sees what the latches hold (on the DMG-CPU B's
+    /// netlist, the scan's latches stay closed while the DMA runs). On the
+    /// DMG, also while the CPU is halted (the DMA's clock stays high, and
+    /// the transfer, paused, keeps OAM); the CGB's search is the CPU's then
+    /// (see `add_object_from_index`).
     // @fact stat-during-oam-dma
+    // @fact oam-scan-during-halted-dma
+    // @fact oam-scan-during-dma-restart
     #[must_use]
     pub(in crate::ppu) const fn dma_hides_object_search(&self) -> bool {
-        !self.d.bus.cpu_idle && self.search_dma_phase().written().is_some()
+        (!self.d.bus.cpu_idle || !self.is_cgb_hardware()) && self.search_dma_runs()
     }
 
     pub(super) fn add_object_from_index(&mut self, index: u8) {
@@ -224,9 +257,15 @@ impl Ppu {
             return;
         }
 
-        // A halted DMA blocks the object search on everything before CGB-E
-        // (pre-CGB units vary; like SameBoy this reads 0xFF there).
-        if dma_active && self.d.bus.cpu_idle && !matches!(self.model, Model::CgbE | Model::Agb) {
+        // A halted DMA blocks the object search on the CGBs before the CGB-E
+        // (like SameBoy, which notes that units before the CGB vary; the
+        // DMG-CPU B's netlist compares the latches, above).
+        // @fact oam-scan-during-halted-dma
+        if dma_active
+            && self.d.bus.cpu_idle
+            && self.is_cgb_hardware()
+            && !matches!(self.model, Model::CgbE | Model::Agb)
+        {
             return;
         }
 

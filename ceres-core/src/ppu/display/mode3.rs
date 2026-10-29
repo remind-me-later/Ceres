@@ -159,8 +159,8 @@ impl Ppu {
                     let base = u16::from(self.d.objs.fetched().index) * Oam::ENTRY_SIZE;
                     // The tile and the attributes go through the latches the
                     // search reads Y and X into, and stay there.
-                    self.d.obj_fetch.tile = self.oam_read(base + Oam::ENTRY_TILE);
-                    self.d.obj_fetch.flags = self.oam_read(base + Oam::ENTRY_ATTRIBUTES);
+                    self.d.obj_fetch.tile = self.oam_read_fetch(base + Oam::ENTRY_TILE);
+                    self.d.obj_fetch.flags = self.oam_read_fetch(base + Oam::ENTRY_ATTRIBUTES);
                     self.d.objs.y_bus = self.d.obj_fetch.tile;
                     self.d.objs.x_bus = self.d.obj_fetch.flags;
                     self.sleep_in_line(State::Mode3ObjectAttributes, 2);

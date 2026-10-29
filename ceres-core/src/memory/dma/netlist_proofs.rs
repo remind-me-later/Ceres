@@ -55,6 +55,7 @@ fn any_ceres() -> Ceres {
             current_src: kani::any(),
             reg: kani::any(),
             restarting: kani::any(),
+            ran_when_written: kani::any(),
         },
         last_copy: kani::any::<bool>().then(|| (kani::any(), kani::any())),
     }
@@ -93,9 +94,10 @@ fn net_m_cycle(net: &mut NetDma, access: Access) -> (Option<u8>, Option<(u16, u8
 }
 
 /// Ceres's M-cycle: the access, then a run of four T-cycles, as
-/// `Gb::run_dma` makes it. Returns what a read reads and the byte the
-/// netlist writes in this M-cycle: the one ceres copied in the last.
-fn ceres_m_cycle(ceres: &mut Ceres, access: Access) -> (Option<u8>, Option<(u16, u8)>) {
+/// `Gb::run_dma` makes it. Returns what a read reads, the byte the netlist
+/// writes in this M-cycle (the one ceres copied in the last), and whether
+/// the transfer runs (`Dma::runs`) after the access.
+fn ceres_m_cycle(ceres: &mut Ceres, access: Access) -> (Option<u8>, Option<(u16, u8)>, bool) {
     let read = match access {
         Access::None => None,
         Access::Read => Some(ceres.dma.read()),
@@ -106,6 +108,7 @@ fn ceres_m_cycle(ceres: &mut Ceres, access: Access) -> (Option<u8>, Option<(u16,
         }
     };
     let written = ceres.last_copy;
+    let runs = ceres.dma.runs();
     let mut copy = None;
     if ceres.dma.is_active() {
         ceres.dma.set_cycles(4);
@@ -123,7 +126,7 @@ fn ceres_m_cycle(ceres: &mut Ceres, access: Access) -> (Option<u8>, Option<(u16,
         }
     }
     ceres.last_copy = copy;
-    (read, written)
+    (read, written, runs)
 }
 
 /// The states match, at the start of the netlist's E.
@@ -204,8 +207,16 @@ fn netlist_dma_bisimulation() {
     let restart = write && net.run && !starting;
     let write_after_write = write && starting && !net.run;
     let write_after_restart = write && starting && net.run;
+    // What the PPU sees of the transfer after the access, before ceres's
+    // step at A: the netlist's run changes only there.
+    // @fact oam-scan-during-dma-restart
+    let run_before = net.run;
     let (net_read, net_write) = net_m_cycle(&mut net, access);
-    let (ceres_read, ceres_write) = ceres_m_cycle(&mut ceres, access);
+    let (ceres_read, ceres_write, runs_after_access) = ceres_m_cycle(&mut ceres, access);
+    assert!(
+        runs_after_access == run_before,
+        "the PPU sees another run after the access"
+    );
     assert!(net_read == ceres_read, "the read differs");
     assert!(net_write == ceres_write, "the OAM write differs");
     // @fact dma-oam-write-after-start
@@ -213,6 +224,7 @@ fn netlist_dma_bisimulation() {
         ceres.dma.blocks_oam() == net.run,
         "the CPU's OAM accesses are blocked otherwise"
     );
+    assert!(ceres.dma.runs() == net.run, "the PPU sees another run");
     assert!(related(&net, &ceres), "the states part");
     kani::cover!(matches!(access, Access::Write(_)), "a transfer starts");
     kani::cover!(restart, "a restart");

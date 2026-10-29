@@ -51,6 +51,36 @@ open = ["doc/hardware-tests.md#what-the-oam-scan-reads-while-an-oam-dma-is-copyi
 needs = ["flash-cart", "cgb-c", "cgb-e"]
 note = "Settled on the DMG by the netlist's two OAM latches; the CGB has the rule because its tests pass with it. SameBoy keeps only the scan's last Y and X."
 
+[oam-fetch-during-dma]
+title = "What the sprite fetch of mode 3 reads while an OAM DMA runs"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+emulators = "disagree"
+open = ["doc/hardware-tests.md#what-the-oam-scan-reads-while-an-oam-dma-is-copying"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "As in the netlist: OAM's latches take the DMA's data lines, which carry the byte it copies (the source byte at its count as the fetch's read ends), as the tile and as the attributes; they hold it for the next line's scan if the DMA hides OAM then. hdl/check/dma_fetch.asm: the model and ceres agree on all 1666 fetches during a DMA. Until 2026-10-29 ceres, as SameBoy, read the OAM pair at the DMA's address; the CGBs still do."
+
+[oam-scan-during-dma-restart]
+title = "The OAM scan and STAT while an OAM DMA is restarted"
+models = ["dmg", "cgb"]
+netlist = "same"
+hardware = "none"
+emulators = "disagree"
+open = ["doc/hardware-tests.md#an-oam-dma-restarted-while-it-runs"]
+needs = ["flash-cart", "dmg-b", "dmg-c", "cgb-c", "cgb-e"]
+note = "As in the netlist: the run stays on through a restart, so the scan keeps comparing what OAM's latches hold and STAT shows mode 0. Until 2026-10-29 ceres, as SameBoy, read OAM and showed mode 2 in the restart's two M-cycles."
+
+[oam-scan-during-halted-dma]
+title = "What the OAM scan compares while the CPU is halted during an OAM DMA"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+emulators = "disagree"
+open = ["doc/hardware-tests.md#what-the-oam-scan-reads-while-an-oam-dma-is-copying"]
+needs = ["flash-cart", "dmg-b", "dmg-c"]
+note = "As in the netlist: dma_phi stays high while the CPU is halted, the transfer pauses with its run on, and the scan compares what OAM's latches hold. Until 2026-10-29 ceres, as SameBoy, skipped the search there (SameBoy notes that units before the CGB vary); the CGBs keep that rule before the CGB-E, whose search reads OAM."
+
 [stat-during-oam-dma]
 title = "STAT shows mode 0, not 2, while an OAM DMA hides the scan"
 models = ["dmg", "cgb"]

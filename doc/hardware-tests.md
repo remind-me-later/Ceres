@@ -108,8 +108,9 @@ CGB is left to check, since there is no netlist for it.
   and compares each entry with what OAM's two latches took last
   (`hdl/rtl/oam.vhd`, `oam_scan.vhd`). That is the Y and X of the last entry
   the scan read, unless OAM was read since: by a sprite fetch of mode 3,
-  which reads the sprite's tile and attributes (at the DMA's address while
-  one runs), or by the CPU (`FExx`).
+  which reads the sprite's tile and attributes (while a DMA runs, the
+  latches take the DMA's data lines instead, which carry the byte it
+  copies, as both: `hdl/check/dma_fetch.asm`), or by the CPU (`FExx`).
   - In `strikethrough`, the latches still hold sprite 39's Y and X from the
     line before, so every entry of the next line matches.
   - In `late_sp39y_2`, the line before the DMA drew sprite 39 itself, and its
@@ -120,7 +121,10 @@ CGB is left to check, since there is no netlist for it.
   The readable model draws `strikethrough`'s screenshot pixel for pixel, and
   passes all 16 of gambatte's DMG `late_sp*` ROMs.
 - **Ceres today:** the same latches (`y_bus` and `x_bus` in
-  `ceres-core/src/ppu/display/objects.rs`), on every model. It passes
+  `ceres-core/src/ppu/display/objects/mod.rs`), on every model; on the DMG,
+  since 2026-10-29, a sprite fetch during a DMA takes the DMA's byte as the
+  netlist's does (`oam_read_fetch`), where it read the OAM pair at the
+  DMA's address before, as SameBoy does (the CGBs still do). It passes
   `strikethrough` on the DMG, CGB-C and CGB-E, and all of gambatte's `oamdma`
   ROMs on both models. Earlier rules each failed one of the two: reading
   `0xFF` during the DMA failed `strikethrough`, and keeping the scan's last Y
@@ -130,7 +134,11 @@ CGB is left to check, since there is no netlist for it.
   object that was read last (by the scan or by the fetch), the rule holds
   there too. If not, the CGB differs, and only the DMG keeps the netlist's
   rule. SameBoy notes that pre-CGB units differ in what the scan reads when a
-  DMA is halted, which this does not cover.
+  DMA is halted: on the netlist, `dma_phi` stays high while the CPU is
+  halted, the transfer pauses with its run on, and the scan compares the
+  latches as during any DMA. Ceres's DMG does that since 2026-10-29 (it
+  skipped the search before, as SameBoy does); a halt during the DMA, with
+  the sweep above, would check it.
 - **Needs:** a test ROM; a CGB-C and a CGB-E.
 
 ### STAT during an OAM DMA
@@ -204,7 +212,8 @@ CGB is left to check, since there is no netlist for it.
   it copies byte c, and sweep c and the moment; dump OAM (or draw sprites
   from it) in the two M-cycles that follow, before the new transfer
   reaches bytes 0 and c. Then write FF46 twice in a row, and when the
-  first byte lands.
+  first byte lands. And restart a transfer during the OAM scan, and read
+  STAT, and see which sprites the line gets, in those two M-cycles.
 - **The evidence:** no test that ceres runs tells the two rules apart: all
   the suites pass with either (2026-10-27).
 - **The netlist:** FF46 is a latch, open while the CPU writes it, so the
@@ -219,7 +228,11 @@ CGB is left to check, since there is no netlist for it.
   `ceres-core/src/memory/dma/mod.rs`, proved in
   `memory/dma/netlist_proofs.rs`). Until 2026-10-27 it had Gambatte's rule
   (`oamDmaStartPos_`): byte c from the old source, then byte c + 1 from the
-  new one, and a second write started the transfer over.
+  new one, and a second write started the transfer over. In those two
+  M-cycles the netlist's run stays on, so the OAM scan keeps comparing
+  OAM's latches and STAT shows mode 0; ceres does too since 2026-10-29
+  (`Dma::runs`), and read OAM and showed mode 2 before, as SameBoy
+  does.
 - **Outcomes:** which bytes hold what in those two M-cycles, and whether a
   second write delays the first byte.
 - **Needs:** a test ROM; a B, a C and a CGB.

@@ -75,6 +75,9 @@ pub(crate) struct Dma {
     /// netlist's restart clears its count while it still runs).
     // @fact dma-restart-bytes
     restarting: bool,
+    /// A transfer ran (it had written a byte) when FF46 was last written:
+    /// the netlist's run stays on until the start-up delay ends.
+    ran_when_written: bool,
 }
 
 impl Default for Dma {
@@ -86,6 +89,7 @@ impl Default for Dma {
             current_src: 0,
             reg: 0xFF,
             restarting: false,
+            ran_when_written: false,
         }
     }
 }
@@ -137,6 +141,26 @@ impl Dma {
     const fn is_warming_up(&self) -> bool {
         matches!(self.phase, DmaPhase::StartUp)
             || (matches!(self.phase, DmaPhase::Copy { next: 0 }) && !self.restarting)
+    }
+
+    /// The transfer runs in `phase`, as the netlist's `run` does: from its
+    /// first byte to its last step, through the start-up delay of a write
+    /// made while it ran, and through a restart's first M-cycle, which
+    /// copies byte 0 as the transfer did.
+    #[must_use]
+    pub(crate) const fn runs_in(&self, phase: DmaPhase) -> bool {
+        match phase {
+            DmaPhase::Idle => false,
+            DmaPhase::StartUp => self.ran_when_written,
+            DmaPhase::Copy { next: 0 } => self.restarting,
+            DmaPhase::Copy { .. } | DmaPhase::Last => true,
+        }
+    }
+
+    /// The transfer runs now (see `runs_in`).
+    #[must_use]
+    pub(crate) const fn runs(&self) -> bool {
+        self.runs_in(self.phase)
     }
 
     /// The DMA owns OAM: CPU reads of it return 0xFF and CPU writes to it
@@ -253,6 +277,7 @@ impl Dma {
         let last = self.oam_byte();
         if !matches!(self.phase, DmaPhase::StartUp | DmaPhase::Copy { next: 0 }) {
             self.restarting = !matches!(self.phase, DmaPhase::Idle | DmaPhase::Last);
+            self.ran_when_written = !matches!(self.phase, DmaPhase::Idle);
             self.cycles = 0;
             self.cycles_modulo = 2;
             self.phase = DmaPhase::StartUp;
@@ -452,21 +477,59 @@ impl<A: AudioCallback> Gb<A> {
             self.dma_copy(src, dest);
         }
         self.ppu
-            .set_dma_state(self.dma.phase, self.dma.current_src, true);
+            .set_dma_state(self.dma.phase, self.dma.runs(), self.dma.current_src, true);
     }
 
     /// Copies the byte at `src` to OAM byte `dest`. The CGB's DMA reads FF
     /// from E000 up, the DMG's reads the work RAM through its echo.
     fn dma_copy(&mut self, src: u16, dest: u8) {
-        let value = if src < ECHO_START {
+        let value = self.dma_source_byte(src);
+        self.ppu
+            .write_oam_by_dma(OAM_START | u16::from(dest), value);
+    }
+
+    /// The byte the transfer copies from `src` (see `dma_copy`).
+    fn dma_source_byte(&self, src: u16) -> u8 {
+        if src < ECHO_START {
             self.dma_read(src)
         } else if self.model.is_cgb_hardware() {
             0xFF
         } else {
             self.dma_read(src & !ECHO_B)
-        };
-        self.ppu
-            .write_oam_by_dma(OAM_START | u16::from(dest), value);
+        }
+    }
+
+    /// Whether the transfer runs after the next `cycles` (see `Dma::runs`).
+    pub(crate) const fn dma_runs_after(&self, cycles: i32) -> bool {
+        self.dma.runs_in(self.dma_phase_after(cycles))
+    }
+
+    /// The byte the transfer copies last in the next `cycles`, if it copies
+    /// one (the steps of `dma_phase_after`).
+    pub(crate) fn dma_byte_after(&self, cycles: i32) -> Option<u8> {
+        if !self.dma.is_active() || self.hdma.cpu_halted() || self.clock.stopped {
+            return None;
+        }
+        let (mut phase, mut src, mut byte) = (self.dma.phase, self.dma.current_src, None);
+        let mut due = (self.dma.cycles_modulo + cycles) / 4;
+        while due > 0 {
+            due -= 1;
+            match phase {
+                DmaPhase::Copy { .. } => {
+                    byte = Some(self.dma_source_byte(src));
+                    src = src.wrapping_add(1);
+                }
+                // A restart's start-up delay copies byte 0 again.
+                DmaPhase::StartUp if self.dma.restarting => byte = Some(self.dma_source_byte(src)),
+                DmaPhase::StartUp | DmaPhase::Last | DmaPhase::Idle => {}
+            }
+            let stop = matches!(phase, DmaPhase::StartUp | DmaPhase::Last);
+            phase = phase.step();
+            if stop {
+                break;
+            }
+        }
+        byte
     }
 
     /// The phase `run_dma` will have reached after the next `cycles`.
@@ -521,6 +584,7 @@ impl<A: AudioCallback> Gb<A> {
         }
         self.ppu.set_dma_state(
             self.dma.phase,
+            self.dma.runs(),
             self.dma.current_src,
             self.dma.cycles_modulo != 0,
         );

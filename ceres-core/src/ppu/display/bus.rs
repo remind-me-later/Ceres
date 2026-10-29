@@ -13,11 +13,19 @@ use {
 #[expect(clippy::struct_excessive_bools, reason = "Independent bus states")]
 #[derive(Clone)]
 pub(super) struct PpuBus {
-    /// Where the OAM DMA is.
+    /// Where the OAM DMA is, and whether it runs (`Dma::runs`).
     pub dma_phase: DmaPhase,
+    pub dma_runs: bool,
+    /// The byte the OAM DMA copied last, which its data lines carry until
+    /// the next (on the DMG, OAM's latches take it while the DMA runs).
+    pub dma_byte: u8,
     /// Where it will be once the T-cycles the PPU is running are accounted
     /// for (the DMA catches up after the PPU).
     pub dma_phase_next: DmaPhase,
+    /// Whether it runs then, and the byte it copies last in that chunk, if
+    /// it copies one.
+    pub dma_runs_next: bool,
+    pub dma_byte_next: Option<u8>,
     /// T-cycles of that chunk still to run after the current one.
     pub chunk_left: i32,
     /// Address the OAM DMA reads next.
@@ -44,7 +52,11 @@ impl Default for PpuBus {
     fn default() -> Self {
         Self {
             dma_phase: DmaPhase::Idle,
+            dma_runs: false,
+            dma_byte: 0xFF,
             dma_phase_next: DmaPhase::Idle,
+            dma_runs_next: false,
+            dma_byte_next: None,
             chunk_left: 0,
             dma_src: 0,
             dma_modulo: false,
@@ -144,16 +156,37 @@ impl Ppu {
     }
 
     /// The OAM DMA's state, as the PPU sees it.
-    pub(crate) const fn set_dma_state(&mut self, phase: DmaPhase, src: u16, modulo: bool) {
+    pub(crate) const fn set_dma_state(
+        &mut self,
+        phase: DmaPhase,
+        runs: bool,
+        src: u16,
+        modulo: bool,
+    ) {
         self.d.bus.dma_phase = phase;
+        self.d.bus.dma_runs = runs;
         self.d.bus.dma_src = src;
         self.d.bus.dma_modulo = modulo;
     }
 
+    /// The OAM DMA copied `val` (see `dma_byte`).
+    pub(in crate::ppu) const fn set_dma_byte(&mut self, val: u8) {
+        self.d.bus.dma_byte = val;
+    }
+
     /// The PPU is about to run `cycles` T-cycles, after which the OAM DMA
-    /// will have reached `phase_next`.
-    pub(crate) const fn set_dma_lookahead(&mut self, phase_next: DmaPhase, cycles: i32) {
+    /// will have reached `phase_next`, running then or not (`runs_next`),
+    /// having copied `byte_next` last if it copied a byte.
+    pub(crate) const fn set_dma_lookahead(
+        &mut self,
+        phase_next: DmaPhase,
+        runs_next: bool,
+        byte_next: Option<u8>,
+        cycles: i32,
+    ) {
         self.d.bus.dma_phase_next = phase_next;
+        self.d.bus.dma_runs_next = runs_next;
+        self.d.bus.dma_byte_next = byte_next;
         self.d.bus.chunk_left = cycles;
     }
 

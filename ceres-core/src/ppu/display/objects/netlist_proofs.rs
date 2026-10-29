@@ -18,27 +18,28 @@
 //! at `8 * m + 1`, in ceres at `8 * m - 2`, so both give sprite i the new
 //! height from `i = 2 * m + 1` on. A save never sees half a write.
 //! `netlist_scan_dma` runs a whole scan while an OAM DMA runs from any
-//! M-cycle to any later one, with OAM's two stages of latches
-//! (`NetOamLatches`): the DMA closes the first, which keep the last Y the
-//! scan read, and the scan goes on comparing it; ceres's search keeps its
-//! `y_bus` (`ObjectSearch::latch`) for the reads its DMA hides. Both see
-//! the same Y for every sprite, from any Y the latches hold as the scan
-//! starts, and the netlist saves the sprites ceres finds. The DMA's run
-//! changes at the A edge, `8 * m + 5`, where ceres steps its DMA (the DMA
-//! proof's mapping); ceres's read of sprite `2 * m + 2`, at that half dot,
-//! comes before the step. `netlist_scan_consider` proves a step of ceres's
-//! search, which keeps a sprite when it is on the line and the list has
-//! room: sprite after sprite, it keeps the same ten.
+//! M-cycle to any later one, with the CPU halted in any of them, with OAM's
+//! two stages of latches (`NetOamLatches`): the DMA closes the first, which
+//! keep the last Y the scan read, and the scan goes on comparing it; ceres's
+//! search keeps its `y_bus` (`ObjectSearch::latch`) for the reads its DMA
+//! hides (`Dma::runs`, which the DMA's proof shows is the netlist's
+//! run, a restart included). Both see the same Y for every sprite, from any
+//! Y the latches hold as the scan starts, and the netlist saves the sprites
+//! ceres finds. The DMA's run changes at the A edge, `8 * m + 5`, where
+//! ceres steps its DMA (the DMA proof's mapping); ceres's read of sprite
+//! `2 * m + 2`, at that half dot, comes before the step.
+//! `netlist_scan_consider` proves a step of ceres's search, which keeps a
+//! sprite when it is on the line and the list has room: sprite after
+//! sprite, it keeps the same ten.
 //!
 //! What it does not cover yet: the half dot of each of ceres's reads, and
 //! of its DMA's steps against them, which are measured (its state machine
-//! is outside the proof); the CPU addressing OAM during the scan; a DMA
-//! restarted during the scan, or one while the CPU is halted, where ceres
-//! departs from the netlist; what the latches hold as the scan starts,
-//! which the sprite fetch of the line before sets (during a DMA, the
-//! netlist's fetch takes the DMA's byte, ceres's the OAM pair at the DMA's
-//! address); the scan of line 0 after the LCD turns on; and the order of
-//! the sprites for the fetch (the sprite store's and render's).
+//! is outside the proof); the CPU addressing OAM during the scan; what the
+//! latches hold as the scan starts, which the sprite fetch of the line
+//! before sets (during a DMA, the DMA's byte: measured with
+//! `hdl/check/dma_fetch.asm`); the scan of line 0 after the LCD turns on;
+//! and the order of the sprites for the fetch (the sprite store's and
+//! render's).
 
 use super::{
     Entry, MAX_OBJECTS_PER_LINE, ObjectSearch,
@@ -103,9 +104,9 @@ const fn ceres_read_h(index: u8) -> i32 {
 }
 
 /// The netlist's scan of a visible `line`, from the line's end to mode 3,
-/// with LCDC bit 2 (`tall`) and OAM DMA's run (`run`) after the edge at
-/// each half dot of the line, OAM's Ys, and the Y OAM's latches hold as it
-/// starts: the sprite each slot saves.
+/// with LCDC bit 2 (`tall`), OAM DMA's run (`run`) and its clock
+/// (`dma_phi`) after the edge at each half dot of the line, OAM's Ys, and
+/// the Y OAM's latches hold as it starts: the sprite each slot saves.
 ///
 /// The CPU does not address OAM, and no sprite is fetched, while it runs.
 fn net_scan(
@@ -113,6 +114,7 @@ fn net_scan(
     ys: &[u8; 40],
     tall: impl Fn(i32) -> bool,
     run: impl Fn(i32) -> bool,
+    dma_phi: impl Fn(i32) -> bool,
     held: u8,
 ) -> [Option<u8>; 10] {
     // The scan of the line before has ended (or, for line 0, the one of
@@ -245,7 +247,7 @@ fn netlist_scan_selection() {
             tall_before
         }
     };
-    let slots = net_scan(line, &ys, net_tall, |_| false, held);
+    let slots = net_scan(line, &ys, net_tall, |_| false, dma_phi, held);
     let ceres_tall = |index: u8| {
         if ceres_read_h(index) > 8 * m + CERES_LCDC_H {
             tall_after
@@ -264,11 +266,11 @@ fn netlist_scan_selection() {
 }
 
 /// A whole scan of a visible line with any Ys, while an OAM DMA runs from
-/// any M-cycle to any later one, with the CPU running: the netlist's
-/// comparator and ceres's search see the same Ys, the last read before the
-/// DMA for the sprites it hides, and the netlist saves the first ten
-/// sprites on the line that ceres's search finds. The Y OAM's latches hold
-/// as the scan starts is any, the same on both.
+/// any M-cycle to any later one, with the CPU halted in any of them: the
+/// netlist's comparator and ceres's search see the same Ys, the last read
+/// before the DMA for the sprites it hides, and the netlist saves the first
+/// ten sprites on the line that ceres's search finds. The Y OAM's latches
+/// hold as the scan starts is any, the same on both.
 #[kani::proof]
 #[kani::unwind(200)]
 fn netlist_scan_dma() {
@@ -283,11 +285,20 @@ fn netlist_scan_dma() {
     let (start, end): (i32, i32) = (kani::any(), kani::any());
     kani::assume(-3 <= start && start < end && end <= 22);
 
+    // The CPU halts in any of those M-cycles, and wakes in any later one:
+    // `dma_phi` stays high, and the transfer pauses with its run on (a run
+    // of any length covers it).
+    // @fact oam-scan-during-halted-dma
+    let (halt, wake): (i32, i32) = (kani::any(), kani::any());
+    kani::assume(start <= halt && halt <= wake && wake <= end);
     let run = |h: i32| (8 * start + A_H..8 * end + A_H).contains(&h);
-    let slots = net_scan(line, &ys, |_| tall, run, held);
+    let phi = |h: i32| dma_phi(h) || (8 * halt + A_H..8 * wake + A_H).contains(&h);
+    let slots = net_scan(line, &ys, |_| tall, run, phi, held);
     // Ceres's search sees the DMA's phase after its last step before the
-    // read; a step at M-cycle `m` leaves a byte written (`DmaPhase::written`)
-    // when the netlist runs after that A edge.
+    // read; a step at M-cycle `m` leaves the transfer running
+    // (`Dma::runs`, proved against the netlist's run in the DMA's
+    // proof, a restart included) when the netlist runs after that A edge.
+    // On the DMG, a halt does not change it.
     let hidden = |index: u8| {
         let step = (ceres_read_h(index) - A_H - 1).div_euclid(8);
         (start..end).contains(&step)
@@ -301,6 +312,10 @@ fn netlist_scan_dma() {
     kani::cover!(
         start < 0 && (1..18).contains(&end) && found > 0,
         "a DMA that ends in the scan"
+    );
+    kani::cover!(
+        halt < wake && (1..18).contains(&halt) && found > 0,
+        "the CPU halts during the scan"
     );
 }
 

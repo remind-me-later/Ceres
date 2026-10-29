@@ -79,5 +79,6 @@ impl Ppu {
 
     pub(crate) const fn write_oam_by_dma(&mut self, addr: u16, val: u8) {
         self.oam.write(addr, val);
+        self.set_dma_byte(val);
     }
 }
