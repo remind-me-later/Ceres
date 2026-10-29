@@ -3,7 +3,7 @@
 //! Each entry is a rule that `hdl/rtl` needs beyond the die's connectivity
 //! to do what the hardware does: the outcome of a width race, a gate or a
 //! latch the die does not show, what a RAM's cells or the analogue side do,
-//! the power-on state, for the models it names. The knowledge database (`hdl/knowledge.sh`) checks
+//! the power-on state, for the models it names. The knowledge base (`hdl/knowledge.sh`) checks
 //! that every fact that needs a rule has one; [`problems`] checks the
 //! entries against the facts and the races.
 

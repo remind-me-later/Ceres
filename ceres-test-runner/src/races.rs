@@ -3,7 +3,7 @@
 //! Each entry is a race of `hdl/rtl`: a delay (an `after` clause) or a short
 //! pulse that a flip-flop or a latch sees (`hdl/find-runts.sh`), and whether
 //! the outcome hangs on the order of two signals or on the widths of their
-//! paths. The knowledge database (`hdl/knowledge.sh`) checks that every
+//! paths. The knowledge base (`hdl/knowledge.sh`) checks that every
 //! delay and every short pulse at a control has its entry; [`problems`]
 //! checks the entries against the facts.
 

@@ -4,7 +4,7 @@
 //! fact. `tsv DIR` writes the facts, their tags, the races of
 //! `hdl/races.toml`, the rules of `hdl/rules.toml`, and the assumptions of
 //! the proofs (`doc/assumptions.toml`) with ceres-core's harnesses and their
-//! tags, as tables, for the knowledge database (`hdl/knowledge.sh`).
+//! tags, as tables, for the knowledge base (`hdl/knowledge.sh`).
 //!
 //! Usage: `cargo run -p ceres-test-runner --example facts -- [open|netlist|races|tags|tsv DIR]`
 //! (the first four without an argument).
@@ -109,7 +109,7 @@ fn tagged(facts: &Facts) {
     }
 }
 
-/// A table for the knowledge database: a row per line, the fields apart by
+/// A table for the knowledge base: a row per line, the fields apart by
 /// tabs (which, like line breaks, the fields cannot hold).
 fn table(dir: &Path, name: &str, rows: impl IntoIterator<Item = Vec<String>>) {
     let path = dir.join(format!("{name}.tsv"));

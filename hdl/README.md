@@ -447,35 +447,46 @@ the same outcome, or width, if the die's physics decides (the `race` of
 [doc/facts.toml](../doc/facts.toml)), with the evidence and the facts that
 rest on it.
 
-## The knowledge database
+## The knowledge base
 
-`knowledge.sh` gathers what the repository knows into one SQLite database,
-`build/knowledge.db`, generated from the sources each time: the model's
-instances, its signals and the ones that control its storage, its delays and its
-`@hw` tags; the short pulses of the reports of `find-runts.sh`; the facts
-of `doc/facts.toml` and their `@fact` tags across the repository (through
-ceres-test-runner's example `facts`); the verdicts of `races.toml`; and the
-rules of `rules.toml` with their `@rule` tags in `rtl/`.
-`knowledge/schema.sql` says what each table holds. The checks are in
-Datalog, `knowledge/knowledge.dl`, which [Soufflé](https://souffle-lang.github.io)
-(2.5 is tested) runs on the same tables (`build/knowledge/*.tsv`); the
-queries, and your own, are SQL, run with `sqlite3`.
+`knowledge.sh` gathers what the repository knows into tables,
+`build/knowledge/*.tsv`, generated from the sources each time: the model's
+instances, its signals and the ones that control its storage, its delays
+and its `@hw` tags; the short pulses of the reports of `find-runts.sh`; the
+facts of `doc/facts.toml` and their `@fact` tags across the repository
+(through ceres-test-runner's example `facts`); the verdicts of `races.toml`;
+the rules of `rules.toml` with their `@rule` tags in `rtl/`; and what the
+proofs assume (below). The checks and the queries on them are in Datalog,
+`knowledge/knowledge.dl`, which also says what each table holds;
+[Soufflé](https://souffle-lang.github.io) (2.5 is tested) runs it.
 
 ```sh
-./knowledge.sh list            # the saved queries and checks
-./knowledge.sh width-facts     # run one (knowledge/queries/*.sql)
-./knowledge.sh check           # the checks (knowledge/knowledge.dl)
-sqlite3 -column -header build/knowledge.db
+./knowledge.sh list            # the queries and the checks
+./knowledge.sh width-facts     # print a query
+./knowledge.sh check           # run the checks
+./knowledge.sh run mine.dl     # your own rules, with the program's
 ```
 
 A check is a relation that must be empty: a delay or a short pulse at a
 control without a verdict, a verdict naming what `rtl/` does not have, a
 fact on a width race that no race names, a fact that needs a rule and has
 none, an applied rule without its tag, two rules explaining the same facts,
-and the proofs' assumptions below.
-Each was a query of SQL before (2026-10-29); on the same tables, and on a
-dozen copies broken so that each check finds something, the two found the
-same rows.
+and the proofs' assumptions below. A query is a relation printed as a
+table: a first column named `rank` orders its rows, and is not printed. A
+file for `run` adds rules to the program's relations and outputs what it
+wants to see, as in
+
+```prolog
+// The facts that no test shows and no open question asks about.
+.decl unasked(fact: symbol)
+unasked(f) :- fact_id(f), !fact_test(f, _), !fact_open(f, _).
+.output unasked(IO=stdout)
+```
+
+The knowledge base was an SQLite database until 2026-10-29. On the same
+tables, and on a dozen copies broken so that each check finds something,
+the Datalog checks found the same rows as the SQL ones; the queries give
+the same rows too (with lists in their cells sorted by name).
 
 ### What the proofs assume
 

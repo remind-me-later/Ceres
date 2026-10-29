@@ -1,41 +1,70 @@
-// The knowledge base's checks, in Datalog (Soufflé): what the repository
-// knows about the hardware, the readable model and ceres, read from the
-// tables ../knowledge.sh builds (build/knowledge/*.tsv; schema.sql says what
-// each holds), and the checks that must find nothing. Each check is a
-// relation, written to its own file; ../knowledge.sh check fails if one is
-// not empty.
+// The knowledge base, in Datalog (Soufflé): what the repository knows
+// about the hardware, the readable model and ceres, read from the tables
+// ../knowledge.sh builds from the sources (build/knowledge/*.tsv), the
+// checks that must find nothing, and the queries. Every table is generated;
+// the hand-written judgement lives in doc/facts.toml (the facts),
+// hdl/races.toml (the races' verdicts), hdl/rules.toml (the rules) and
+// doc/assumptions.toml (what the proofs assume). Each check and each query
+// is a relation, written to its own file; ../knowledge.sh check fails if a
+// check is not empty, and ../knowledge.sh NAME prints a query.
 //
 //   souffle -F build/knowledge -D OUT knowledge/knowledge.dl
 
 // The tables.
 
 // The readable model (hdl/rtl, knowledge/rtl.awk, oracle/controls.awk).
+
+// An instance: the entity it is in, its label, its own entity.
+.decl instance(parent: symbol, label: symbol, entity: symbol)
+// A signal or a port, by the entity that declares it.
 .decl signal(entity: symbol, name: symbol)
+// A signal that controls storage: it clocks a flip-flop ("edge"), or a
+// latch, an asynchronous set or reset or a process with no clock tests it
+// ("level"). A bit is name(i), i a number or "i" for any.
 .decl control(entity: symbol, kind: symbol, signal: symbol)
+// An assignment with delays (`after`): where, the signal assigned, and its
+// delays apart by spaces (tco is a flip-flop's clock-to-output).
 .decl delay(file: symbol, line: number, entity: symbol, signal: symbol, delays: symbol)
+// An `@hw` tag: what the code rests on (die: the die's cells; measured:
+// dmg-sim or hardware; inferred).
+.decl hw_tag(file: symbol, line: number, entity: symbol, kind: symbol, text: symbol)
+// The short pulses of the model's runs (find-runts.sh): the ROM, the entity
+// and signal (a bit as name(i)), its path, how many, the shortest (ns), when
+// the first began (ms), their level (0, 1, b: both).
 .decl runt(rom: symbol, entity: symbol, signal: symbol, path: symbol, pulses: number,
            shortest_ns: float, first_ms: float, level: symbol)
 
-// The facts (doc/facts.toml).
+// The facts (doc/facts.toml; its header says what the fields mean), their
+// models, tests, open questions and needs, and their `@fact` tags in the
+// code and the documents.
 .decl fact(id: symbol, title: symbol, netlist: symbol, hardware: symbol,
            emulators: symbol, race: symbol, note: symbol)
 .decl fact_model(fact: symbol, model: symbol)
+.decl fact_test(fact: symbol, rom: symbol)
+.decl fact_open(fact: symbol, question: symbol)
+.decl fact_need(fact: symbol, need: symbol)
+.decl fact_tag(fact: symbol, file: symbol, line: number)
 
-// The races' verdicts (hdl/races.toml).
+// The races' verdicts (hdl/races.toml): order or width and the evidence;
+// the models whose readable model has each; the facts that rest on each;
+// the delays (signal tco: all the flip-flops') and the signals with short
+// pulses that each covers (a vector's name covers every bit).
 .decl race(id: symbol, title: symbol, race: symbol, evidence: symbol)
 .decl race_model(race: symbol, model: symbol)
 .decl race_fact(race: symbol, fact: symbol)
 .decl race_delay(race: symbol, entity: symbol, signal: symbol)
 .decl race_signal(race: symbol, entity: symbol, signal: symbol)
 
-// The rules beyond the die (hdl/rules.toml), and their `@rule` tags.
+// The rules the model needs beyond the die's connectivity (hdl/rules.toml):
+// kind (delay, outcome, logic, ram, state, analogue, unknown), status
+// (applied, proposed, missing) and the evidence; the models each is for,
+// the facts it explains, the width races it settles, and the `@rule` tags
+// of rtl/.
 .decl rule(id: symbol, title: symbol, kind: symbol, status: symbol, evidence: symbol)
 .decl rule_model(rule: symbol, model: symbol)
 .decl rule_fact(rule: symbol, fact: symbol)
+.decl rule_race(rule: symbol, race: symbol)
 .decl rule_tag(rule: symbol, file: symbol, line: number)
-
-// The chips looked at (knowledge.sh's MODELS).
-.decl tree_model(model: symbol)
 
 // What the proofs against the netlist assume (doc/assumptions.toml): the
 // evidence (proved, replayed, measured, fact or open) and how; the facts
@@ -49,12 +78,21 @@
 .decl harness_tag(function: symbol, claim: symbol, assumption: symbol, file: symbol,
                   line: number)
 
+// The chips looked at (knowledge.sh's MODELS): by default all that rtl/ has.
+.decl tree_model(model: symbol)
+
+.input instance(IO=file, filename="instance.tsv")
 .input signal(IO=file, filename="signal.tsv")
 .input control(IO=file, filename="control.tsv")
 .input delay(IO=file, filename="delay.tsv")
+.input hw_tag(IO=file, filename="hw_tag.tsv")
 .input runt(IO=file, filename="runt.tsv")
 .input fact(IO=file, filename="fact.tsv")
 .input fact_model(IO=file, filename="fact_model.tsv")
+.input fact_test(IO=file, filename="fact_test.tsv")
+.input fact_open(IO=file, filename="fact_open.tsv")
+.input fact_need(IO=file, filename="fact_need.tsv")
+.input fact_tag(IO=file, filename="fact_tag.tsv")
 .input race(IO=file, filename="race.tsv")
 .input race_model(IO=file, filename="race_model.tsv")
 .input race_fact(IO=file, filename="race_fact.tsv")
@@ -63,17 +101,16 @@
 .input rule(IO=file, filename="rule.tsv")
 .input rule_model(IO=file, filename="rule_model.tsv")
 .input rule_fact(IO=file, filename="rule_fact.tsv")
+.input rule_race(IO=file, filename="rule_race.tsv")
 .input rule_tag(IO=file, filename="rule_tag.tsv")
-.input tree_model(IO=file, filename="tree_model.tsv")
 .input assumption(IO=file, filename="assumption.tsv")
 .input assumption_fact(IO=file, filename="assumption_fact.tsv")
 .input assumption_rests(IO=file, filename="assumption_rests.tsv")
 .input harness(IO=file, filename="harness.tsv")
 .input harness_tag(IO=file, filename="harness_tag.tsv")
+.input tree_model(IO=file, filename="tree_model.tsv")
 
-// What the tables say, for the chips looked at. schema.sql has the same
-// views for the queries (rule_here, race_here, fact_here, runt_at_control,
-// delay_race, runt_race): a change to one is a change to the other.
+// What the tables say, for the chips looked at.
 
 // The rules, races and facts of the chips looked at.
 .decl rule_here(rule: symbol)
@@ -308,20 +345,167 @@ check("width-facts-without-race",
 .output rules_explaining_the_same(IO=file, filename="rules-explaining-the-same.tsv", headers=true)
 .output width_facts_without_race(IO=file, filename="width-facts-without-race.tsv", headers=true)
 
-// The queries in Datalog, for ../knowledge.sh NAME (the others are SQL, in
-// queries/).
+// Lists in a cell: the items of a list (by its name and its key) joined
+// by spaces, in their order by name; "" for a key with no items.
+.decl member(list: symbol, key: symbol, item: symbol)
+.decl has_members(list: symbol, key: symbol)
+has_members(l, k) :- member(l, k, _).
+.decl not_first(list: symbol, key: symbol, item: symbol)
+not_first(l, k, b) :- member(l, k, a), member(l, k, b), a < b.
+.decl between(list: symbol, key: symbol, a: symbol, b: symbol)
+between(l, k, a, b) :- member(l, k, a), member(l, k, c), member(l, k, b), a < c, c < b.
+.decl next(list: symbol, key: symbol, a: symbol, b: symbol)
+next(l, k, a, b) :- member(l, k, a), member(l, k, b), a < b, !between(l, k, a, b).
+.decl has_next(list: symbol, key: symbol, item: symbol)
+has_next(l, k, a) :- next(l, k, a, _).
+.decl joining(list: symbol, key: symbol, last: symbol, text: symbol)
+joining(l, k, a, a) :- member(l, k, a), !not_first(l, k, a).
+joining(l, k, b, cat(t, " ", b)) :- joining(l, k, a, t), next(l, k, a, b).
+.decl joined(list: symbol, key: symbol, text: symbol)
+joined(l, k, t) :- joining(l, k, a, t), !has_next(l, k, a).
+
+member("rule-models", r, m) :- rule_model(r, m).
+member("rule-facts", r, f) :- rule_fact(r, f).
+member("rule-tags", r, cat(file, ":", to_string(line))) :- rule_tag(r, file, line).
+member("race-models", r, m) :- race_model(r, m).
+member("race-delays", r, cat(e, ".", s)) :- race_delay(r, e, s).
+member("race-signals", r, cat(e, ".", s)) :- race_signal(r, e, s).
+member("race-facts", r, f) :- race_fact(r, f).
+member("race-model", r, cat(e, ".", s)) :- race_delay(r, e, s) ; race_signal(r, e, s).
+member("fact-tags", f, cat(file, ":", to_string(line))) :- fact_tag(f, file, line).
+member("need-facts", n, f) :- fact_need(f, n), fact_open(f, _).
+
+// A list's text, "" for none.
+.decl list(list: symbol, key: symbol, text: symbol)
+list(l, k, t) :- joined(l, k, t).
+list("rule-models", r, "") :- rule(r, _, _, _, _), !has_members("rule-models", r).
+list("rule-facts", r, "") :- rule(r, _, _, _, _), !has_members("rule-facts", r).
+list("rule-tags", r, "") :- rule(r, _, _, _, _), !has_members("rule-tags", r).
+list("race-models", r, "") :- race(r, _, _, _), !has_members("race-models", r).
+list("race-delays", r, "") :- race(r, _, _, _), !has_members("race-delays", r).
+list("race-signals", r, "") :- race(r, _, _, _), !has_members("race-signals", r).
+list("race-facts", r, "") :- race(r, _, _, _), !has_members("race-facts", r).
+list("race-model", r, "") :- race(r, _, _, _), !has_members("race-model", r).
+list("fact-tags", f, "") :- fact_id(f), !has_members("fact-tags", f).
+
+// The order the queries list the rules in, by status.
+.decl status_rank(status: symbol, rank: number)
+status_rank("applied", 0).
+status_rank("proposed", 1).
+status_rank("missing", 2).
+
+// The queries, for ../knowledge.sh NAME. A first column named rank orders
+// the rows (then the others do, from the left), and is not printed.
 .decl query(name: symbol, title: symbol)
 query("assumptions",
       "What each proof against the netlist rests on, directly or through the proofs of what it assumes, and the evidence.").
+query("borrowed-rules",
+      "The rules for the chips looked at that no fact about them shows: they follow another chip's evidence.").
+query("delays",
+      "The delays of rtl/ other than the flip-flops', with their race.").
+query("departures",
+      "Where ceres departs from the netlist, and what each rests on.").
+query("needs",
+      "What settling the open questions takes, by how many open facts it serves.").
 query("open-assumptions",
       "The open assumptions, and the proofs that rest on each.").
+query("pulses",
+      "The short pulses at controls, by signal, with their race if classified (those under 10 ns first).").
+query("races",
+      "The races of the model, with what they cover and the facts on each.").
+query("rules",
+      "The rules beyond the die's connectivity, with their kind, status and facts.").
+query("untested-rules",
+      "The rules for the chips looked at whose facts no hardware test shows: they rest on documents, emulators or a guess.").
+query("width-facts",
+      "The facts on a width race, with its delays, signals and the fact's tags.").
 .output query(IO=file, filename="queries.tsv")
 
 .decl assumptions(harness: symbol, assumption: symbol, evidence: symbol, via: symbol)
 assumptions(h, a, e, "directly") :- assumes(h, a), assumption(a, _, e, _).
 assumptions(h, a, e, "through others") :- rests(h, a), !assumes(h, a), assumption(a, _, e, _).
-.output assumptions(IO=file, filename="assumptions.tsv", headers=true)
+
+.decl borrowed_rules(rank: number, status: symbol, id: symbol, models: symbol, facts: symbol)
+.decl rule_shown_here(rule: symbol)
+rule_shown_here(r) :- rule_fact(r, f), fact_here(f).
+borrowed_rules(n, status, r, models, facts) :-
+    rule_here(r), !rule_shown_here(r), rule(r, _, _, status, _), status_rank(status, n),
+    list("rule-models", r, models), list("rule-facts", r, facts).
+
+// The race that covers a delay or the pulses at a signal, "" for none.
+.decl delay_race(file: symbol, line: number, entity: symbol, signal: symbol, delays: symbol,
+                 race: symbol)
+delay_race(file, line, e, s, d, r) :- delay(file, line, e, s, d), race_delay(r, e, s), race_here(r).
+delay_race(file, line, e, s, d, r) :-
+    delay(file, line, e, s, "tco"), d = "tco", race_delay(r, "", "tco"), race_here(r).
+delay_race(file, line, e, s, d, "") :- delay(file, line, e, s, d), !delay_covered(e, s, d).
+
+.decl delays(entity: symbol, signal: symbol, delays: symbol, site: symbol, race: symbol)
+delays(e, s, d, cat(file, ":", to_string(line)), r) :- delay_race(file, line, e, s, d, r), d != "tco".
+
+.decl departures(id: symbol, hardware: symbol, tests: number, open_questions: number,
+                 title: symbol)
+departures(f, h, tests, open, title) :-
+    fact(f, title, "differs", h, _, _, _),
+    tests = count : { fact_test(f, _) }, open = count : { fact_open(f, _) }.
+
+.decl needs(rank: number, need: symbol, facts: number, which: symbol)
+needs(-n, need, n, which) :-
+    member("need-facts", need, _), n = count : { member("need-facts", need, _) },
+    list("need-facts", need, which).
 
 .decl open_assumptions(assumption: symbol, harness: symbol, title: symbol)
 open_assumptions(a, h, title) :- rests(h, a), assumption(a, title, "open", _).
+
+.decl pulse_race(entity: symbol, signal: symbol, race: symbol)
+pulse_race(e, s, r) :- pulse_signal(e, s, _), race_signal(r, e, s), race_here(r).
+pulse_race(e, s, r) :- pulse_signal(e, s, _), base(s, b), race_signal(r, e, b), race_here(r).
+pulse_race(e, s, "") :- pulse_signal(e, s, _), !pulse_covered(e, s).
+.decl pulses(rank: number, entity: symbol, signal: symbol, kind: symbol, roms: number,
+             pulses: number, shortest_ns: float, a_rom: symbol, race: symbol)
+pulses(rank, e, s, kind, roms, pulses, shortest, rom, r) :-
+    pulse_shortest(e, s, kind, shortest), (shortest < 10, rank = 0 ; shortest >= 10, rank = 1),
+    roms = count : { pulse_rom(e, s, kind, _) },
+    pulses = sum n : { runt_at_control(_, e, s, _, n, _, _, _, kind) },
+    shortest_rom(e, s, kind, rom), !later_rom(e, s, kind, rom), pulse_race(e, s, r).
+
+.decl races(rank: number, race: symbol, id: symbol, models: symbol, delays: symbol,
+            signals: symbol, facts: symbol)
+races(n, kind, r, models, delays, signals, facts) :-
+    race(r, _, kind, _), (kind = "width", n = 0 ; kind != "width", n = 1),
+    list("race-models", r, models), list("race-delays", r, delays),
+    list("race-signals", r, signals), list("race-facts", r, facts).
+
+.decl rules(rank: number, status: symbol, kind: symbol, id: symbol, models: symbol,
+            facts: symbol, tags: symbol)
+rules(n, status, kind, r, models, facts, tags) :-
+    rule(r, _, kind, status, _), status_rank(status, n),
+    list("rule-models", r, models), list("rule-facts", r, facts), list("rule-tags", r, tags).
+
+.decl untested_rules(rank: number, status: symbol, id: symbol, models: symbol, facts: symbol)
+.decl rule_tested(rule: symbol)
+rule_tested(r) :- rule_fact(r, f), fact(f, _, _, h, _, _, _), h != "none".
+untested_rules(n, status, r, models, facts) :-
+    rule_here(r), !rule_tested(r), rule(r, _, _, status, _), status_rank(status, n),
+    list("rule-models", r, models), list("rule-facts", r, facts).
+
+.decl width_facts(fact: symbol, race: symbol, model: symbol, tags: symbol)
+.decl fact_raced(fact: symbol)
+fact_raced(f) :- race_fact(_, f).
+width_facts(f, r, model, tags) :-
+    fact(f, _, _, _, _, "width", _), race_fact(r, f), race(r, _, _, _),
+    list("race-model", r, model), list("fact-tags", f, tags).
+width_facts(f, "", "", tags) :-
+    fact(f, _, _, _, _, "width", _), !fact_raced(f), list("fact-tags", f, tags).
+
+.output assumptions(IO=file, filename="assumptions.tsv", headers=true)
+.output borrowed_rules(IO=file, filename="borrowed-rules.tsv", headers=true)
+.output delays(IO=file, filename="delays.tsv", headers=true)
+.output departures(IO=file, filename="departures.tsv", headers=true)
+.output needs(IO=file, filename="needs.tsv", headers=true)
 .output open_assumptions(IO=file, filename="open-assumptions.tsv", headers=true)
+.output pulses(IO=file, filename="pulses.tsv", headers=true)
+.output races(IO=file, filename="races.tsv", headers=true)
+.output rules(IO=file, filename="rules.tsv", headers=true)
+.output untested_rules(IO=file, filename="untested-rules.tsv", headers=true)
+.output width_facts(IO=file, filename="width-facts.tsv", headers=true)

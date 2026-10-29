@@ -1,34 +1,37 @@
 #!/bin/sh
-# The knowledge database: what the repository knows about the hardware, the
-# readable model and ceres, as SQLite tables to query (knowledge/schema.sql
-# says what each holds), and the checks on it, in Datalog.
+# The knowledge base: what the repository knows about the hardware, the
+# readable model and ceres, as tables built from the sources, and the
+# checks and queries on them, in Datalog (knowledge/knowledge.dl, run by
+# Soufflé; it says what each table holds).
 #
-#   knowledge.sh                build build/knowledge.db from the sources
-#   knowledge.sh check          build it, and run the checks: the relations of
-#                               knowledge/knowledge.dl (Soufflé), each of
-#                               which must be empty (exits 1 if one is not)
-#   knowledge.sh NAME           build it, and run knowledge/queries/NAME.sql,
-#                               or the query NAME of knowledge/knowledge.dl
+#   knowledge.sh                build the tables, build/knowledge/*.tsv
+#   knowledge.sh check          build them, and run the checks: relations of
+#                               knowledge/knowledge.dl, each of which must
+#                               be empty (exits 1 if one is not)
+#   knowledge.sh NAME           build them, and print the query NAME
 #   knowledge.sh list           the queries and the checks, with what each
 #                               finds
+#   knowledge.sh run FILE       build them, and run the rules of FILE (.dl)
+#                               with knowledge/knowledge.dl's: what FILE
+#                               outputs to stdout (`.output r(IO=stdout)`)
 #
 # The sources: rtl/ and board/ (knowledge/rtl.awk, oracle/controls.awk),
-# doc/facts.toml, hdl/races.toml and hdl/rules.toml with the `@fact` and
-# `@rule` tags (the example facts of ceres-test-runner), and the reports of
-# find-runts.sh in build/runts/reports. MODELS are the chips to look at, as
-# doc/facts.toml names them: by default all that rtl/ has (dmg cgb cgb-c
-# cgb-e), which the checks need; MODELS="cgb cgb-c cgb-e" ./knowledge.sh
-# borrowed-rules lists what the CGB's model takes from the DMG's.
-# Open it with
-# `sqlite3 build/knowledge.db` for queries of your own.
+# doc/facts.toml, hdl/races.toml, hdl/rules.toml and doc/assumptions.toml
+# with the `@fact`, `@rule`, `@assumes` and `@discharges` tags (the example
+# facts of ceres-test-runner), and the reports of find-runts.sh in
+# build/runts/reports. MODELS are the chips to look at, as doc/facts.toml
+# names them: by default all that rtl/ has (dmg cgb cgb-c cgb-e), which the
+# checks need; MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules lists
+# what the CGB's model takes from the DMG's.
 
 set -eu
 
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
-DB=$HDL/build/knowledge.db
 MODELS=${MODELS:-dmg cgb cgb-c cgb-e}
 TABLES=$HDL/build/knowledge
+PROGRAM=$HDL/knowledge/knowledge.dl
+TAB=$(printf '\t')
 
 build() {
 	mkdir -p "$TABLES"
@@ -45,39 +48,31 @@ build() {
 		awk -F '\t' -v OFS='\t' '{ $6 = $6 / 1e6; $7 = $7 / 1e12; print }' >"$TABLES/runt.tsv"
 	cargo run -q --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner --example facts -- tsv "$TABLES"
 	printf '%s\n' $MODELS >"$TABLES/tree_model.tsv"
-
-	rm -f "$DB.new"
-	{
-		cat knowledge/schema.sql
-		echo ".mode tabs"
-		for table in instance signal control delay hw_tag runt fact fact_model fact_test fact_open \
-			fact_need fact_tag race race_model race_fact race_delay race_signal rule rule_model rule_fact rule_race rule_tag \
-			assumption assumption_fact assumption_rests harness harness_tag tree_model; do
-			echo ".import $TABLES/$table.tsv $table"
-		done
-	} | sqlite3 "$DB.new"
-	mv "$DB.new" "$DB"
 }
 
-# Runs knowledge/knowledge.dl on the tables, into build/knowledge-dl.
+# Runs the program on the tables, its relations into build/knowledge-dl.
 datalog() {
-	command -v souffle >/dev/null || { echo "knowledge.sh needs Soufflé (souffle) for this" >&2; exit 2; }
+	command -v souffle >/dev/null || { echo "knowledge.sh needs Soufflé (souffle)" >&2; exit 2; }
 	out=$HDL/build/knowledge-dl
 	rm -rf "$out"
 	mkdir -p "$out"
-	souffle -F "$TABLES" -D "$out" "$HDL/knowledge/knowledge.dl"
+	souffle -F "$TABLES" -D "$out" "$1"
 }
 
-# The checks' or the queries' facts of knowledge/knowledge.dl:
+# The checks' or the queries' facts of the program:
 # RELATION("NAME",\n "TITLE"), as NAME<tab>TITLE.
 dl_list() {
-	sed -n "/^$1(\"/{N;s/^$1(\"\([^\"]*\)\",\n *\"\(.*\)\")\.\$/\1\t\2/p}" "$HDL/knowledge/knowledge.dl"
+	sed -n "/^$1(\"/{N;s/^$1(\"\([^\"]*\)\",\n *\"\(.*\)\")\.\$/\1\t\2/p}" "$PROGRAM"
 }
 
-# Runs a query file, with its first comment line as a title.
-query() {
-	sed -n '1s/^-- //p' "$1"
-	sqlite3 -header -column "$DB" <"$1"
+# Prints a relation's file: its header, then its rows in order. A first
+# column named rank orders them first (numerically), and is not printed.
+show() {
+	if [ "$(head -n 1 "$1" | cut -f 1)" = rank ]; then
+		{ head -n 1 "$1"; tail -n +2 "$1" | LC_ALL=C sort -t "$TAB" -k1,1n -k2; } | cut -f 2-
+	else
+		{ head -n 1 "$1"; tail -n +2 "$1" | LC_ALL=C sort; }
+	fi | column -t -s "$TAB"
 }
 
 case ${1:-} in
@@ -85,43 +80,41 @@ case ${1:-} in
 	build
 	;;
 list)
-	for f in "$HDL"/knowledge/queries/*.sql; do
-		printf '%-40s %s\n' "queries/$(basename "$f" .sql)" "$(sed -n '1s/^-- //p' "$f")"
-	done
-	dl_list query | while IFS='	' read -r name title; do
+	dl_list query | while IFS="$TAB" read -r name title; do
 		printf '%-40s %s\n' "queries/$name" "$title"
 	done
-	dl_list check | while IFS='	' read -r name title; do
+	dl_list check | while IFS="$TAB" read -r name title; do
 		printf '%-40s %s\n' "checks/$name" "$title"
 	done
 	;;
 check)
 	build
-	datalog
+	datalog "$PROGRAM"
 	failed=0
-	while IFS='	' read -r name title; do
+	while IFS="$TAB" read -r name title; do
 		# A header, then a row for each thing the check finds.
 		if [ "$(wc -l <"$out/$name.tsv")" -gt 1 ]; then
 			echo "check $name: $title"
-			column -t -s '	' "$out/$name.tsv"
+			show "$out/$name.tsv"
 			echo
 			failed=1
 		fi
 	done <"$out/checks.tsv"
 	exit $failed
 	;;
+run)
+	[ $# -eq 2 ] || { echo "usage: $0 run FILE.dl" >&2; exit 2; }
+	file=$(cd -- "$(dirname -- "$2")" && pwd)/$(basename -- "$2")
+	build
+	cat "$PROGRAM" "$file" >"$HDL/build/knowledge-run.dl"
+	datalog "$HDL/build/knowledge-run.dl"
+	;;
 *)
-	if [ -f "$HDL/knowledge/queries/$1.sql" ]; then
-		build
-		query "$HDL/knowledge/queries/$1.sql"
-	elif title=$(dl_list query | awk -F '	' -v n="$1" '$1 == n { print $2; found = 1 } END { exit !found }'); then
-		build
-		datalog
-		echo "$title"
-		column -t -s '	' "$out/$1.tsv"
-	else
-		echo "no query $1 (knowledge.sh list)" >&2
-		exit 2
-	fi
+	title=$(dl_list query | awk -F "$TAB" -v n="$1" '$1 == n { print $2; found = 1 } END { exit !found }') ||
+		{ echo "no query $1 (knowledge.sh list)" >&2; exit 2; }
+	build
+	datalog "$PROGRAM"
+	echo "$title"
+	show "$out/$1.tsv"
 	;;
 esac
