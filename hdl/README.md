@@ -456,19 +456,25 @@ instances, its signals and the ones that control its storage, its delays and its
 of `doc/facts.toml` and their `@fact` tags across the repository (through
 ceres-test-runner's example `facts`); the verdicts of `races.toml`; and the
 rules of `rules.toml` with their `@rule` tags in `rtl/`.
-`knowledge/schema.sql` says what each table holds.
+`knowledge/schema.sql` says what each table holds. The checks are in
+Datalog, `knowledge/knowledge.dl`, which [Soufflé](https://souffle-lang.github.io)
+(2.5 is tested) runs on the same tables (`build/knowledge/*.tsv`); the
+queries, and your own, are SQL, run with `sqlite3`.
 
 ```sh
 ./knowledge.sh list            # the saved queries and checks
 ./knowledge.sh width-facts     # run one (knowledge/queries/*.sql)
-./knowledge.sh check           # the checks (knowledge/checks/*.sql)
+./knowledge.sh check           # the checks (knowledge/knowledge.dl)
 sqlite3 -column -header build/knowledge.db
 ```
 
-A check is a query that must find nothing: a delay or a short pulse at a
+A check is a relation that must be empty: a delay or a short pulse at a
 control without a verdict, a verdict naming what `rtl/` does not have, a
 fact on a width race that no race names, a fact that needs a rule and has
 none, an applied rule without its tag, two rules explaining the same facts.
+Each was a query of SQL before (2026-10-29); on the same tables, and on a
+dozen copies broken so that each check finds something, the two found the
+same rows.
 
 ### The rules beyond the die
 

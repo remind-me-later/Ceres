@@ -65,7 +65,9 @@ CREATE TABLE rule_tag (rule TEXT, file TEXT, line INTEGER);
 -- The chips looked at (knowledge.sh's MODELS): by default all that rtl/ has.
 CREATE TABLE tree_model (model TEXT);
 
--- Views.
+-- Views, for the queries (knowledge/queries/). The checks, and the views
+-- they need, are in knowledge.dl: those that both have (what is here, the
+-- pulses at a control, what a race covers) say the same in each.
 
 -- The rules for the chips looked at: the ones the tags and checks are
 -- about.
@@ -133,15 +135,3 @@ LEFT JOIN (SELECT * FROM race_signal WHERE race IN (SELECT id FROM race_here)) r
            OR rs.signal = CASE WHEN instr(r.signal, '(') > 0
                                THEN substr(r.signal, 1, instr(r.signal, '(') - 1)
                                ELSE r.signal END);
-
--- The facts that need a rule: the model misses a hardware test (netlist
--- differs from ceres where ceres matches the hardware, or both miss it), is
--- silent where a test shows the outcome, or rests on a width race that a
--- test shows.
-CREATE VIEW fact_needing_rule AS
-SELECT *
-FROM fact
-WHERE (netlist = 'differs' AND hardware = 'same')
-   OR (netlist = 'same' AND hardware = 'differs')
-   OR (netlist = 'silent' AND hardware <> 'none')
-   OR (race = 'width' AND netlist <> 'none' AND hardware <> 'none');

@@ -1,0 +1,215 @@
+// The knowledge base's checks, in Datalog (Soufflé): what the repository
+// knows about the hardware, the readable model and ceres, read from the
+// tables ../knowledge.sh builds (build/knowledge/*.tsv; schema.sql says what
+// each holds), and the checks that must find nothing. Each check is a
+// relation, written to its own file; ../knowledge.sh check fails if one is
+// not empty.
+//
+//   souffle -F build/knowledge -D OUT knowledge/knowledge.dl
+
+// The tables.
+
+// The readable model (hdl/rtl, knowledge/rtl.awk, oracle/controls.awk).
+.decl signal(entity: symbol, name: symbol)
+.decl control(entity: symbol, kind: symbol, signal: symbol)
+.decl delay(file: symbol, line: number, entity: symbol, signal: symbol, delays: symbol)
+.decl runt(rom: symbol, entity: symbol, signal: symbol, path: symbol, pulses: number,
+           shortest_ns: float, first_ms: float, level: symbol)
+
+// The facts (doc/facts.toml).
+.decl fact(id: symbol, title: symbol, netlist: symbol, hardware: symbol,
+           emulators: symbol, race: symbol, note: symbol)
+.decl fact_model(fact: symbol, model: symbol)
+
+// The races' verdicts (hdl/races.toml).
+.decl race(id: symbol, title: symbol, race: symbol, evidence: symbol)
+.decl race_model(race: symbol, model: symbol)
+.decl race_fact(race: symbol, fact: symbol)
+.decl race_delay(race: symbol, entity: symbol, signal: symbol)
+.decl race_signal(race: symbol, entity: symbol, signal: symbol)
+
+// The rules beyond the die (hdl/rules.toml), and their `@rule` tags.
+.decl rule(id: symbol, title: symbol, kind: symbol, status: symbol, evidence: symbol)
+.decl rule_model(rule: symbol, model: symbol)
+.decl rule_fact(rule: symbol, fact: symbol)
+.decl rule_tag(rule: symbol, file: symbol, line: number)
+
+// The chips looked at (knowledge.sh's MODELS).
+.decl tree_model(model: symbol)
+
+.input signal(IO=file, filename="signal.tsv")
+.input control(IO=file, filename="control.tsv")
+.input delay(IO=file, filename="delay.tsv")
+.input runt(IO=file, filename="runt.tsv")
+.input fact(IO=file, filename="fact.tsv")
+.input fact_model(IO=file, filename="fact_model.tsv")
+.input race(IO=file, filename="race.tsv")
+.input race_model(IO=file, filename="race_model.tsv")
+.input race_fact(IO=file, filename="race_fact.tsv")
+.input race_delay(IO=file, filename="race_delay.tsv")
+.input race_signal(IO=file, filename="race_signal.tsv")
+.input rule(IO=file, filename="rule.tsv")
+.input rule_model(IO=file, filename="rule_model.tsv")
+.input rule_fact(IO=file, filename="rule_fact.tsv")
+.input rule_tag(IO=file, filename="rule_tag.tsv")
+.input tree_model(IO=file, filename="tree_model.tsv")
+
+// What the tables say, for the chips looked at. schema.sql has the same
+// views for the queries (rule_here, race_here, fact_here, runt_at_control,
+// delay_race, runt_race): a change to one is a change to the other.
+
+// The rules, races and facts of the chips looked at.
+.decl rule_here(rule: symbol)
+rule_here(r) :- rule_model(r, m), tree_model(m).
+.decl race_here(race: symbol)
+race_here(r) :- race_model(r, m), tree_model(m).
+.decl fact_here(fact: symbol)
+fact_here(f) :- fact_model(f, m), tree_model(m).
+
+// A signal's name without its bit: "lines" for "lines(4)".
+.decl runt_signal(signal: symbol)
+runt_signal(s) :- runt(_, _, s, _, _, _, _, _).
+.decl paren(signal: symbol, at: number)
+paren(s, j) :- runt_signal(s), j = range(0, strlen(s)), substr(s, j, 1) = "(".
+.decl base(signal: symbol, base: symbol)
+base(s, s) :- runt_signal(s), !contains("(", s).
+base(s, substr(s, 0, i)) :- runt_signal(s), contains("(", s), i = min j : { paren(s, j) }.
+
+// The short pulses at a control: what a flip-flop or a latch may take or
+// not by the die's physics, by the control's signal (a bit, the vector, or
+// any bit of it).
+.decl runt_at_control(rom: symbol, entity: symbol, signal: symbol, path: symbol,
+                      pulses: number, shortest_ns: float, first_ms: float, level: symbol,
+                      kind: symbol)
+runt_at_control(rom, e, s, path, n, ns, ms, level, kind) :-
+    runt(rom, e, s, path, n, ns, ms, level), control(e, kind, c), base(s, b),
+    (c = s ; c = b ; c = cat(b, "(i)")).
+
+// A race of the chips looked at covers a delay: its own, or every
+// flip-flop's (tco).
+.decl delay_covered(entity: symbol, signal: symbol, delays: symbol)
+delay_covered(e, s, d) :- delay(_, _, e, s, d), race_delay(r, e, s), race_here(r).
+delay_covered(e, s, "tco") :- delay(_, _, e, s, "tco"), race_delay(r, "", "tco"), race_here(r).
+
+// A race of the chips looked at covers the pulses at a signal: by its
+// name, or by its vector's.
+.decl pulse_covered(entity: symbol, signal: symbol)
+pulse_covered(e, s) :- runt_at_control(_, e, s, _, _, _, _, _, _), race_signal(r, e, s), race_here(r).
+pulse_covered(e, s) :-
+    runt_at_control(_, e, s, _, _, _, _, _, _), base(s, b), race_signal(r, e, b), race_here(r).
+
+// The facts that need a rule: the model misses a hardware test (the netlist
+// differs from ceres where ceres matches the hardware, or both miss it), is
+// silent where a test shows the outcome, or rests on a width race that a
+// test shows.
+.decl fact_needing_rule(fact: symbol)
+fact_needing_rule(f) :- fact(f, _, "differs", "same", _, _, _).
+fact_needing_rule(f) :- fact(f, _, "same", "differs", _, _, _).
+fact_needing_rule(f) :- fact(f, _, "silent", h, _, _, _), h != "none".
+fact_needing_rule(f) :- fact(f, _, n, h, _, "width", _), n != "none", h != "none".
+
+// The checks: each must find nothing.
+
+// The rules applied in rtl/ that no `@rule` tag shows, and the tags that
+// name no rule applied here.
+.decl applied_rules_without_tag(rule: symbol, problem: symbol)
+.decl rule_tagged(rule: symbol)
+rule_tagged(r) :- rule_tag(r, _, _).
+.decl rule_applied_here(rule: symbol)
+rule_applied_here(r) :- rule(r, _, _, "applied", _), rule_here(r).
+applied_rules_without_tag(r, "no tag") :- rule_applied_here(r), !rule_tagged(r).
+applied_rules_without_tag(r, cat("tag at ", file, ":", to_string(line), " of a rule not applied here")) :-
+    rule_tag(r, file, line), !rule_applied_here(r).
+
+// The delays of rtl/ that no race of races.toml covers.
+.decl delays_without_verdict(file: symbol, line: number, entity: symbol, signal: symbol,
+                             delays: symbol)
+delays_without_verdict(file, line, e, s, d) :- delay(file, line, e, s, d), !delay_covered(e, s, d).
+
+// The facts about the chips looked at that need a rule of rules.toml for
+// them and have none.
+.decl facts_without_rule(id: symbol, netlist: symbol, hardware: symbol, race: symbol,
+                         title: symbol)
+.decl fact_explained(fact: symbol)
+fact_explained(f) :- rule_fact(r, f), rule_here(r).
+facts_without_rule(f, n, h, race, title) :-
+    fact_needing_rule(f), fact_here(f), !fact_explained(f), fact(f, title, n, h, _, race, _).
+
+// The pulses under 10 ns at a control that no race of races.toml covers: by
+// signal, in how many ROMs, how many pulses, the shortest, and a ROM that
+// shows the shortest (the first by name).
+.decl pulses_without_verdict(entity: symbol, signal: symbol, kind: symbol, roms: number,
+                             pulses: number, shortest_ns: float, a_rom: symbol)
+.decl pulse_signal(entity: symbol, signal: symbol, kind: symbol)
+pulse_signal(e, s, kind) :- runt_at_control(_, e, s, _, _, _, _, _, kind).
+.decl pulse_rom(entity: symbol, signal: symbol, kind: symbol, rom: symbol)
+pulse_rom(e, s, kind, rom) :- runt_at_control(rom, e, s, _, _, _, _, _, kind).
+.decl pulse_shortest(entity: symbol, signal: symbol, kind: symbol, shortest_ns: float)
+pulse_shortest(e, s, kind, shortest) :-
+    pulse_signal(e, s, kind),
+    shortest = min ns : { runt_at_control(_, e, s, _, _, ns, _, _, kind) }.
+.decl shortest_rom(entity: symbol, signal: symbol, kind: symbol, rom: symbol)
+shortest_rom(e, s, kind, rom) :-
+    pulse_shortest(e, s, kind, ns), runt_at_control(rom, e, s, _, _, ns, _, _, kind).
+.decl later_rom(entity: symbol, signal: symbol, kind: symbol, rom: symbol)
+later_rom(e, s, kind, rom) :-
+    shortest_rom(e, s, kind, rom), shortest_rom(e, s, kind, other), other < rom.
+pulses_without_verdict(e, s, kind, roms, pulses, shortest, rom) :-
+    pulse_shortest(e, s, kind, shortest), shortest < 10, !pulse_covered(e, s),
+    roms = count : { pulse_rom(e, s, kind, _) },
+    pulses = sum n : { runt_at_control(_, e, s, _, n, _, _, _, kind) },
+    shortest_rom(e, s, kind, rom), !later_rom(e, s, kind, rom).
+
+// The delays and signals of the races of the chips looked at that rtl/ does
+// not have.
+.decl races_naming_nothing(race: symbol, entity: symbol, signal: symbol, what: symbol)
+.decl delay_signal(entity: symbol, signal: symbol)
+delay_signal(e, s) :- delay(_, _, e, s, _).
+races_naming_nothing(r, e, s, "delay") :-
+    race_delay(r, e, s), race_here(r), (e != "" ; s != "tco"), !delay_signal(e, s).
+races_naming_nothing(r, e, s, "signal") :- race_signal(r, e, s), race_here(r), !signal(e, s).
+
+// The rules that explain the same facts as another: one of them is enough.
+// A row per fact they explain.
+.decl rules_explaining_the_same(rule: symbol, also: symbol, fact: symbol)
+.decl explaining(rule: symbol)
+explaining(r) :- rule_fact(r, _).
+.decl explain_other(a: symbol, b: symbol)
+explain_other(a, b) :- explaining(a), explaining(b), a < b, rule_fact(a, f), !rule_fact(b, f).
+explain_other(a, b) :- explaining(a), explaining(b), a < b, rule_fact(b, f), !rule_fact(a, f).
+rules_explaining_the_same(a, b, f) :-
+    explaining(a), explaining(b), a < b, !explain_other(a, b), rule_fact(a, f).
+
+// The facts about the chips looked at on a width race of the netlist that
+// no race of theirs names.
+.decl width_facts_without_race(id: symbol, title: symbol)
+.decl fact_with_race_here(fact: symbol)
+fact_with_race_here(f) :- race_fact(r, f), race_here(r).
+width_facts_without_race(f, title) :-
+    fact_here(f), fact(f, title, n, _, _, "width", _), n != "none", !fact_with_race_here(f).
+
+// The checks' names and what each finds, for ../knowledge.sh.
+.decl check(name: symbol, title: symbol)
+check("applied-rules-without-tag",
+      "The rules applied in rtl/ that no `@rule` tag shows, and the tags that name no rule applied here.").
+check("delays-without-verdict",
+      "The delays of rtl/ that no race of races.toml covers.").
+check("facts-without-rule",
+      "The facts about the chips looked at that need a rule of rules.toml for them and have none.").
+check("pulses-without-verdict",
+      "The pulses under 10 ns at a control that no race of races.toml covers.").
+check("races-naming-nothing",
+      "The delays and signals of the races of the chips looked at that rtl/ does not have.").
+check("rules-explaining-the-same",
+      "The rules that explain the same facts as another: one of them is enough.").
+check("width-facts-without-race",
+      "The facts about the chips looked at on a width race of the netlist that no race of theirs names.").
+.output check(IO=file, filename="checks.tsv")
+
+.output applied_rules_without_tag(IO=file, filename="applied-rules-without-tag.tsv", headers=true)
+.output delays_without_verdict(IO=file, filename="delays-without-verdict.tsv", headers=true)
+.output facts_without_rule(IO=file, filename="facts-without-rule.tsv", headers=true)
+.output pulses_without_verdict(IO=file, filename="pulses-without-verdict.tsv", headers=true)
+.output races_naming_nothing(IO=file, filename="races-naming-nothing.tsv", headers=true)
+.output rules_explaining_the_same(IO=file, filename="rules-explaining-the-same.tsv", headers=true)
+.output width_facts_without_race(IO=file, filename="width-facts-without-race.tsv", headers=true)

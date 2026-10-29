@@ -1,12 +1,12 @@
 #!/bin/sh
 # The knowledge database: what the repository knows about the hardware, the
 # readable model and ceres, as SQLite tables to query (knowledge/schema.sql
-# says what each holds).
+# says what each holds), and the checks on it, in Datalog.
 #
 #   knowledge.sh                build build/knowledge.db from the sources
-#   knowledge.sh check          build it, and run the checks: the queries of
-#                               knowledge/checks/, each of which must find
-#                               nothing (exits 1 if one does)
+#   knowledge.sh check          build it, and run the checks: the relations of
+#                               knowledge/knowledge.dl (Soufflé), each of
+#                               which must be empty (exits 1 if one is not)
 #   knowledge.sh NAME           build it, and run knowledge/queries/NAME.sql
 #   knowledge.sh list           the queries and the checks, with what each
 #                               finds
@@ -68,22 +68,32 @@ case ${1:-} in
 	build
 	;;
 list)
-	for f in "$HDL"/knowledge/queries/*.sql "$HDL"/knowledge/checks/*.sql; do
-		printf '%-40s %s\n' "$(basename "$(dirname "$f")")/$(basename "$f" .sql)" \
-			"$(sed -n '1s/^-- //p' "$f")"
+	for f in "$HDL"/knowledge/queries/*.sql; do
+		printf '%-40s %s\n' "queries/$(basename "$f" .sql)" "$(sed -n '1s/^-- //p' "$f")"
 	done
+	# The checks' facts: check("NAME",\n "TITLE").
+	sed -n '/^check("/{N;s/^check("\([^"]*\)",\n *"\(.*\)")\.$/\1\t\2/p}' "$HDL/knowledge/knowledge.dl" |
+		while IFS='	' read -r name title; do
+			printf '%-40s %s\n' "checks/$name" "$title"
+		done
 	;;
 check)
+	command -v souffle >/dev/null || { echo "knowledge.sh check needs Soufflé (souffle)" >&2; exit 2; }
 	build
+	out=$HDL/build/knowledge-checks
+	rm -rf "$out"
+	mkdir -p "$out"
+	souffle -F "$TABLES" -D "$out" "$HDL/knowledge/knowledge.dl"
 	failed=0
-	for f in "$HDL"/knowledge/checks/*.sql; do
-		if [ -n "$(sqlite3 "$DB" <"$f")" ]; then
-			echo "check $(basename "$f" .sql): $(sed -n '1s/^-- //p' "$f")"
-			sqlite3 -header -column "$DB" <"$f"
+	while IFS='	' read -r name title; do
+		# A header, then a row for each thing the check finds.
+		if [ "$(wc -l <"$out/$name.tsv")" -gt 1 ]; then
+			echo "check $name: $title"
+			column -t -s '	' "$out/$name.tsv"
 			echo
 			failed=1
 		fi
-	done
+	done <"$out/checks.tsv"
 	exit $failed
 	;;
 *)
