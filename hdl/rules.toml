@@ -12,6 +12,10 @@
 # Fields:
 #
 # - title: the rule, in a line.
+# - models: the models it is for, as doc/facts.toml names them. A rule
+#   found on the DMG is the CGB's too where the CGB model (branch hdl_cgb)
+#   keeps it and no CGB test contradicts it; the evidence says whether a
+#   CGB test shows it.
 # - kind: delay (a delay's value or range), outcome (which way a pulse of
 #   no width goes), logic (a gate or latch beyond the die's), ram (what a
 #   RAM's cells do that the netlist does not model), state (the power-on
@@ -31,38 +35,43 @@
 
 [tile-register-takes-the-pulse]
 title = "The tile register takes its clock's pulse of no width at a window start"
+models = ["dmg", "cgb"]
 kind = "outcome"
 status = "applied"
 races = ["tile-register-at-window-start"]
 facts = ["window-start-tile-register-pulse"]
-evidence = "The comment at bg_tile_clock in rtl/render.vhd: with the pulse the model draws Mealybug's m3_lcdc_win_en_change_multiple_wx and m3_scy_change as the DMG does, without it (dmg-sim's slower gates) it does not."
+evidence = "The comment at bg_tile_clock in rtl/render.vhd: with the pulse the model draws Mealybug's m3_lcdc_win_en_change_multiple_wx and m3_scy_change as the DMG does, without it (dmg-sim's slower gates) it does not. The CGB model keeps it, and draws m3_scy_change as the DMG does, where the CGB-C's screenshot differs in 5284 pixels (ceres matches it): the CGB's mode 3 differs there for a cause not yet known, which this rule may or may not be part of (2026-10-29)."
 
 [lcdc-latch-opens-after-strobe]
 title = "LCDC's latch opens a few ns (3; more than 0, at most 6 tried) after the CPU's write strobe"
+models = ["dmg", "cgb"]
 kind = "delay"
 status = "applied"
 races = ["lcdc-write-latch"]
 facts = ["lcdc-write-latch-delay"]
-evidence = "At 0 ns, three of Gambatte's late_sizechange ROMs show 3, not the DMG-08's 0; at 3 and 6 ns all 23 pass (races.toml, 2026-10-27)."
+evidence = "At 0 ns, three of Gambatte's late_sizechange ROMs show 3, not the DMG-08's 0; at 3 and 6 ns all 23 pass (races.toml, 2026-10-27). The CGB-C's three ROMs of the fact expect the same, and the CGB model, with this rule, passes them (2026-10-29)."
 
 [oam-free-between-scan-and-mode-3]
 title = "OAM is free to the CPU for a moment (1 ns) between the OAM scan and mode 3, and its data lines reach the RAM within it"
+models = ["dmg", "cgb"]
 kind = "delay"
 status = "applied"
 races = ["oam-write-in-free-gap"]
 facts = ["oam-write-as-mode-3-starts"]
-evidence = "gbmicrotest's oam_write_l1_c fails with no gap, with the gap filtered and with the data drivers at 3 ns (races.toml, 2026-10-27)."
+evidence = "gbmicrotest's oam_write_l1_c fails with no gap, with the gap filtered and with the data drivers at 3 ns (races.toml, 2026-10-27). No CGB test looks; the CGB model keeps it."
 
 [mode-0-rises-after-lyc-flag]
 title = "Mode 0 rises 14 ns after the pixel counter's clock, after LY = LYC's flag has changed"
+models = ["dmg", "cgb"]
 kind = "delay"
 status = "applied"
 races = ["mode-0-after-lyc-flag"]
 facts = ["mode-0-rises-after-lyc-flag", "lcd-off-in-vblank-mode-0-source"]
-evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3, with the delay measured in dmg-sim."
+evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3, with the delay measured in dmg-sim. The CGB-C reads 0 there where the DMG-08 reads 2; the CGB model, which keeps this rule and has the CGB's own read delays, passes it (2026-10-29)."
 
 [stat-mode-2-falls-after-mode-3]
 title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"
+models = ["dmg"]
 kind = "delay"
 status = "applied"
 races = ["stat-mode-2-into-mode-3"]
@@ -71,14 +80,16 @@ evidence = "The comment at stat_mode2 in rtl/lcd_timing.vhd: gbmicrotest's oam_w
 
 [stat-flag-takes-a-flip-flops-dip]
 title = "IF's STAT flag takes a dip of STAT's interrupt line a flip-flop wide, not one two gates wide"
+models = ["dmg", "cgb"]
 kind = "delay"
 status = "applied"
 races = ["stat-or-at-vblank-end", "stat-or-at-vblank-start"]
 facts = ["stat-or-at-vblank-end", "stat-or-at-vblank-start"]
-evidence = "On the die the OR (SUKO) dips at both ends of VBlank, and the flag (LALU, a dffsr) is clocked by its rise. At the end, POPU's mode 1 falls into SUKO and, through TOLU and TAPA, raises the mode 2 source: a dip of two gates, which the DMG-08 does not take (Gambatte's m2irq_ly00_lcdstat30). At the start, ROPO's LY = LYC flag (clocked by hclk) falls and POPU (clocked by NYPE, a flip-flop on hclk) raises mode 1 a flip-flop later, which it takes (lycint143_m1irq_2; with the dip filtered, 7 ROMs miss the interrupt: races.toml, 2026-10-28). dmg-sim, whose delays come from the layout, takes both: check/stat_dips.asm reads 02 for each, the DMG-08's tests 00 and 02 (2026-10-29). The comment at int_stat in rtl/lcd_timing.vhd: the model computes the two sources of the end in one expression, and lets the start's dip through."
+evidence = "On the die the OR (SUKO) dips at both ends of VBlank, and the flag (LALU, a dffsr) is clocked by its rise. At the end, POPU's mode 1 falls into SUKO and, through TOLU and TAPA, raises the mode 2 source: a dip of two gates, which the DMG-08 does not take (Gambatte's m2irq_ly00_lcdstat30). At the start, ROPO's LY = LYC flag (clocked by hclk) falls and POPU (clocked by NYPE, a flip-flop on hclk) raises mode 1 a flip-flop later, which it takes (lycint143_m1irq_2; with the dip filtered, 7 ROMs miss the interrupt: races.toml, 2026-10-28). dmg-sim, whose delays come from the layout, takes both: check/stat_dips.asm reads 02 for each, the DMG-08's tests 00 and 02 (2026-10-29). The comment at int_stat in rtl/lcd_timing.vhd: the model computes the two sources of the end in one expression, and lets the start's dip through. The CGB-C's tests expect the same (the ROMs' cgb04c digits), and the CGB model, with this rule, passes them and check/stat_dips.asm as a CGB-C and a CGB-E, and lycint143_m1irq_ds_2 in double speed (2026-10-29)."
 
 [timer-clock-ignores-the-pulse]
 title = "The timer's clock does not take the pulse of no width as TAC's enable and select change at once"
+models = ["dmg"]
 kind = "outcome"
 status = "proposed"
 races = ["timer-clock-at-tac-write"]
@@ -87,6 +98,7 @@ evidence = "gbmicrotest's halt_bug and 004-tima_boot_phase: ceres does not count
 
 [write-path-to-pixel-latches]
 title = "A CPU write reaches BGP and WX later, against the pixel clock, than the netlist's delays say"
+models = ["dmg"]
 kind = "delay"
 status = "proposed"
 races = ["register-write-against-pixel-clock"]
@@ -95,6 +107,7 @@ evidence = "Ceres matches the screenshots of Mealybug's m3_bgp_change and m3_win
 
 [dma-source-fe00-ff00]
 title = "An OAM DMA from FE00 or FF00 copies FF and 00, as ceres does"
+models = ["dmg"]
 kind = "unknown"
 status = "proposed"
 facts = ["dma-from-fe00-ff00"]
@@ -102,6 +115,7 @@ evidence = "Gambatte's oamdma_srcFE00 and oamdma_srcFF00 ROMs: ceres passes, the
 
 [dma-holds-external-bus]
 title = "Cartridge RAM read while an OAM DMA has the external bus gives the DMA's byte"
+models = ["dmg"]
 kind = "analogue"
 status = "proposed"
 facts = ["dma-reads-external-bus-held"]
@@ -109,6 +123,7 @@ evidence = "Gambatte's oamdma_src0000_srambankchange_1: ceres passes, the model 
 
 [bus-with-two-drivers]
 title = "What the CPU reads and pushes while an OAM DMA drives the bus too"
+models = ["dmg"]
 kind = "analogue"
 status = "proposed"
 facts = ["bus-with-two-drivers"]
@@ -116,6 +131,7 @@ evidence = "Gambatte's oamdma busypush and busyread ROMs: ceres passes, the mode
 
 [power-on-values]
 title = "What OAM and the registers that no boot ROM writes hold at power-on"
+models = ["dmg"]
 kind = "state"
 status = "proposed"
 facts = ["power-on-state"]
@@ -123,6 +139,7 @@ evidence = "gbmicrotest's poweron_oam_000, poweron_dma_000, poweron_obp0_000 and
 
 [wave-ram-trigger-collision]
 title = "A trigger of channel 3 while it reads wave RAM corrupts its first bytes"
+models = ["dmg"]
 kind = "ram"
 status = "proposed"
 facts = ["wave-ram-corruption"]
@@ -130,6 +147,7 @@ evidence = "Blargg's dmg_sound 10-wave trigger while on: ceres passes; the netli
 
 [oam-corruption-values]
 title = "The values the OAM corruption bug writes"
+models = ["dmg"]
 kind = "ram"
 status = "missing"
 facts = ["oam-corruption-bug"]
@@ -137,6 +155,7 @@ evidence = "Blargg's oam_bug 7-timing_effect fails on ceres, as on SameBoy."
 
 [bg-enable-in-mode-3]
 title = "The background's enable written in mode 3, at column 0"
+models = ["dmg"]
 kind = "unknown"
 status = "missing"
 facts = ["bg-enable-change-column-0"]
@@ -144,6 +163,7 @@ evidence = "Ceres and the model are 4 pixels off the DMG-blob screenshot of Meal
 
 [halt-op-dupe-delay]
 title = "gbmicrotest's halt_op_dupe_delay"
+models = ["dmg"]
 kind = "unknown"
 status = "missing"
 facts = ["halt-op-dupe-delay"]
@@ -151,6 +171,7 @@ evidence = "Ceres, SameBoy and the model fail it with the same values and the sa
 
 [stat-write-glitch-line-154]
 title = "gbmicrotest's stat_write_glitch_l154_d"
+models = ["dmg"]
 kind = "unknown"
 status = "missing"
 facts = ["stat-write-glitch-line-154"]

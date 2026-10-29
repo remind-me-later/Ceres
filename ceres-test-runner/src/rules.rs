@@ -3,13 +3,13 @@
 //! Each entry is a rule that `hdl/rtl` needs beyond the die's connectivity
 //! to do what the hardware does: the outcome of a width race, a gate or a
 //! latch the die does not show, what a RAM's cells or the analogue side do,
-//! the power-on state. The knowledge database (`hdl/knowledge.sh`) checks
+//! the power-on state, for the models it names. The knowledge database (`hdl/knowledge.sh`) checks
 //! that every fact that needs a rule has one; [`problems`] checks the
 //! entries against the facts and the races.
 
 use {
     crate::{
-        facts::{Facts, Race},
+        facts::{Facts, ModelName, Race},
         races::Races,
     },
     anyhow::{Context as _, Result},
@@ -80,6 +80,7 @@ impl Status {
 #[serde(deny_unknown_fields)]
 pub struct Rule {
     pub title: String,
+    pub models: Vec<ModelName>,
     pub kind: Kind,
     pub status: Status,
     #[serde(default)]
@@ -105,12 +106,24 @@ pub fn problems(rules: &Rules, facts: &Facts, races: &Races) -> Vec<String> {
     let mut problems = Vec::new();
     for (id, rule) in rules {
         let mut problem = |message: String| problems.push(format!("{id}: {message}"));
+        if rule.models.is_empty() {
+            problem("no models".to_owned());
+        }
         if rule.facts.is_empty() {
             problem("explains no fact".to_owned());
         }
         for fact_id in &rule.facts {
-            if !facts.contains_key(fact_id) {
-                problem(format!("no fact {fact_id}"));
+            match facts.get(fact_id) {
+                None => problem(format!("no fact {fact_id}")),
+                Some(fact)
+                    if !fact
+                        .models
+                        .iter()
+                        .any(|f| rule.models.iter().any(|r| r.overlaps(*f))) =>
+                {
+                    problem(format!("the fact {fact_id} is about none of its models"));
+                }
+                Some(_) => {}
             }
         }
         for race_id in &rule.races {

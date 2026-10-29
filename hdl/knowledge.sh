@@ -14,7 +14,9 @@
 # The sources: rtl/ and board/ (knowledge/rtl.awk, oracle/controls.awk),
 # doc/facts.toml, hdl/races.toml and hdl/rules.toml with the `@fact` and
 # `@rule` tags (the example facts of ceres-test-runner), and the reports of
-# find-runts.sh in build/runts/reports. Open it with
+# find-runts.sh in build/runts/reports. MODELS are the models that rtl/ is,
+# as doc/facts.toml names them: the checks are about the rules for them.
+# Open it with
 # `sqlite3 build/knowledge.db` for queries of your own.
 
 set -eu
@@ -22,6 +24,7 @@ set -eu
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
 DB=$HDL/build/knowledge.db
+MODELS="dmg"
 TABLES=$HDL/build/knowledge
 
 build() {
@@ -38,13 +41,14 @@ build() {
 	find build/runts/reports -name '*.txt' -exec awk -f oracle/runts.awk "$TABLES/instance.tsv" {} + |
 		awk -F '\t' -v OFS='\t' '{ $6 = $6 / 1e6; $7 = $7 / 1e12; print }' >"$TABLES/runt.tsv"
 	cargo run -q --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner --example facts -- tsv "$TABLES"
+	printf '%s\n' $MODELS >"$TABLES/tree_model.tsv"
 
 	rm -f "$DB.new"
 	{
 		cat knowledge/schema.sql
 		echo ".mode tabs"
 		for table in instance signal control delay hw_tag runt fact fact_model fact_test fact_open \
-			fact_need fact_tag race race_fact race_delay race_signal rule rule_fact rule_race rule_tag; do
+			fact_need fact_tag race race_fact race_delay race_signal rule rule_model rule_fact rule_race rule_tag tree_model; do
 			echo ".import $TABLES/$table.tsv $table"
 		done
 	} | sqlite3 "$DB.new"

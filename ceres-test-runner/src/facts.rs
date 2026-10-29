@@ -46,6 +46,17 @@ impl ModelName {
         }
     }
 
+    /// The two name the same model, or one is the CGB and the other one of
+    /// its revisions.
+    #[must_use]
+    pub fn overlaps(self, other: Self) -> bool {
+        self == other
+            || matches!(
+                (self, other),
+                (Self::Cgb, Self::CgbC | Self::CgbE) | (Self::CgbC | Self::CgbE, Self::Cgb)
+            )
+    }
+
     /// The model has the DMG-CPU's logic (the MGB's and SGB's as a working
     /// assumption), so the netlist speaks for it.
     #[must_use]

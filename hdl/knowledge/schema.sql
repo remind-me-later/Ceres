@@ -52,14 +52,35 @@ CREATE TABLE race_signal (race TEXT, entity TEXT, signal TEXT);
 
 -- The rules the model needs beyond the die's connectivity (hdl/rules.toml):
 -- kind (delay, outcome, logic, ram, state, analogue, unknown), status
--- (applied, proposed, missing) and the evidence; the facts each explains,
--- the width races it settles, and the `@rule` tags of rtl/.
+-- (applied, proposed, missing) and the evidence; the models each is for,
+-- the facts it explains, the width races it settles, and the `@rule` tags
+-- of rtl/.
 CREATE TABLE rule (id TEXT PRIMARY KEY, title TEXT, kind TEXT, status TEXT, evidence TEXT);
+CREATE TABLE rule_model (rule TEXT, model TEXT);
 CREATE TABLE rule_fact (rule TEXT, fact TEXT);
 CREATE TABLE rule_race (rule TEXT, race TEXT);
 CREATE TABLE rule_tag (rule TEXT, file TEXT, line INTEGER);
 
+-- The models that rtl/ is (knowledge.sh's MODELS): dmg here, the CGB's on
+-- the branch hdl_cgb.
+CREATE TABLE tree_model (model TEXT);
+
 -- Views.
+
+-- The rules for the model that rtl/ is: the ones its tags and checks are
+-- about.
+CREATE VIEW rule_here AS
+SELECT *
+FROM rule r
+WHERE EXISTS (SELECT 1 FROM rule_model m JOIN tree_model t ON t.model = m.model
+              WHERE m.rule = r.id);
+
+-- The facts about the model that rtl/ is.
+CREATE VIEW fact_here AS
+SELECT *
+FROM fact f
+WHERE EXISTS (SELECT 1 FROM fact_model m JOIN tree_model t ON t.model = m.model
+              WHERE m.fact = f.id);
 
 -- A signal's name without its bit.
 CREATE VIEW runt_bit AS
