@@ -43,6 +43,9 @@ build() {
 	awk -v TABLE=signal -f knowledge/rtl.awk rtl/*.vhd | sort -u >"$TABLES/signal.tsv"
 	awk -v TABLE=hw -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/hw_tag.tsv"
 	awk -v TABLE=rule -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/rule_tag.tsv"
+	for table in port portmap flow anchor; do
+		awk -v TABLE=$table -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/$table.tsv"
+	done
 	mkdir -p build/runts/reports
 	find build/runts/reports -name '*.txt' -exec awk -f oracle/runts.awk "$TABLES/instance.tsv" {} + |
 		awk -F '\t' -v OFS='\t' '{ $6 = $6 / 1e6; $7 = $7 / 1e12; print }' >"$TABLES/runt.tsv"

@@ -21,7 +21,9 @@
 # - evidence: what shows the verdict.
 #
 # knowledge.sh check lists the delays and the pulses under 10 ns at a
-# control that no entry for the model of rtl/ covers.
+# control that no entry for the model of rtl/ covers, and the races and
+# facts linked here that no path of signals connects (README.md, "Races and
+# facts, through the signals").
 
 [flip-flops]
 title = "A flip-flop's output changes 1 ns after its clock's edge"

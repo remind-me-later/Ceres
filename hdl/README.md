@@ -488,6 +488,27 @@ tables, and on a dozen copies broken so that each check finds something,
 the Datalog checks found the same rows as the SQL ones; the queries give
 the same rows too (with lists in their cells sorted by name).
 
+### Races and facts, through the signals
+
+`knowledge/rtl.awk` also reads `rtl/` as a graph of signals: an edge from
+each signal an assignment reads (in its expression, or in the conditions
+of the ifs and cases around it) to the one it assigns, and through the
+port maps, into an instance's inputs and out of its outputs. The CPU's bus
+in the chips' tops and the CPU core are left out, since through them (and
+through software) every signal reaches every other. A race sits at its
+signals and delays, a fact at the signals the statements after its `@fact`
+tags assign, and after the `@rule` tags of the rules that explain it. The
+knowledge base follows the graph recursively, and `knowledge.sh check`
+finds a race and a fact that rest on each other, as `races.toml` says, that
+no path connects either way.
+
+That is coarse inside the PPU, a tight cluster where most of a race's
+signals reach most facts, and sharp across blocks: a link from the timer's
+race to a STAT fact is caught. `./knowledge.sh race-links` gives each link
+and its shortest path (the links are 0 to 2 edges long, most other pairs
+3 to 40), and `./knowledge.sh race-fact-neighbours` the width races and
+facts within an edge of each other that no link joins, to look at.
+
 ### What the proofs assume
 
 ceres-core's proofs against the netlist each take some things as given: a

@@ -25,6 +25,16 @@
 // An assignment with delays (`after`): where, the signal assigned, and its
 // delays apart by spaces (tco is a flip-flop's clock-to-output).
 .decl delay(file: symbol, line: number, entity: symbol, signal: symbol, delays: symbol)
+// A port of an entity and its direction (in, out, inout, buffer); an
+// instance's port and a signal of the entity it is in that its actual
+// reads or drives; a signal (or variable) an assignment reads, and the one
+// it assigns, in an entity (in its expression, or the conditions of the
+// ifs and cases around it); a tag's anchors in rtl/, the signals the
+// statement after an `@fact` or `@rule` tag assigns.
+.decl port(entity: symbol, port: symbol, direction: symbol)
+.decl portmap(entity: symbol, label: symbol, instance: symbol, port: symbol, signal: symbol)
+.decl flow(entity: symbol, source: symbol, target: symbol)
+.decl anchor(kind: symbol, id: symbol, entity: symbol, signal: symbol)
 // An `@hw` tag: what the code rests on (die: the die's cells; measured:
 // dmg-sim or hardware; inferred).
 .decl hw_tag(file: symbol, line: number, entity: symbol, kind: symbol, text: symbol)
@@ -89,6 +99,10 @@
 .input control(IO=file, filename="control.tsv")
 .input delay(IO=file, filename="delay.tsv")
 .input hw_tag(IO=file, filename="hw_tag.tsv")
+.input port(IO=file, filename="port.tsv")
+.input portmap(IO=file, filename="portmap.tsv")
+.input flow(IO=file, filename="flow.tsv")
+.input anchor(IO=file, filename="anchor.tsv")
 .input runt(IO=file, filename="runt.tsv")
 .input fact(IO=file, filename="fact.tsv")
 .input fact_model(IO=file, filename="fact_model.tsv")
@@ -165,6 +179,65 @@ in_chip(m, e) :- in_chip(m, p), instance(p, _, e).
 .decl rule_applied_on(rule: symbol, model: symbol)
 rule_applied_on(r, m) :-
     rule_tag(r, _, _, e, b), in_chip(c, e), (b = "all" ; b = c), covers(c, m).
+
+// The model's signals as a graph: a node is an entity's signal, an edge
+// goes from what an assignment reads to what it assigns, and through the
+// port maps, from an actual into an instance's input and out of its output
+// (both ways for an inout). An entity's instances share its nodes. The
+// CPU's bus in the chips' tops and the CPU core are left out: every
+// register hangs on the bus, and through it (and through software) every
+// signal would reach every other.
+.decl cpu_bus(signal: symbol)
+cpu_bus("data"). cpu_bus("addr"). cpu_bus("cpu_rd"). cpu_bus("cpu_wr").
+.decl through_cpu(entity: symbol, signal: symbol)
+through_cpu(e, s) :- chip_top(_, e), cpu_bus(s).
+through_cpu(e, s) :- flow(e, s, _), match("sm83.*", e).
+through_cpu(e, s) :- flow(e, _, s), match("sm83.*", e).
+through_cpu(e, s) :- port(e, s, _), match("sm83.*", e).
+.decl edge(entity: symbol, signal: symbol, to_entity: symbol, to_signal: symbol)
+edge(e, a, e, b) :- flow(e, a, b), !through_cpu(e, a), !through_cpu(e, b).
+edge(p, s, c, f) :-
+    portmap(p, _, c, f, s), port(c, f, d), d != "out", !through_cpu(p, s), !through_cpu(c, f).
+edge(c, f, p, s) :-
+    portmap(p, _, c, f, s), port(c, f, d), d != "in", !through_cpu(p, s), !through_cpu(c, f).
+
+// Where the races and the facts sit: a race at its signals (a vector's
+// name for every bit) and the signals of its delays; a fact at the anchors
+// of its `@fact` tags, and of the `@rule` tags of the rules that explain
+// it.
+.decl race_at(race: symbol, entity: symbol, signal: symbol)
+race_at(r, e, s) :- race_signal(r, e, s).
+race_at(r, e, s) :- race_delay(r, e, s), e != "".
+.decl fact_at(fact: symbol, entity: symbol, signal: symbol)
+fact_at(f, e, s) :- anchor("fact", f, e, s).
+fact_at(f, e, s) :- rule_fact(r, f), anchor("rule", r, e, s).
+
+// What each of those places reaches, recursively.
+.decl seed(entity: symbol, signal: symbol)
+seed(e, s) :- race_at(_, e, s).
+seed(e, s) :- fact_at(_, e, s).
+.decl reaches(entity: symbol, signal: symbol, to_entity: symbol, to_signal: symbol)
+reaches(e, s, e, s) :- seed(e, s).
+reaches(e, s, e2, s2) :- reaches(e, s, e1, s1), edge(e1, s1, e2, s2).
+
+// A race and a fact are connected where a signal of one reaches one of the
+// other's, either way: the logic of a fact feeds the storage that takes
+// the race's pulse, or the race's outcome flows into what the fact shows.
+.decl connected(race: symbol, fact: symbol)
+connected(r, f) :- race_at(r, e, s), fact_at(f, e2, s2), reaches(e, s, e2, s2).
+connected(r, f) :- race_at(r, e, s), fact_at(f, e2, s2), reaches(e2, s2, e, s).
+
+// How near a race and a fact are: the shortest path between their
+// signals, either way, where it is at most 3 edges (the links of
+// races.toml are 0 to 2; most other pairs are farther).
+.decl near(entity: symbol, signal: symbol, to_entity: symbol, to_signal: symbol, d: number)
+near(e, s, e, s, 0) :- seed(e, s).
+near(e, s, e2, s2, d + 1) :- near(e, s, e1, s1, d), d < 3, edge(e1, s1, e2, s2).
+.decl near_pair(race: symbol, fact: symbol, d: number)
+near_pair(r, f, d) :- race_at(r, e, s), fact_at(f, e2, s2), near(e, s, e2, s2, d).
+near_pair(r, f, d) :- race_at(r, e, s), fact_at(f, e2, s2), near(e2, s2, e, s, d).
+.decl nearest(race: symbol, fact: symbol, d: number)
+nearest(r, f, m) :- near_pair(r, f, _), m = min d : { near_pair(r, f, d) }.
 
 // What the tables say, for the chips looked at.
 
@@ -377,6 +450,16 @@ applied_rules_off_their_models(r, m, "not_on names it, and rtl/ applies it there
 rules_not_on_nothing(r, m, "its models name it") :- rule_not_on(r, m), rule_stated(r, m).
 rules_not_on_nothing(r, m, "it would not follow there") :- rule_not_on(r, m), !rule_reaches(r, m).
 
+// The races and the facts that rest on them that no signal connects, where
+// both sit somewhere in rtl/.
+.decl races_not_reaching_their_facts(race: symbol, fact: symbol)
+.decl race_placed(race: symbol)
+race_placed(r) :- race_at(r, _, _).
+.decl fact_placed(fact: symbol)
+fact_placed(f) :- fact_at(f, _, _).
+races_not_reaching_their_facts(r, f) :-
+    race_fact(r, f), race_placed(r), fact_placed(f), !connected(r, f).
+
 // The checks' names and what each finds, for ../knowledge.sh.
 .decl check(name: symbol, title: symbol)
 check("assumptions-naming-nothing",
@@ -389,6 +472,8 @@ check("proofs-resting-on-themselves",
       "The proofs that rest, through the others, on what they prove.").
 check("applied-rules-off-their-models",
       "The applied rules that hold on a chip looked at and that rtl/ applies only on others, or that rtl/ applies where not_on says they do not hold.").
+check("races-not-reaching-their-facts",
+      "The races and the facts that rest on them, both in rtl/, that no signal connects either way.").
 check("rules-not-on-nothing",
       "The models a rule's not_on names that its models name, or that it would not follow to.").
 check("applied-rules-without-tag",
@@ -413,6 +498,7 @@ check("width-facts-without-race",
 .output proofs_resting_on_themselves(IO=file, filename="proofs-resting-on-themselves.tsv", headers=true)
 
 .output applied_rules_off_their_models(IO=file, filename="applied-rules-off-their-models.tsv", headers=true)
+.output races_not_reaching_their_facts(IO=file, filename="races-not-reaching-their-facts.tsv", headers=true)
 .output rules_not_on_nothing(IO=file, filename="rules-not-on-nothing.tsv", headers=true)
 .output applied_rules_without_tag(IO=file, filename="applied-rules-without-tag.tsv", headers=true)
 .output delays_without_verdict(IO=file, filename="delays-without-verdict.tsv", headers=true)
@@ -490,6 +576,10 @@ query("open-assumptions",
       "The open assumptions, and the proofs that rest on each.").
 query("pulses",
       "The short pulses at controls, by signal, with their race if classified (those under 10 ns first).").
+query("race-links",
+      "The links of races.toml from a race to a fact, and whether a signal connects them: connected, or unchecked where one of the two sits nowhere in rtl/.").
+query("race-fact-neighbours",
+      "The width races and the facts within an edge of each other that races.toml does not link: links to look at.").
 query("races",
       "The races of the model, with what they cover and the facts on each.").
 query("rules",
@@ -554,6 +644,19 @@ pulses(rank, e, s, kind, roms, pulses, shortest, rom, r) :-
     pulses = sum n : { runt_at_control(_, e, s, _, n, _, _, _, kind) },
     shortest_rom(e, s, kind, rom), !later_rom(e, s, kind, rom), pulse_race(e, s, r).
 
+.decl race_links(race: symbol, fact: symbol, signals: symbol)
+race_links(r, f, cat("connected, ", to_string(d), " edges apart")) :-
+    race_fact(r, f), nearest(r, f, d).
+race_links(r, f, "connected, more than 3 edges apart") :-
+    race_fact(r, f), connected(r, f), !nearest(r, f, _).
+race_links(r, f, "not connected") :- race_fact(r, f), race_placed(r), fact_placed(f), !connected(r, f).
+race_links(r, f, "unchecked: the race is nowhere in rtl/") :- race_fact(r, f), !race_placed(r).
+race_links(r, f, "unchecked: the fact is nowhere in rtl/") :-
+    race_fact(r, f), race_placed(r), !fact_placed(f).
+
+.decl race_fact_neighbours(race: symbol, fact: symbol, edges: number)
+race_fact_neighbours(r, f, d) :- nearest(r, f, d), d <= 1, race(r, _, "width", _), !race_fact(r, f).
+
 .decl races(rank: number, race: symbol, id: symbol, models: symbol, delays: symbol,
             signals: symbol, facts: symbol)
 races(n, kind, r, models, delays, signals, facts) :-
@@ -591,6 +694,8 @@ width_facts(f, "", "", tags) :-
 .output needs(IO=file, filename="needs.tsv", headers=true)
 .output open_assumptions(IO=file, filename="open-assumptions.tsv", headers=true)
 .output pulses(IO=file, filename="pulses.tsv", headers=true)
+.output race_links(IO=file, filename="race-links.tsv", headers=true)
+.output race_fact_neighbours(IO=file, filename="race-fact-neighbours.tsv", headers=true)
 .output races(IO=file, filename="races.tsv", headers=true)
 .output rules(IO=file, filename="rules.tsv", headers=true)
 .output untested_rules(IO=file, filename="untested-rules.tsv", headers=true)
