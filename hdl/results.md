@@ -176,7 +176,9 @@ after the fixes the sweep led to (the read after a HALT cut short, in ceres;
 that read NR52 or wave RAM. Of the 19 that still differ, six are the DMA's
 bus in the netlist (`dma-reads-external-bus-held`, `dma-from-fe00-ff00`).
 
-Not yet looked into:
+The other 13 do not show on the screen: the 12 of them that are DMG tests
+pass on the model (`run-gambatte.sh`, 2026-10-29), as on ceres, so the
+differences below are in what the ROMs do not check:
 
 - In their accesses (1): `oam_access/postread_scx3_2` (OAM read as mode 3
   ends: 00 on ceres, `FF` on the model; with `xout1` in its name, Gambatte's
@@ -305,6 +307,17 @@ model and ceres pass:
   filtered, 7 of Gambatte's `lycint143_m1irq`, `lycint_m1intirq` and
   `m1irq` ROMs miss the DMG-08's interrupt. At VBlank's end the DMG takes
   no such dip (`stat-or-at-vblank-end`).
+
+The two STAT races are one rule (`stat-flag-takes-a-flip-flops-dip`). On
+the die the OR of STAT's sources dips at both ends of VBlank: at the end,
+mode 1 raises the mode 2 source through two gates (TOLU, TAPA); at the
+start, mode 1 rises a flip-flop after LY = LYC's flag falls. IF's flag
+takes the second dip and not the first. `check/stat_dips.asm` reads the
+flag across both: the model and ceres read 00 and 02, as the
+DMG-08's tests show, and dmg-sim, whose delays come from the layout, 02 and
+02. The timer's clock fits the same line (its pulse of two multiplexers is
+not taken); the tile register at a window start does not (it takes a pulse
+of one gate), and keeps its own rule.
 
 Most of the second sweep's pulses come from the sound channels, and end
 themselves: a counter's overflow reloads it, an envelope's tick resets

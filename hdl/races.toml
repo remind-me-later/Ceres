@@ -142,7 +142,7 @@ title = "STAT's interrupt line as mode 1 falls and the mode 2 source rises at VB
 race = "width"
 signals = ["lcd_timing.int_stat"]
 facts = ["stat-or-at-vblank-end"]
-evidence = "The comment at int_stat in rtl/lcd_timing.vhd: on the die the OR of the two sources may drop for a moment between them and set IF again; Gambatte's m2irq_ly00_lcdstat30 shows the DMG-08 does not, so the model computes both in one expression and has no pulse to find."
+evidence = "The comment at int_stat in rtl/lcd_timing.vhd: on the die the OR of the two sources drops for two gates (TOLU, TAPA) between them, and dmg-sim sets IF again on its rise (check/stat_dips.asm, 2026-10-29); Gambatte's m2irq_ly00_lcdstat30 shows the DMG-08 does not, so the model computes both in one expression and has no pulse to find."
 
 [window-address-cycles]
 title = "The fetcher's tile map and bit plane cycles as the window restarts the fetch"

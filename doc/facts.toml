@@ -201,7 +201,7 @@ netlist = "same"
 hardware = "same"
 race = "width"
 tests = ["gambatte/lcdirq_precedence/m2irq_ly00_lcdstat30_dmg08_cgb04c_out0.gbc"]
-note = "A static hazard of the OR of the sources; the model computes the two in one expression."
+note = "A static hazard of the OR of the sources: on the die mode 1 raises the mode 2 source through two gates (TOLU, TAPA), and the OR dips for that time. dmg-sim takes the dip (hdl/check/stat_dips.asm), the DMG-08 does not; the readable model computes the two in one expression."
 
 [stat-or-at-vblank-start]
 title = "STAT's LY = LYC source falls as the mode 1 source rises at line 144: an interrupt"
@@ -218,7 +218,7 @@ tests = [
   "gambatte/m1/lycint_m1intirq_2_dmg08_cgb04c_out1.gbc",
   "gambatte/m1/m1irq_m2enable_lyc_3_dmg08_cgb04c_out3.gbc",
 ]
-note = "The flag is one flip-flop after hclk, mode 1 two: the OR of the sources drops for one flip-flop's delay, and IF's flag takes its second rise. At VBlank's end the same kind of dip does not set it (stat-or-at-vblank-end)."
+note = "The flag is one flip-flop after hclk, mode 1 two: the OR of the sources drops for one flip-flop's delay, and IF's flag takes its second rise. At VBlank's end a dip of two gates does not set it (stat-or-at-vblank-end); dmg-sim takes both (hdl/check/stat_dips.asm)."
 
 [mode-0-rises-after-lyc-flag]
 title = "Mode 0 rises 14 ns after its compare, after LY = LYC's flag has changed"

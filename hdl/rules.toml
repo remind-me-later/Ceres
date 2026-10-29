@@ -69,21 +69,13 @@ races = ["stat-mode-2-into-mode-3"]
 facts = ["stat-mode-2-until-mode-3"]
 evidence = "The comment at stat_mode2 in rtl/lcd_timing.vhd: gbmicrotest's oam_write_l1_a and lcdon_to_stat3_c read mode 2 or 3, never 0."
 
-[stat-or-holds-at-vblank-end]
-title = "STAT's interrupt line does not drop as mode 1's source falls and mode 2's rises"
-kind = "outcome"
+[stat-flag-takes-a-flip-flops-dip]
+title = "IF's STAT flag takes a dip of STAT's interrupt line a flip-flop wide, not one two gates wide"
+kind = "delay"
 status = "applied"
-races = ["stat-or-at-vblank-end"]
-facts = ["stat-or-at-vblank-end"]
-evidence = "The comment at int_stat in rtl/lcd_timing.vhd: Gambatte's m2irq_ly00_lcdstat30 shows no interrupt on the DMG-08."
-
-[stat-or-dips-at-vblank-start]
-title = "STAT's interrupt line drops between LY = LYC's flag falling and mode 1 rising at line 144, and IF takes its rise"
-kind = "outcome"
-status = "applied"
-races = ["stat-or-at-vblank-start"]
-facts = ["stat-or-at-vblank-start"]
-evidence = "The comment at int_stat in rtl/lcd_timing.vhd: the flag is one flip-flop after hclk and mode 1 two, and with the dip filtered 7 of Gambatte's lycint143_m1irq, lycint_m1intirq and m1irq ROMs miss the DMG-08's interrupt (races.toml, 2026-10-28). With stat-or-holds-at-vblank-end, perhaps one rule: the OR dips where its sources come a flip-flop apart, not where one gate switches both."
+races = ["stat-or-at-vblank-end", "stat-or-at-vblank-start"]
+facts = ["stat-or-at-vblank-end", "stat-or-at-vblank-start"]
+evidence = "On the die the OR (SUKO) dips at both ends of VBlank, and the flag (LALU, a dffsr) is clocked by its rise. At the end, POPU's mode 1 falls into SUKO and, through TOLU and TAPA, raises the mode 2 source: a dip of two gates, which the DMG-08 does not take (Gambatte's m2irq_ly00_lcdstat30). At the start, ROPO's LY = LYC flag (clocked by hclk) falls and POPU (clocked by NYPE, a flip-flop on hclk) raises mode 1 a flip-flop later, which it takes (lycint143_m1irq_2; with the dip filtered, 7 ROMs miss the interrupt: races.toml, 2026-10-28). dmg-sim, whose delays come from the layout, takes both: check/stat_dips.asm reads 02 for each, the DMG-08's tests 00 and 02 (2026-10-29). The comment at int_stat in rtl/lcd_timing.vhd: the model computes the two sources of the end in one expression, and lets the start's dip through."
 
 [timer-clock-ignores-the-pulse]
 title = "The timer's clock does not take the pulse of no width as TAC's enable and select change at once"

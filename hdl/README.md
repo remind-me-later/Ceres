@@ -257,6 +257,9 @@ it through the bus traces: `check/stat_vblank_end.asm` (`make` builds it)
 does so with STAT across the end of VBlank, and
 `check/lcd_off_line_start.asm` turns the LCD off at each M-cycle around a
 line's start and reads IF (see [results.md](results.md)).
+`check/stat_dips.asm` is a test of its own, short enough for dmg-sim: it
+reads IF across STAT's dips at VBlank's end and start, and passes with what
+the DMG-08 does (its header says how to run it).
 
 `sweep-cuts.sh NAME < roms.txt` runs this on a list of ROMs, `JOBS` at a
 time, with the environment's `BOOT`, `TEST`, `APU` and `SECS`, writes a
