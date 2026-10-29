@@ -48,7 +48,7 @@ build() {
 		cat knowledge/schema.sql
 		echo ".mode tabs"
 		for table in instance signal control delay hw_tag runt fact fact_model fact_test fact_open \
-			fact_need fact_tag race race_fact race_delay race_signal rule rule_model rule_fact rule_race rule_tag tree_model; do
+			fact_need fact_tag race race_model race_fact race_delay race_signal rule rule_model rule_fact rule_race rule_tag tree_model; do
 			echo ".import $TABLES/$table.tsv $table"
 		done
 	} | sqlite3 "$DB.new"

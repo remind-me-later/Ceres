@@ -6,6 +6,9 @@
 # Fields:
 #
 # - title: the race, in a line.
+# - models: the models whose readable model has it: the DMG's (rtl/ here)
+#   and the CGB's (rtl/ on the branch hdl_cgb), which keeps most of the
+#   DMG's code.
 # - race: order if the signals are far enough apart that any delays keeping
 #   their order give the same outcome; width if a pulse of almost no width,
 #   or two paths of almost one delay, decide it: there the die's physics
@@ -19,16 +22,18 @@
 # - evidence: what shows the verdict.
 #
 # knowledge.sh check lists the delays and the pulses under 10 ns at a
-# control that no entry covers.
+# control that no entry for the model of rtl/ covers.
 
 [flip-flops]
 title = "A flip-flop's output changes 1 ns after its clock's edge"
+models = ["dmg", "cgb"]
 race = "order"
 delays = ["tco"]
 evidence = "Flip-flops clocked by one edge read each other's outputs from before it, whatever tco is. Where a flip-flop's output meets its own clock or another edge in logic, the pulse that makes is a race of its own, listed here by its signals."
 
 [tile-register-at-window-start]
 title = "The tile register's clock pulses for no time as the window starts at fetcher count 3"
+models = ["dmg", "cgb"]
 race = "width"
 signals = ["render.bg_tile_clock", "render.myso", "render.fetch_count"]
 facts = ["window-start-tile-register-pulse"]
@@ -36,6 +41,7 @@ evidence = "The comment at bg_tile_clock in rtl/render.vhd: with the pulse the m
 
 [timer-clock-at-tac-write]
 title = "The timer's clock as TAC's select and enable change"
+models = ["dmg", "cgb"]
 race = "width"
 signals = ["timer.timer_clock"]
 facts = ["timer-enable-race"]
@@ -43,6 +49,7 @@ evidence = "The fact's note: the enable reaches the clock gate before the select
 
 [cartridge-address-latch]
 title = "The address pins' latches at the start of a VRAM access from a register"
+models = ["dmg", "cgb"]
 race = "width"
 delays = [
   "external_bus.vram_addr",
@@ -58,6 +65,7 @@ evidence = "The comments in rtl/external_bus.vhd: TEXO passes a pulse of 3.25 ns
 
 [mode-0-after-lyc-flag]
 title = "Mode 0 rises 14 ns after its compare, after LY = LYC's flag has changed"
+models = ["dmg", "cgb"]
 race = "width"
 delays = ["render.mode0"]
 facts = ["mode-0-rises-after-lyc-flag", "lcd-off-in-vblank-mode-0-source"]
@@ -65,6 +73,7 @@ evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3
 
 [stat-mode-2-into-mode-3]
 title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"
+models = ["dmg"]
 race = "width"
 delays = ["lcd_timing.stat_mode2"]
 facts = ["stat-mode-2-until-mode-3"]
@@ -72,36 +81,42 @@ evidence = "The comment at stat_mode2 in rtl/lcd_timing.vhd: gbmicrotest's oam_w
 
 [fetcher-done-at-first-fetch]
 title = "The fetcher's done flag rises with the first fetch's restart, which clears it at once"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["render.lovy"]
 evidence = "LOVY and PORY take the end of the first fetch at one falling edge, and PORY's restart resets LOVY: a pulse of no width, which only the fetching latch sees, and the restart sets that latch again. With LOVY's pulse filtered (1 ns) at the latch, the bus traces, screens and results of 12 gbmicrotest ROMs that show it are unchanged (2026-10-27)."
 
 [sprite-load]
 title = "A sprite's pixels load into the shifter as the sprite store's output settles"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["render.sprite_on"]
 evidence = "sprite_on pulses for no time as loaded rises before the shifter's bits are cleared. With it filtered (1 ns) at the shifter, the 12 gbmicrotest ROMs that show it (sprite and OAM DMA tests) are unchanged (2026-10-27)."
 
 [fetch-start-under-fine-scroll]
 title = "The first fetch's flags as the window or the fine scroll restarts the fetcher"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["render.nyka", "render.pory", "render.pygo"]
 evidence = "NYKA, PORY and PYGO are set and reset at one edge with SCX 6 and 7 and at a window start. With them filtered (1 ns) at the latches and the restart, the 28 gbmicrotest ROMs that show them are unchanged (2026-10-27)."
 
 [oam-read-strobes]
 title = "OAM's word line and read strobe as the scan, a DMA or the CPU change hands"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["oam.word_line", "oam.read_ram", "oam.latch_open"]
 evidence = "With word_line and read_ram filtered (2 ns), the 16 gbmicrotest ROMs that show the pulses are unchanged (2026-10-27)."
 
 [interrupt-boundary]
 title = "The CPU's interrupt boundary (XOGS) as data_phase and the fetch change at one edge"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["sm83_sequencer.boundary"]
 evidence = "With boundary filtered (2 ns), the 15 gbmicrotest ROMs that show its pulse of 1 ns are unchanged (2026-10-27)."
 
 [lcdc-write-latch]
 title = "LCDC's latch opens 3 ns after the CPU's write strobe"
+models = ["dmg", "cgb"]
 race = "width"
 delays = ["lcd_control.write_lcdc"]
 signals = ["render.dot", "render.clkpipe", "render.segu"]
@@ -110,6 +125,7 @@ evidence = "With the latch opened at once, Gambatte's late_sizechange2_sp00_2, l
 
 [oam-write-in-free-gap]
 title = "A CPU write to OAM in the 1 ns between the OAM scan and mode 3"
+models = ["dmg", "cgb"]
 race = "width"
 delays = ["render.mode3_i", "oam.bus_even", "oam.bus_odd"]
 signals = ["oam.write_even", "oam.write_odd", "oam.free", "oam.cpu_access"]
@@ -118,12 +134,14 @@ evidence = "gbmicrotest's oam_write_l1_c, which passes on the DMG-08, fails with
 
 [vram-address-drivers]
 title = "The PPU's VRAM address drivers take 2 ns"
+models = ["dmg", "cgb"]
 race = "order"
 delays = ["vram_bus.render_settled"]
 evidence = "At 0 and 4 ns the bus traces, screens and results of 86 gbmicrotest ROMs are unchanged (2026-10-27)."
 
 [cpu-bus-timings]
 title = "When the CPU's control lines and data reach the chip's bus within a phase"
+models = ["dmg", "cgb"]
 race = "order"
 delays = [
   "sm83.d",
@@ -139,6 +157,7 @@ evidence = "With all the CPU's delays (t_* in rtl/sm83.vhd) scaled by 0.8 and by
 
 [stat-or-at-vblank-end]
 title = "STAT's interrupt line as mode 1 falls and the mode 2 source rises at VBlank's end"
+models = ["dmg", "cgb"]
 race = "width"
 signals = ["lcd_timing.int_stat"]
 facts = ["stat-or-at-vblank-end"]
@@ -146,18 +165,21 @@ evidence = "The comment at int_stat in rtl/lcd_timing.vhd: on the die the OR of 
 
 [window-address-cycles]
 title = "The fetcher's tile map and bit plane cycles as the window restarts the fetch"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["render.tile_map_cycle", "render.bit_plane_cycle"]
 evidence = "They pulse for no time as the fetch counter resets at a window start, and only VRAM's address multiplexer sees them. With them filtered (1 ns), the 5 gbmicrotest ROMs that show them (ppu_win_vs_wx, win1_a, win1_b, win9_a, win9_b) are unchanged (2026-10-27)."
 
 [envelope-volume-ripple]
 title = "A sound channel's volume counter rippling from stage to stage"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["apu_ch1.volume_clocks", "apu_ch2.volume_clocks", "apu_ch4.volume_clocks"]
 evidence = "A stage's toggle reaches the next stage's clock after tco, and the direction's multiplexer switches the clocks at once: pulses of 1 ns. With channel 4's clocks filtered (2 ns), the volume steps through the same values in gbmicrotest's audio_testbench, the only ROM that shows them, as with the clocks delayed as much but not filtered (2026-10-27). With channels 1 and 2's filtered (3 ns), the 225 Gambatte ROMs of the sweep's other new pulses (all show channel 1's, from tinyboot's sound) give the same bus traces, frames, results and channel outputs as with them delayed as much (2026-10-28)."
 
 [register-write-against-pixel-clock]
 title = "A CPU write to BGP or WX against the dot it lands in"
+models = ["dmg", "cgb"]
 race = "width"
 signals = ["render.bgp", "render.wx"]
 facts = ["bgp-write-in-mode-3", "window-start-wx-written-every-line"]
@@ -165,48 +187,56 @@ evidence = "The netlist draws Mealybug's m3_bgp_change and m3_window_timing a pi
 
 [frequency-counter-reload]
 title = "A sound channel's frequency counter reloading as it overflows"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["apu_ch1.counter", "apu_ch2.counter", "apu_ch3.counter"]
 evidence = "Bit 10 falls as the counter overflows; the reload flip-flop, clocked by that fall, loads the frequency tco later, and the bits it sets are low for that time. The pulse ends because the flip-flop has taken its edge: it is as wide as the flip-flop and the load need, whatever their delays."
 
 [envelope-tick-reset]
 title = "An envelope's tick clearing itself as the 512 Hz clock falls"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["apu_ch1.tick_reset", "apu_ch2.tick_reset"]
 evidence = "tick_reset rises as hz512 falls with tick set, and resets tick, which drops it: the pulse ends because the flip-flop has been reset, so it is as wide as the reset needs, whatever the delays."
 
 [length-expiry]
 title = "A sound channel's length clock as the last count expires the length"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["apu_ch1.length_clock", "apu_ch2.length_clock", "apu_ch3.length_clock", "apu_ch4.length_clock"]
 evidence = "The count that overflows the length sets the expired flip-flop, which stops the length clock: a low pulse of two tco that ends because both flip-flops have taken their edges. With the clocks filtered (3 ns), the Gambatte sound ROMs that show it (DIV and NR52 writes against the length) give the same bus traces, results and channel outputs as with them delayed as much (2026-10-28)."
 
 [channel-1-load-and-stop]
 title = "Channel 1's counter load and stop as a restart, a reload or the sweep change at once"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["apu_ch1.load_counter", "apu_ch1.stop"]
 evidence = "With load_counter and stop filtered (3 ns), the three Gambatte sound ROMs that show their pulses give the same bus traces, results and channel outputs as with them delayed as much (2026-10-28). The stop pulse is overflow's, as NR10's negate bit is cleared: the model sees the new sign before the new sum; on the die the sum settles through the adder's carry chain. With overflow filtered (3 ns), channel 1 stops at the same times in the first second of Blargg's dmg_sound 04-sweep, 05-sweep details and 06-overflow on trigger as with it delayed as much (2026-10-29)."
 
 [oam-precharge-at-dma]
 title = "OAM's precharge as an OAM DMA and the sprite fetch change hands"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["oam.precharge"]
 evidence = "With precharge filtered (3 ns), the 7 Gambatte oamdma late_sp ROMs that show its pulse of 1 ns give the same bus traces and frames as with it delayed as much (2026-10-28)."
 
 [window-start-for-no-time]
 title = "The window's start flag and the fetcher's reset pulsing for no time"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["render.win_start", "render.fetch_reset"]
 evidence = "With both filtered (3 ns), the 127 Gambatte ROMs that show the pulses (window, m0enable, enable_display) give the same bus traces and frames as with them delayed as much (2026-10-28)."
 
 [sprite-priority-settling]
 title = "The sprite store's priority chain as the matches change"
+models = ["dmg", "cgb"]
 race = "order"
 signals = ["sprite_store.selected"]
 evidence = "With selected filtered (3 ns), Gambatte's sprite_late_enable_spx19_2, the only ROM that shows its pulse of 1 ns, gives the same bus trace and frames as with it delayed as much (2026-10-28)."
 
 [stat-or-at-vblank-start]
 title = "STAT's interrupt line as LY = LYC's flag falls and mode 1 rises at line 144"
+models = ["dmg", "cgb"]
 race = "width"
 signals = ["interrupts.requests"]
 facts = ["stat-or-at-vblank-start"]

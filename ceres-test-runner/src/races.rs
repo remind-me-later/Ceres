@@ -8,7 +8,7 @@
 //! checks the entries against the facts.
 
 use {
-    crate::facts::{Facts, Race},
+    crate::facts::{Facts, ModelName, Race},
     anyhow::{Context as _, Result},
     serde::Deserialize,
     std::{collections::BTreeMap, fs, path::Path},
@@ -19,6 +19,7 @@ use {
 #[serde(deny_unknown_fields)]
 pub struct Mechanism {
     pub title: String,
+    pub models: Vec<ModelName>,
     pub race: Race,
     #[serde(default)]
     pub delays: Vec<String>,
@@ -45,6 +46,9 @@ pub fn problems(races: &Races, facts: &Facts) -> Vec<String> {
     let mut problems = Vec::new();
     for (id, race) in races {
         let mut problem = |message: String| problems.push(format!("{id}: {message}"));
+        if race.models.is_empty() {
+            problem("no models".to_owned());
+        }
         if race.delays.is_empty() && race.signals.is_empty() {
             problem("names no delay and no signal".to_owned());
         }
@@ -68,6 +72,14 @@ pub fn problems(races: &Races, facts: &Facts) -> Vec<String> {
                     fact.race.map_or("none", Race::name),
                     race.race.name()
                 )),
+                Some(fact)
+                    if !fact
+                        .models
+                        .iter()
+                        .any(|f| race.models.iter().any(|r| r.overlaps(*f))) =>
+                {
+                    problem(format!("the fact {fact_id} is about none of its models"));
+                }
                 Some(_) => {}
             }
         }

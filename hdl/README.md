@@ -468,7 +468,9 @@ fails a hardware test. `./knowledge.sh rules` lists them.
 A rule names the models it is for, as the facts do. One found on the DMG
 is the CGB's too where the CGB model (branch `hdl_cgb`) keeps it and no
 CGB test contradicts it, since the CGB follows the DMG where nothing else
-is known. `MODELS` in `knowledge.sh` says which model `rtl/` is (`dmg`
-here): the checks hold `rtl/` to the rules for it, and `./knowledge.sh
+is known. A race names the models whose readable model has it: the CGB
+model keeps most of the DMG's code, and with it its races. `MODELS` in
+`knowledge.sh` says which model `rtl/` is (`dmg` here): the checks hold
+`rtl/` to the races and the rules for it, and `./knowledge.sh
 borrowed-rules` lists those of its rules that no fact about it shows, the
 ones it takes from another model.
