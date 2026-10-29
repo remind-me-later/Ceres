@@ -1,7 +1,7 @@
 #!/bin/sh
-# Records the divider, the timer, IF, OAM DMA and the line timing of the
-# readable model (the DMG's), phase by phase, for ceres-core's replay
-# through its transcriptions of them.
+# Records the divider, the timer, IF, OAM DMA, the line timing and the OAM
+# scan of the readable model (the DMG's), phase by phase, for ceres-core's
+# replay through its transcriptions of them.
 #
 #   trace-blocks.sh <ROM> [SECS]
 #
@@ -15,8 +15,8 @@
 #   cargo test -p ceres-core --release netlist_replay -- --ignored
 #
 # replays every trace in build/blocks through ceres-core's NetTimer, NetIf,
-# NetDma and NetLcd (src/netlist_replay.rs) and reports the phases where
-# one parts from the model.
+# NetDma, NetLcd and NetScan (src/netlist_replay.rs) and reports the phases
+# where one parts from the model.
 
 set -eu
 

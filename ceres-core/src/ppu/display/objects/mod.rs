@@ -1,6 +1,11 @@
 //! Objects: the mode 2 search for the objects on the line and the state of
 //! the object fetch in mode 3.
 
+#[cfg(any(kani, test))]
+pub(super) mod netlist;
+#[cfg(kani)]
+mod netlist_proofs;
+
 use {
     super::{State, TILE_BYTES, VRAM_BANK1},
     crate::{
@@ -68,7 +73,39 @@ impl SizeChange {
     }
 }
 
+/// An object whose Y is `y` is on `line`: Y - 16 is the object's top line.
+pub(super) const fn on_line(y: u8, line: u8, height_16: bool) -> bool {
+    let top = y as i32 - 16;
+    let line = line as i32;
+    top <= line && top + if height_16 { 16 } else { 8 } > line
+}
+
 impl ObjectSearch {
+    /// The search looks at the object `index` (X `x`, Y `y`), and keeps it
+    /// if it is on the line and the list has room.
+    pub(super) fn consider(&mut self, index: u8, x: u8, y: u8, on_line: bool) {
+        if on_line && self.count < MAX_OBJECTS_PER_LINE {
+            self.insert(index, x, y);
+        }
+    }
+
+    /// Inserts an object in the list, sorted by X (descending), then by OAM
+    /// index (descending).
+    fn insert(&mut self, index: u8, obj_x: u8, obj_y: u8) {
+        let count = self.count;
+        let at = self.entries[..count]
+            .iter()
+            .position(|e| e.x < obj_x || (e.x == obj_x && e.index < index))
+            .unwrap_or(count);
+        self.entries.copy_within(at..count, at + 1);
+        self.entries[at] = Entry {
+            index,
+            x: obj_x,
+            y: obj_y,
+        };
+        self.count += 1;
+    }
+
     /// The next object to draw, if any.
     pub(super) fn next(&self) -> Option<Entry> {
         self.count.checked_sub(1).map(|i| self.entries[i])
@@ -186,33 +223,10 @@ impl Ppu {
             Some(c) if c.line == self.d.current_line => c.large(index),
             _ => self.lcdc & LCDC_OBJ_SIZE_B != 0,
         };
-        if self.object_on_line(self.d.objs.y_bus, height_16) {
-            self.insert_object(index, self.d.objs.x_bus, self.d.objs.y_bus);
-        }
-    }
-
-    fn object_on_line(&self, y: u8, height_16: bool) -> bool {
-        let y = i32::from(y) - 16;
-        let line = i32::from(self.d.current_line);
-        y <= line && y + if height_16 { 16 } else { 8 } > line
-    }
-
-    /// Inserts an object in the list, sorted by X (descending), then by OAM
-    /// index (descending).
-    fn insert_object(&mut self, index: u8, obj_x: u8, obj_y: u8) {
-        let objs = &mut self.d.objs;
-        let count = objs.count;
-        let at = objs.entries[..count]
-            .iter()
-            .position(|e| e.x < obj_x || (e.x == obj_x && e.index < index))
-            .unwrap_or(count);
-        objs.entries.copy_within(at..count, at + 1);
-        objs.entries[at] = Entry {
-            index,
-            x: obj_x,
-            y: obj_y,
-        };
-        objs.count += 1;
+        let (x, y) = (self.d.objs.x_bus, self.d.objs.y_bus);
+        self.d
+            .objs
+            .consider(index, x, y, on_line(y, self.d.current_line, height_16));
     }
 
     fn remove_object(&mut self, index: u8) {
@@ -259,10 +273,8 @@ impl Ppu {
             let base = u16::from(index) * Oam::ENTRY_SIZE;
             let y = self.oam_read(base + Oam::ENTRY_Y);
             let x = self.oam_read(base + Oam::ENTRY_X);
-            match (self.object_on_line(y, old), self.object_on_line(y, large)) {
-                (false, true) if self.d.objs.count < MAX_OBJECTS_PER_LINE => {
-                    self.insert_object(index, x, y);
-                }
+            match (on_line(y, line, old), on_line(y, line, large)) {
+                (false, true) => self.d.objs.consider(index, x, y, true),
                 (true, false) => self.remove_object(index),
                 _ => {}
             }

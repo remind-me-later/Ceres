@@ -1,10 +1,11 @@
 //! Replays the readable model's traces of the divider, the timer, IF, OAM
-//! DMA and the line timing (`hdl/trace-blocks.sh`, in `hdl/build/blocks`)
-//! through their transcriptions, `NetTimer`, `NetIf`, `NetDma` and
-//! `NetLcd`, phase by phase, and reports where a transcription parts from
-//! the model. The proofs against ceres (`timing/netlist_proofs.rs`,
-//! `interrupts/netlist_proofs.rs`, `memory/dma/netlist_proofs.rs`,
-//! `ppu/display/timing/netlist_proofs.rs`, `netlist_proofs.rs`) rest on
+//! DMA, the line timing and the OAM scan (`hdl/trace-blocks.sh`, in
+//! `hdl/build/blocks`) through their transcriptions, `NetTimer`, `NetIf`,
+//! `NetDma`, `NetLcd` and `NetScan`, phase by phase, and reports where a
+//! transcription parts from the model. The proofs against ceres
+//! (`timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
+//! `memory/dma/netlist_proofs.rs`, `ppu/display/timing/netlist_proofs.rs`,
+//! `ppu/display/objects/netlist_proofs.rs`, `netlist_proofs.rs`) rest on
 //! these transcriptions; this checks them.
 //!
 //! Each block starts from the model's state at a phase boundary. Then every
@@ -19,7 +20,7 @@ use {
     crate::{
         interrupts::netlist::{NetIf, lowest},
         memory::netlist::{NetDma, Phase as DmaPhase},
-        ppu::NetLcd,
+        ppu::{NetLcd, NetScan, ScanClocks},
         timing::netlist::{Access, NetTimer, Phase, Reg},
     },
     std::{
@@ -82,6 +83,19 @@ struct LcdLine {
     mode3: bool,
     /// The byte a read takes, in the middle of phase H (older traces lack it).
     read: Option<u8>,
+    /// The OAM scan (older traces lack it).
+    scan: Option<ScanLine>,
+}
+
+/// The OAM scan in a line of a trace: its flip-flops, the save strobes and
+/// the Y match, and what it takes in: the Y read from OAM and LCDC bit 2.
+struct ScanLine {
+    net: NetScan,
+    y_match: bool,
+    tall: bool,
+    /// The slots' save strobes, bit `i` for slot `i`.
+    save: u16,
+    y: u8,
 }
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
@@ -112,8 +126,6 @@ fn parse(text: &str) -> Option<Line> {
     else {
         return None;
     };
-    let hex8 = |s: &str| u8::from_str_radix(s, 16).ok();
-    let bit = |s: &str, i: usize| s.as_bytes().get(i).map(|&b| b == b'1');
     Some(Line {
         phase: phase.chars().next()?,
         addr: u16::from_str_radix(addr, 16).ok()?,
@@ -151,7 +163,7 @@ fn parse(text: &str) -> Option<Line> {
         },
         lcd: match *rest {
             [] | [_] => None,
-            [_, inputs, flops, lx, ly, lyc, enables, ref read @ ..] => Some(LcdLine {
+            [_, inputs, flops, lx, ly, lyc, enables, ref rest @ ..] => Some(LcdLine {
                 net: NetLcd {
                     clk: bit(inputs, 0)?,
                     wuvu: bit(flops, 0)?,
@@ -176,14 +188,51 @@ fn parse(text: &str) -> Option<Line> {
                 mode0: bit(inputs, 2)?,
                 mode2: bit(inputs, 3)?,
                 mode3: bit(inputs, 4)?,
-                read: match *read {
+                read: match *rest {
                     [] => None,
-                    [byte] => Some(hex8(byte)?),
-                    _ => return None,
+                    [byte, ..] => Some(hex8(byte)?),
+                },
+                scan: match *rest {
+                    [] | [_] => None,
+                    [_, ref scan @ ..] => Some(parse_scan(scan)?),
                 },
             }),
             _ => return None,
         },
+    })
+}
+
+/// A byte in hexadecimal.
+fn hex8(s: &str) -> Option<u8> {
+    u8::from_str_radix(s, 16).ok()
+}
+
+/// Bit `i` of a field of bits, from the left.
+fn bit(s: &str, i: usize) -> Option<bool> {
+    s.as_bytes().get(i).map(|&b| b == b'1')
+}
+
+/// The OAM scan's fields of a trace line, after the read.
+fn parse_scan(fields: &[&str]) -> Option<ScanLine> {
+    let [scan_bits, index, count, save, y] = *fields else {
+        return None;
+    };
+    Some(ScanLine {
+        net: NetScan {
+            start_scan: bit(scan_bits, 0)?,
+            anel: bit(scan_bits, 1)?,
+            scanning: bit(scan_bits, 2)?,
+            ceno: bit(scan_bits, 3)?,
+            index: hex8(index)?,
+            byba: bit(scan_bits, 4)?,
+            doba: bit(scan_bits, 5)?,
+            not_saving: bit(scan_bits, 6)?,
+            count: hex8(count)?,
+        },
+        y_match: bit(scan_bits, 7)?,
+        tall: bit(scan_bits, 8)?,
+        save: u16::from_str_radix(save, 16).ok()?,
+        y: hex8(y)?,
     })
 }
 
@@ -730,6 +779,67 @@ fn replay_lcd(name: &str, lines: &[Line], report: &mut Report) {
     }
 }
 
+/// The OAM scan, edge by edge, on the line timing's traced clocks.
+fn replay_scan(name: &str, lines: &[Line], report: &mut Report) {
+    let Some(start) = lines.first().and_then(|l| l.lcd.as_ref()) else {
+        return;
+    };
+    let Some(mut net) = start.scan.as_ref().map(|s| s.net) else {
+        return;
+    };
+    let mut before = start;
+    for (n, line) in lines.iter().enumerate().skip(1) {
+        let Some(after) = line.lcd.as_ref() else {
+            return;
+        };
+        let (Some(scan_before), Some(scan)) = (before.scan.as_ref(), after.scan.as_ref()) else {
+            return;
+        };
+        let place = format!("{name}:{}", n + 1);
+        if before.ppu_reset {
+            net.reset();
+        } else {
+            let clocks = ScanClocks {
+                rising: before.clk,
+                wuvu_before: before.net.wuvu,
+                wuvu_after: after.net.wuvu,
+                wosu_before: before.net.wosu,
+                vclk: before.net.vclk,
+                ly: before.net.ly,
+            };
+            net.edge(clocks, scan_before.y, scan_before.tall);
+        }
+        if after.ppu_reset {
+            net.reset();
+        }
+        report.phases += 1;
+        let y_match = NetScan::y_match(scan.y, after.net.ly, scan.tall);
+        let save = net
+            .save(after.net.wosu, scan.y, after.net.ly, scan.tall)
+            .map_or(0, |slot| 1 << slot);
+        if save != 0 {
+            report.saw("scan: a save");
+        }
+        if net.stop_scan() && !scan_before.net.stop_scan() {
+            report.saw("scan: a stop");
+        }
+        if scan.tall != scan_before.tall && scan.net.scanning {
+            report.saw("scan: LCDC bit 2 changes");
+        }
+        if net != scan.net || y_match != scan.y_match || save != scan.save {
+            report.differ(
+                format!("scan, phase {}", line.phase),
+                format!(
+                    "{place} ({net:?} y_match {y_match} save {save:03X}, model {:?} y_match {} save {:03X})",
+                    scan.net, scan.y_match, scan.save
+                ),
+            );
+            net = scan.net;
+        }
+        before = after;
+    }
+}
+
 #[test]
 #[ignore = "needs traces of the model: hdl/trace-blocks.sh"]
 #[expect(
@@ -762,6 +872,7 @@ fn netlist_replay() {
         replay_if(name, &lines, &mut report);
         replay_dma(name, &lines, &mut report);
         replay_lcd(name, &lines, &mut report);
+        replay_scan(name, &lines, &mut report);
     }
 
     let summary = summary(traces.len(), &report).expect("a String takes any text");

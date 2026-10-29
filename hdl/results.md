@@ -321,6 +321,53 @@ handler after the same instruction, as in that M-cycle the CPU is writing
 LCDC. STAT's mode bits and the HBlank source (the OAM scan's and render's)
 are not proved yet.
 
+## Ceres's transcription of the OAM scan
+
+`NetScan` (`ceres-core/src/ppu/display/objects/netlist.rs`) transcribes
+`oam_scan.vhd` edge by edge, on `NetLcd`'s clocks: the scan's start at
+the line's end, the sprite index, the stop that starts mode 3, the Y
+comparator, and the count of saved sprites that picks the slot of each
+save. The traces now carry its flip-flops, the save strobes, the Y the
+comparator sees and LCDC bit 2. Over the 123 ROMs traced with them
+(gbmicrotest's 62 sprite, OAM and mode 2 ROMs, Gambatte's 20 sprite ROMs,
+18 late OAM DMA ROMs and 23 `late_sizechange` ROMs), `netlist_replay`
+finds `NetScan` the model's in every phase: 73,950 saves, 147,423 stops,
+and 17 changes of LCDC bit 2 during a scan.
+
+The comparator is a window behind the index: as `wuvu` rises, OAM's
+second latches take the Y read in the window before (`oam.vhd`'s
+precharge is `wosu and wuvu` in mode 2), and the sprite store latches that
+window's index (`sprite_store.vhd`'s `scanned`). `ceno` is still low in
+index 0's window, so sprite i is compared and saved in index i + 1's
+window, at half dots `4i - 1` and `4i` of the line, and sprite 39 in the
+window after index 39, before `ceno` falls. No save comes with index 00:
+the first of a trace comes with index 01 in 58 of them.
+
+The proofs (`cargo kani -p ceres-core --harness netlist_scan`, 3
+harnesses, 2 minutes) then show:
+
+- the comparator, Y plus LY's complement, is ceres's `on_line` for every
+  Y, visible line and height;
+- a whole scan, from the line's end to mode 3, with any 40 Ys and a write
+  of LCDC bit 2 in any M-cycle around it, saves the first ten sprites on
+  the line in index order, one slot each, with the heights ceres's search
+  reads, and ends as it started;
+- a step of ceres's search keeps a sprite when it is on the line and the
+  list has room, and keeps the rest: sprite after sprite, the same ten.
+
+The write's timing: ceres lands the DMG's LCDC write 2 half dots before
+its access (the object search sees OBJ_SIZE with the second of
+`DmgLcdc`'s two writes), the netlist's LCDC changes in phase E, 1 half dot
+after it (all 46 changes of bit 2 in the traces, 17 of them during a
+scan, come in E). Ceres reads sprite i at `4i - 3` (all 677,840 reads of
+six runs of `late_sizechange` ROMs), so both give sprite i the new height
+from `i = 2m + 1` on, for the access at `8m`, and a save never sees half a
+write. A read a dot later, or a netlist write in the next phase A,
+fails the proof. Not proved: the half dot of ceres's reads (its state
+machine is outside the proof), the Y the netlist reads from OAM (`oam.vhd`,
+OAM DMA's hold of it, against ceres's `y_bus`), the scan of line 0 after
+the LCD is turned on, and the order of the saved sprites for the fetch.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

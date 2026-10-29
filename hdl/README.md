@@ -388,10 +388,13 @@ on Rust transcriptions of some of the model's blocks: `NetTimer`
 `NetIf` (`ceres-core/src/interrupts/netlist.rs`, of `interrupts.vhd` and
 the request latch of `sm83_interrupts.vhd`) and `NetDma`
 (`ceres-core/src/memory/netlist.rs`, of `dma.vhd`, clocked by `dma_phi`,
-which stops while the CPU is halted), and `NetLcd`
+which stops while the CPU is halted), `NetLcd`
 (`ceres-core/src/ppu/display/timing/netlist.rs`, of `lcd_timing.vhd`'s
 line clock, LY, VBlank, LY = LYC, the latches of LYC and STAT's enables,
-and the STAT interrupt line, edge by edge; the first block of the PPU).
+and the STAT interrupt line, edge by edge; the first block of the PPU) and
+`NetScan` (`ceres-core/src/ppu/display/objects/netlist.rs`, of
+`oam_scan.vhd`: the scan's start and stop, the sprite index, the Y
+comparator and the save strobes, on `NetLcd`'s clocks).
 `trace-blocks.sh` records those
 blocks at the end of every phase while the model runs a ROM (the testbench's
 `BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in
@@ -409,8 +412,9 @@ A request that rises and falls within a phase (the STAT write's glitch)
 counts as a rise in that phase: the trace notes every rising edge of the
 request lines, not only their values at the phase's end. The results are in
 [results.md](results.md#ceress-transcriptions-of-the-timer-if-and-oam-dma)
-and, for the line timing,
-[results.md](results.md#ceress-transcription-of-the-line-timing).
+and, for the line timing and the OAM scan,
+[results.md](results.md#ceress-transcription-of-the-line-timing) and
+[results.md](results.md#ceress-transcription-of-the-oam-scan).
 
 ### Finding its races
 

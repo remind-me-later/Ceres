@@ -35,8 +35,8 @@
 -- read OAM, or VRAM), and DIV when the divider does not count on (a write
 -- to DIV, STOP), its value in M-cycles; values in hexadecimal.
 --
--- BLOCKS gets the divider, the timer, IF, OAM DMA and the line timing (the
--- DMG's) at the end of every phase, from
+-- BLOCKS gets the divider, the timer, IF, OAM DMA, the line timing and the
+-- OAM scan (the DMG's) at the end of every phase, from
 -- the CPU's first access on, for ceres-core's replay through its
 -- transcriptions of them (netlist_replay.rs): the phase that ends; the
 -- address, RD and WR, and the data bus; DIV's counter, TIMA, TMA and TAC;
@@ -49,9 +49,11 @@
 -- in A to D, and while the CPU is halted); the clock as the phase's
 -- closing edge leaves it, the LCD's reset and modes 0, 2 and 3; the line
 -- timing's wuvu, vena, wosu, vclk, nype, line_153, first_line, mode1 and
--- lyc_match, LX, LY, LYC and STAT's enables; and the byte a read takes, the
--- core's data bus in the middle of phase H. Values in hexadecimal, bits as
--- 0 or 1.
+-- lyc_match, LX, LY, LYC and STAT's enables; the byte a read takes, the
+-- core's data bus in the middle of phase H; and the OAM scan's start_scan,
+-- anel, scanning, ceno, byba, doba, not_saving, y_match and LCDC bit 2, its
+-- index and count, the save strobes and the Y it reads. Values in
+-- hexadecimal, bits as 0 or 1.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -428,6 +430,19 @@ begin
 		alias lyc         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.lyc : std_ulogic_vector(7 downto 0) >>;
 		alias lyc_match   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.lyc_match : std_ulogic >>;
 		alias stat_enable is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_lcd_timing.stat_enable : std_ulogic_vector(6 downto 3) >>;
+		alias lcdc        is << signal .gameboy_tb.u_gameboy.chip.u_chip.lcdc : std_ulogic_vector(7 downto 0) >>;
+		alias sprite_y    is << signal .gameboy_tb.u_gameboy.chip.u_chip.oam_even : std_ulogic_vector(7 downto 0) >>;
+		alias save        is << signal .gameboy_tb.u_gameboy.chip.u_chip.save : std_ulogic_vector(9 downto 0) >>;
+		alias y_match     is << signal .gameboy_tb.u_gameboy.chip.u_chip.y_match : std_ulogic >>;
+		alias start_scan  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.start_scan : std_ulogic >>;
+		alias anel        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.anel : std_ulogic >>;
+		alias scanning    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.scanning_i : std_ulogic >>;
+		alias ceno        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.ceno_i : std_ulogic >>;
+		alias byba        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.byba : std_ulogic >>;
+		alias doba        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.doba : std_ulogic >>;
+		alias not_saving  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.not_saving : std_ulogic >>;
+		alias scan_index  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.index_i : unsigned(5 downto 0) >>;
+		alias scan_count  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.count : unsigned(3 downto 0) >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := false;
@@ -477,7 +492,11 @@ begin
 					& ' ' & b01(wuvu) & b01(vena) & b01(wosu) & b01(vclk) & b01(nype) & b01(line_153)
 					& b01(first_line) & b01(mode1) & b01(lyc_match)
 					& ' ' & hx(std_ulogic_vector(lx)) & ' ' & hx(std_ulogic_vector(ly)) & ' ' & hx(lyc)
-					& ' ' & hx(stat_enable & "000") & ' ' & hx(read_in_h));
+					& ' ' & hx(stat_enable & "000") & ' ' & hx(read_in_h)
+					& ' ' & b01(start_scan) & b01(anel) & b01(scanning) & b01(ceno) & b01(byba) & b01(doba)
+					& b01(not_saving) & b01(y_match) & b01(lcdc(2))
+					& ' ' & hx(std_ulogic_vector(scan_index)) & ' ' & hx(std_ulogic_vector(scan_count))
+					& ' ' & hx(save) & ' ' & hx(sprite_y));
 				writeline(f, l);
 			end if;
 			ended := phase;

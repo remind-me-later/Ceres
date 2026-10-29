@@ -1,7 +1,7 @@
 mod color_palette;
 mod display;
 #[cfg(test)]
-pub(crate) use display::NetLcd;
+pub(crate) use display::{NetLcd, NetScan, ScanClocks};
 mod oam;
 mod oam_bug;
 mod rgba_buf;
