@@ -54,7 +54,13 @@
 -- anel, scanning, ceno, byba, doba, not_saving, y_match and LCDC bit 2, its
 -- index and count, the save strobes and the Y it reads (OAM's second even
 -- latches); OAM's first even latches, and the sprite fetch's fetch_read and
--- fetch_hold. Values in hexadecimal, bits as 0 or 1.
+-- fetch_hold; the clocks' inputs (CK1, /RESET, T1, T2, osc_ena, clk_ena,
+-- mreq, write, test_reset, the divider's last bit), their latches and
+-- resets (AFUR, ALEF, APUK, ADYK, TUBO's waiting, osc_stable, sys_reset,
+-- cpu_sys_reset, reset2) and the clocks they make (clk_1mhz, clk_t4,
+-- data_phase, exec_phase, pch_phase, cpu_wr_sync, cpu_ext_cs_en, PHI). Values
+-- in hexadecimal, bits as 0 or 1. With BLOCKS_FROM_POWER_ON, from the
+-- power-on.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -82,6 +88,8 @@ entity gameboy_tb is
 		PIXELS      : string := "";
 		CUTS        : string := "";
 		BLOCKS      : string := "";
+		-- BLOCKS from the power-on, not from the CPU's first access
+		BLOCKS_FROM_POWER_ON : boolean := false;
 
 		-- The chip: DMG_B, or the CGB's CGB_C or CGB_E (see gameboy)
 		REVISION : revision_t := DMG_B;
@@ -447,9 +455,35 @@ begin
 		alias first_even  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.first_even : std_ulogic_vector(7 downto 0) >>;
 		alias fetch_read  is << signal .gameboy_tb.u_gameboy.chip.u_chip.fetch_read : std_ulogic >>;
 		alias fetch_hold  is << signal .gameboy_tb.u_gameboy.chip.u_chip.fetch_hold : std_ulogic >>;
+		alias ck_ck1        is << signal .gameboy_tb.u_gameboy.chip.u_chip.ck1 : std_ulogic >>;
+		alias ck_reset_n    is << signal .gameboy_tb.u_gameboy.chip.u_chip.reset_n : std_ulogic >>;
+		alias ck_t1         is << signal .gameboy_tb.u_gameboy.chip.u_chip.t1 : std_ulogic >>;
+		alias ck_t2         is << signal .gameboy_tb.u_gameboy.chip.u_chip.t2 : std_ulogic >>;
+		alias ck_osc_ena    is << signal .gameboy_tb.u_gameboy.chip.u_chip.osc_ena : std_ulogic >>;
+		alias ck_clk_ena    is << signal .gameboy_tb.u_gameboy.chip.u_chip.clk_ena : std_ulogic >>;
+		alias ck_mreq       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mreq : std_ulogic >>;
+		alias ck_write      is << signal .gameboy_tb.u_gameboy.chip.u_chip.write : std_ulogic >>;
+		alias ck_test_reset is << signal .gameboy_tb.u_gameboy.chip.u_chip.test_reset : std_ulogic >>;
+		alias ck_afur       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.afur : std_ulogic >>;
+		alias ck_alef       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.alef : std_ulogic >>;
+		alias ck_apuk       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.apuk : std_ulogic >>;
+		alias ck_adyk       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.adyk : std_ulogic >>;
+		alias ck_waiting    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.waiting : std_ulogic >>;
+		alias ck_osc_stable is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.osc_stable_i : std_ulogic >>;
+		alias ck_sys_reset  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.sys_reset_i : std_ulogic >>;
+		alias ck_cpu_reset  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_clocks.cpu_sys_reset_i : std_ulogic >>;
+		alias ck_reset2     is << signal .gameboy_tb.u_gameboy.chip.u_chip.reset2 : std_ulogic >>;
+		alias ck_1mhz       is << signal .gameboy_tb.u_gameboy.chip.u_chip.clk_1mhz : std_ulogic >>;
+		alias ck_t4         is << signal .gameboy_tb.u_gameboy.chip.u_chip.clk_t4 : std_ulogic >>;
+		alias ck_data       is << signal .gameboy_tb.u_gameboy.chip.u_chip.data_phase : std_ulogic >>;
+		alias ck_exec       is << signal .gameboy_tb.u_gameboy.chip.u_chip.exec_phase : std_ulogic >>;
+		alias ck_pch        is << signal .gameboy_tb.u_gameboy.chip.u_chip.pch_phase : std_ulogic >>;
+		alias ck_wr_sync    is << signal .gameboy_tb.u_gameboy.chip.u_chip.cpu_wr_sync : std_ulogic >>;
+		alias ck_ext_cs_en  is << signal .gameboy_tb.u_gameboy.chip.u_chip.cpu_ext_cs_en : std_ulogic >>;
+		alias ck_phi        is << signal .gameboy_tb.u_gameboy.chip.u_chip.phi : std_ulogic >>;
 		file f        : text;
 		variable l    : line;
-		variable seen : boolean := false;
+		variable seen : boolean := BLOCKS_FROM_POWER_ON;
 		variable ended : phase_t;
 		-- The requests that rose in the phase, also for less than its length.
 		variable rose : std_ulogic_vector(4 downto 0) := (others => '0');
@@ -501,7 +535,13 @@ begin
 					& b01(not_saving) & b01(y_match) & b01(lcdc(2))
 					& ' ' & hx(std_ulogic_vector(scan_index)) & ' ' & hx(std_ulogic_vector(scan_count))
 					& ' ' & hx(save) & ' ' & hx(sprite_y)
-					& ' ' & hx(first_even) & ' ' & b01(fetch_read) & b01(fetch_hold));
+					& ' ' & hx(first_even) & ' ' & b01(fetch_read) & b01(fetch_hold)
+					& ' ' & b01(ck_ck1) & b01(ck_reset_n) & b01(ck_t1) & b01(ck_t2) & b01(ck_osc_ena)
+					& b01(ck_clk_ena) & b01(ck_mreq) & b01(ck_write) & b01(ck_test_reset) & b01(div(15))
+					& ' ' & b01(ck_afur) & b01(ck_alef) & b01(ck_apuk) & b01(ck_adyk) & b01(ck_waiting)
+					& b01(ck_osc_stable) & b01(ck_sys_reset) & b01(ck_cpu_reset) & b01(ck_reset2)
+					& ' ' & b01(ck_1mhz) & b01(ck_t4) & b01(ck_data) & b01(ck_exec) & b01(ck_pch)
+					& b01(ck_wr_sync) & b01(ck_ext_cs_en) & b01(ck_phi));
 				writeline(f, l);
 			end if;
 			ended := phase;

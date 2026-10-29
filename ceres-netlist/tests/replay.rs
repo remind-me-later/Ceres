@@ -1,8 +1,9 @@
 //! Replays the readable model's traces of the divider, the timer, IF, OAM
-//! DMA, the line timing and the OAM scan (`hdl/trace-blocks.sh`, in
-//! `hdl/build/blocks`) through their transcriptions, `NetTimer`, `NetIf`,
-//! `NetDma`, `NetLcd` and `NetScan`, phase by phase, and reports where a
-//! transcription parts from the model. ceres-core's proofs against ceres
+//! DMA, the line timing, the OAM scan and the clocks (`hdl/trace-blocks.sh`,
+//! in `hdl/build/blocks`, and from the power-on in its `power-on/`) through
+//! their transcriptions, `NetTimer`, `NetIf`, `NetDma`, `NetLcd`,
+//! `NetScan`, `NetOamLatches` and `NetClocks`, phase by phase, and reports
+//! where a transcription parts from the model. ceres-core's proofs against ceres
 //! (its `timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
 //! `memory/dma/netlist_proofs.rs`, `ppu/display/timing/netlist_proofs.rs`,
 //! `ppu/display/objects/netlist_proofs.rs`, `netlist_proofs.rs`) rest on
@@ -18,6 +19,7 @@
 
 use {
     ceres_netlist::{
+        clocks::{ClockInputs, ClockOutputs, NetClocks},
         dma::{NetDma, Phase as DmaPhase},
         interrupts::{NetIf, lowest},
         lcd_timing::NetLcd,
@@ -68,6 +70,16 @@ struct Line {
     dma_phi: Option<bool>,
     /// The line timing (older traces lack it).
     lcd: Option<LcdLine>,
+    /// The clocks and resets (older traces lack them).
+    clocks: Option<ClockLine>,
+}
+
+/// The clocks in a line of a trace: what they take in, their latches and
+/// resets, and the clocks they make.
+struct ClockLine {
+    inputs: ClockInputs,
+    net: NetClocks,
+    outputs: ClockOutputs,
 }
 
 /// The line timing in a line of a trace: its flip-flops (the LCD's pins'
@@ -113,12 +125,15 @@ struct OamLine {
 }
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
-#[expect(
-    clippy::cognitive_complexity,
-    reason = "a flat match over the trace's fields, in their order"
-)]
 fn parse(text: &str) -> Option<Line> {
-    let fields: Vec<&str> = text.split_whitespace().collect();
+    let all: Vec<&str> = text.split_whitespace().collect();
+    // The clocks' three fields end the lines that have them.
+    let (fields, clocks) = match *all.as_slice() {
+        [ref fields @ .., inputs, state, made] if all.len() == CLOCK_LINE_FIELDS => {
+            (fields, Some(parse_clocks(inputs, state, made)?))
+        }
+        ref fields => (fields, None),
+    };
     let &[
         phase,
         addr,
@@ -140,7 +155,7 @@ fn parse(text: &str) -> Option<Line> {
         dma_count,
         dma_write,
         ref rest @ ..,
-    ] = fields.as_slice()
+    ] = fields
     else {
         return None;
     };
@@ -179,43 +194,100 @@ fn parse(text: &str) -> Option<Line> {
             [] => None,
             [phi, ..] => Some(bit(phi, 0)?),
         },
+        // The line timing's fields follow the DMA's clock (older traces lack
+        // them).
         lcd: match *rest {
             [] | [_] => None,
-            [_, inputs, flops, lx, ly, lyc, enables, ref rest @ ..] => Some(LcdLine {
-                net: NetLcd {
-                    clk: bit(inputs, 0)?,
-                    wuvu: bit(flops, 0)?,
-                    vena: bit(flops, 1)?,
-                    wosu: bit(flops, 2)?,
-                    lx: hex8(lx)?,
-                    vclk: bit(flops, 3)?,
-                    nype: bit(flops, 4)?,
-                    ly: hex8(ly)?,
-                    line_153: bit(flops, 5)?,
-                    first_line: bit(flops, 6)?,
-                    mode1: bit(flops, 7)?,
-                    frame: false,
-                    line_parity: false,
-                    cpg_lx: false,
-                    lyc: hex8(lyc)?,
-                    lyc_match: bit(flops, 8)?,
-                    stat_enable: hex8(enables)?,
-                },
-                clk: bit(inputs, 0)?,
-                ppu_reset: bit(inputs, 1)?,
-                mode0: bit(inputs, 2)?,
-                mode2: bit(inputs, 3)?,
-                mode3: bit(inputs, 4)?,
-                read: match *rest {
-                    [] => None,
-                    [byte, ..] => Some(hex8(byte)?),
-                },
-                scan: match *rest {
-                    [] | [_] => None,
-                    [_, ref scan @ ..] => Some(parse_scan(scan)?),
-                },
-            }),
-            _ => return None,
+            ref lcd => Some(parse_lcd(lcd)?),
+        },
+        clocks,
+    })
+}
+
+/// The line timing's fields, after the DMA's clock: `None` for fields that
+/// do not parse.
+fn parse_lcd(fields: &[&str]) -> Option<LcdLine> {
+    let [_, inputs, flops, lx, ly, lyc, enables, ref rest @ ..] = *fields else {
+        return None;
+    };
+    Some(LcdLine {
+        net: NetLcd {
+            clk: bit(inputs, 0)?,
+            wuvu: bit(flops, 0)?,
+            vena: bit(flops, 1)?,
+            wosu: bit(flops, 2)?,
+            lx: hex8(lx)?,
+            vclk: bit(flops, 3)?,
+            nype: bit(flops, 4)?,
+            ly: hex8(ly)?,
+            line_153: bit(flops, 5)?,
+            first_line: bit(flops, 6)?,
+            mode1: bit(flops, 7)?,
+            frame: false,
+            line_parity: false,
+            cpg_lx: false,
+            lyc: hex8(lyc)?,
+            lyc_match: bit(flops, 8)?,
+            stat_enable: hex8(enables)?,
+        },
+        clk: bit(inputs, 0)?,
+        ppu_reset: bit(inputs, 1)?,
+        mode0: bit(inputs, 2)?,
+        mode2: bit(inputs, 3)?,
+        mode3: bit(inputs, 4)?,
+        read: match *rest {
+            [] => None,
+            [byte, ..] => Some(hex8(byte)?),
+        },
+        scan: match *rest {
+            [] | [_] => None,
+            [_, ref scan @ ..] => Some(parse_scan(scan)?),
+        },
+    })
+}
+
+/// The fields of a line that has the clocks'.
+const CLOCK_LINE_FIELDS: usize = 37;
+
+/// The clocks' fields: what they take in, their latches and resets, and the
+/// clocks they make (see `BLOCKS` in `hdl/board/gameboy_tb.vhd`).
+fn parse_clocks(inputs: &str, state: &str, made: &str) -> Option<ClockLine> {
+    let inputs = ClockInputs {
+        ck1: bit(inputs, 0)?,
+        reset_pin_n: bit(inputs, 1)?,
+        t1: bit(inputs, 2)?,
+        t2: bit(inputs, 3)?,
+        osc_ena: bit(inputs, 4)?,
+        clk_ena: bit(inputs, 5)?,
+        mreq: bit(inputs, 6)?,
+        write: bit(inputs, 7)?,
+        test_reset: bit(inputs, 8)?,
+        div_16hz: bit(inputs, 9)?,
+    };
+    Some(ClockLine {
+        inputs,
+        net: NetClocks {
+            clk: inputs.ck1 || !inputs.osc_ena,
+            afur: bit(state, 0)?,
+            alef: bit(state, 1)?,
+            apuk: bit(state, 2)?,
+            adyk: bit(state, 3)?,
+            waiting: bit(state, 4)?,
+            sys_reset: bit(state, 6)?,
+            cpu_sys_reset: bit(state, 7)?,
+        },
+        outputs: ClockOutputs {
+            clk_1mhz: bit(made, 0)?,
+            clk_t4: bit(made, 1)?,
+            data_phase: bit(made, 2)?,
+            exec_phase: bit(made, 3)?,
+            pch_phase: bit(made, 4)?,
+            cpu_wr_sync: bit(made, 5)?,
+            cpu_ext_cs_en: bit(made, 6)?,
+            phi: bit(made, 7)?,
+            osc_stable: bit(state, 5)?,
+            reset: !inputs.reset_pin_n,
+            reset2: bit(state, 8)?,
         },
     })
 }
@@ -931,6 +1003,86 @@ fn replay_oam_latches(before: &Line, after: &Line, place: &str, report: &mut Rep
     }
 }
 
+/// The clocks and resets, edge by edge, with each line's inputs: the
+/// latches, the resets and the clocks they make, against the model's.
+///
+/// The trace takes a line two delta cycles after the edge: the latches have
+/// followed it, but AFER, a flip-flop, changes its output a `tco` later, so
+/// a line shows `cpu_sys_reset` as the edge before left it. A trace from the
+/// power-on starts at its second line: the first is taken at time 0, before
+/// the latches settle.
+fn replay_clocks(name: &str, lines: &[Line], report: &mut Report, from_power_on: bool) {
+    let first = usize::from(from_power_on);
+    let (Some(start), Some(following)) = (
+        lines.get(first).and_then(|l| l.clocks.as_ref()),
+        lines.get(first + 1).and_then(|l| l.clocks.as_ref()),
+    ) else {
+        return;
+    };
+    let mut net = NetClocks {
+        cpu_sys_reset: following.net.cpu_sys_reset,
+        ..start.net
+    };
+    for (n, line) in lines.iter().enumerate().skip(first + 1) {
+        let Some(clocks) = line.clocks.as_ref() else {
+            return;
+        };
+        let before = net;
+        net.step(clocks.inputs);
+        report.phases += 1;
+        if before.sys_reset && !net.sys_reset {
+            report.saw("clocks: the power-on wait ends");
+        }
+        if before.cpu_sys_reset && !net.cpu_sys_reset {
+            report.saw("clocks: the CPU's reset ends");
+        }
+        if !clocks.inputs.reset_pin_n {
+            report.saw("clocks: /RESET is low");
+        }
+        if !clocks.inputs.clk_ena {
+            report.saw("clocks: the core's clocks stop (HALT)");
+        }
+        if !clocks.inputs.osc_ena {
+            report.saw("clocks: the oscillator stops (STOP)");
+        }
+        // The trace takes a line as `phase` changes, two delta cycles after
+        // the latches (`phase_i`, then the port). The clocks decoded from
+        // `phase_i` have changed by then, those decoded through another
+        // signal (`clk_1mhz_i`, `data_phase_i`) not yet: they still show
+        // the phase before the edge.
+        let now = net.outputs(clocks.inputs);
+        let then = before.outputs(clocks.inputs);
+        let outputs = ClockOutputs {
+            clk_1mhz: then.clk_1mhz,
+            data_phase: then.data_phase,
+            exec_phase: then.exec_phase,
+            phi: then.phi,
+            reset2: before.cpu_sys_reset || net.sys_reset,
+            ..now
+        };
+        let shown = NetClocks {
+            cpu_sys_reset: before.cpu_sys_reset,
+            ..net
+        };
+        if shown != clocks.net || outputs != clocks.outputs {
+            report.differ(
+                format!("clocks, phase {}", line.phase),
+                format!(
+                    "{name}:{} ({shown:?} {outputs:?}, model {:?} {:?})",
+                    n + 1,
+                    clocks.net,
+                    clocks.outputs
+                ),
+            );
+            net = clocks.net;
+            net.cpu_sys_reset = lines
+                .get(n + 1)
+                .and_then(|l| l.clocks.as_ref())
+                .map_or(clocks.net.cpu_sys_reset, |c| c.net.cpu_sys_reset);
+        }
+    }
+}
+
 #[test]
 #[ignore = "needs traces of the model: hdl/trace-blocks.sh"]
 #[expect(
@@ -964,9 +1116,30 @@ fn netlist_replay() {
         replay_dma(name, &lines, &mut report);
         replay_lcd(name, &lines, &mut report);
         replay_scan(name, &lines, &mut report);
+        replay_clocks(name, &lines, &mut report, false);
+    }
+    // The traces from the power-on (`FROM=power-on`): the clocks only, as
+    // the other blocks are held in their resets.
+    let mut power_on: Vec<_> = fs::read_dir(dir.join("power-on"))
+        .into_iter()
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "txt"))
+        .collect();
+    power_on.sort();
+    for path in &power_on {
+        let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?");
+        let text = fs::read_to_string(path).expect("a trace");
+        let lines: Vec<Line> = text
+            .lines()
+            .enumerate()
+            .map(|(n, l)| parse(l).unwrap_or_else(|| panic!("{name}:{}: not a trace line", n + 1)))
+            .collect();
+        replay_clocks(name, &lines, &mut report, true);
     }
 
-    let summary = summary(traces.len(), &report).expect("a String takes any text");
+    let summary = summary(traces.len() + power_on.len(), &report).expect("a String takes any text");
     eprintln!("{summary}");
     assert!(report.phases > 0, "no phases replayed");
     assert!(

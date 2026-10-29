@@ -393,8 +393,10 @@ of `lcd_timing.vhd`'s line clock, LY, VBlank, LY = LYC, the latches of LYC
 and STAT's enables, and the STAT interrupt line, edge by edge; the first
 block of the PPU), `NetScan` (`oam_scan`, of `oam_scan.vhd`: the scan's
 start and stop, the sprite index, the Y comparator and the save strobes,
-on `NetLcd`'s clocks) and `NetOamLatches` (`oam`, of `oam.vhd`'s two
-stages of latches of the Y, which OAM DMA holds).
+on `NetLcd`'s clocks), `NetOamLatches` (`oam`, of `oam.vhd`'s two
+stages of latches of the Y, which OAM DMA holds) and `NetClocks`
+(`clocks`, of `clocks.vhd`'s DMG part: the latches that count the phases,
+the clocks decoded from them, and the resets, through the power-on wait).
 `trace-blocks.sh` records those
 blocks at the end of every phase while the model runs a ROM (the testbench's
 `BLOCKS`), and ceres-netlist's test `netlist_replay` replays every trace in
@@ -407,6 +409,10 @@ ls ../external/test-roms/gbmicrotest/timer_*.gb | sed 's|^\.\./||' |
 	TEST=gbmicrotest xargs -P 4 -I{} ./trace-blocks.sh {} 0.1
 cargo test -p ceres-netlist --release --test replay -- --ignored --nocapture
 ```
+
+`FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
+into `build/blocks/power-on/`, for the clocks' reset and wait; the replay
+takes only the clocks there, as the other blocks are held in reset.
 
 A request that rises and falls within a phase (the STAT write's glitch)
 counts as a rise in that phase: the trace notes every rising edge of the

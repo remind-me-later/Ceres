@@ -16,6 +16,7 @@
     reason = "the workspace's release profile links with fat LTO, which inlines across crates"
 )]
 
+pub mod clocks;
 pub mod dma;
 pub mod interrupts;
 pub mod lcd_timing;
