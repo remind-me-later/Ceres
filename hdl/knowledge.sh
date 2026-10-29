@@ -24,7 +24,7 @@ set -eu
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
 DB=$HDL/build/knowledge.db
-MODELS="dmg"
+MODELS="cgb cgb-c cgb-e"
 TABLES=$HDL/build/knowledge
 
 build() {

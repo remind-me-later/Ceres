@@ -161,6 +161,11 @@ What the model does not have, and why:
   (`enable_display/ly0_late_scx7_m3stat_scx0_2`), and an HBlank enable
   late on line 143 (`m1/ly143_late_m0enable_2`). Of the 69 LCD ROMs whose
   results differ between the DMG and the CGB, the rest pass.
+- **The CGB's mode 3 when SCY changes in it.** The model draws
+  Mealybug's `m3_scy_change` as the DMG does (its DMG screenshot, shade
+  for shade), where the CGB-C's screenshot differs in 5284 pixels and
+  ceres matches it. The cause is not known yet; the other Mealybug ROMs
+  have not been run on the model.
 - **The CGB-C's other differences** (`doc/hardware-tests.md`, "What differs
   between the CGB-C and the CGB-E"): the LCD's timing has those that ceres
   knows (`REVISION`); the rest would be more fitting.

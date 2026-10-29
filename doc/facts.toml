@@ -436,6 +436,7 @@ title = "A STAT write in the half dot of the VBlank latch"
 models = ["cgb"]
 netlist = "none"
 hardware = "same"
+race = "width"
 tests = [
   "gambatte/m1/m1irq_disable_1_dmg08_out3_cgb04c_out1.gbc",
   "gambatte/m1/ly143_late_m2enable_2_dmg08_out3_cgb04c_out1.gbc",

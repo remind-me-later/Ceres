@@ -55,8 +55,8 @@ delays = [
   "external_bus.vram_addr",
   "external_bus.non_vram_mreq_i",
   "external_bus.addr_latch",
-  "dmg_cpu_b.fexx_ffxx",
-  "dmg_cpu_b.boot_slow",
+  "cgb_cpu.fexx_ffxx",
+  "cgb_cpu.boot_slow",
   "sm83.a",
 ]
 signals = ["external_bus.addr_latch"]
@@ -136,8 +136,8 @@ evidence = "gbmicrotest's oam_write_l1_c, which passes on the DMG-08, fails with
 title = "The PPU's VRAM address drivers take 2 ns"
 models = ["dmg", "cgb"]
 race = "order"
-delays = ["vram_bus.render_settled"]
-evidence = "At 0 and 4 ns the bus traces, screens and results of 86 gbmicrotest ROMs are unchanged (2026-10-27)."
+delays = ["vram_bus.render_settled", "vram_bus.render_bank_settled"]
+evidence = "At 0 and 4 ns the bus traces, screens and results of 86 gbmicrotest ROMs are unchanged (2026-10-27). On the CGB, with the bank's driver as well, cgb-acid2's frames are unchanged at 0 and 4 ns (2026-10-29)."
 
 [cpu-bus-timings]
 title = "When the CPU's control lines and data reach the chip's bus within a phase"
@@ -241,3 +241,11 @@ race = "width"
 signals = ["interrupts.requests"]
 facts = ["stat-or-at-vblank-start"]
 evidence = "LY = LYC's flag (one flip-flop after hclk) falls 1 ns before mode 1 (two flip-flops after it) rises, and IF's flag takes the OR's second rise. With STAT's request filtered (3 ns), 7 of the 11 Gambatte ROMs that show the pulse (lycint143_m1irq, lycint_m1intirq, m1irq_m2enable_lyc_3, m1irq_lcdstat50_lyc8f) show 1 or no digit, not the DMG-08's 3 or 1; delayed as much but not filtered they pass (2026-10-28)."
+
+[cgb-stat-enables-with-vblank-latch]
+title = "STAT's written enables reach the interrupt with POPU's mode 1, 3 ns after the half dot's edge"
+models = ["cgb"]
+race = "width"
+delays = ["lcd_timing.stat_enable"]
+facts = ["cgb-stat-write-at-vblank-latch"]
+evidence = "The comment at stat_enable in rtl/lcd_timing.vhd. With the enables at the edge, 3 ns before mode 1, Gambatte's ly143_late_m2enable_2 reads the DMG's 3, not the CGB-C's 1; m1irq_disable_1 and _2 and ly143_late_m2enable_1 are unchanged (2026-10-29)."
