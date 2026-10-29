@@ -14,6 +14,7 @@
 -- mode is SameBoy's (it selects bank 1 after switching to the DMG's mode).
 -- Where the bank lines are (pins to an external RAM, as here, or inside
 -- the chip) the CPU does not see.
+-- @rule cgb-work-ram-banks
 
 library ieee;
 use ieee.std_logic_1164.all;

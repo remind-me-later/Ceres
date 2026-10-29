@@ -28,6 +28,12 @@ source:
 - **guess**: nothing says; the model keeps the DMG's way where it can
   (unknown CGB behaviour follows the DMG's).
 
+Each difference is a rule of [rules.toml](rules.toml) for the CGB, tagged
+`@rule <id>` where `rtl/` applies it, and named under its table below.
+`MODELS="cgb cgb-c cgb-e" ./knowledge.sh untested-rules` lists those that
+no hardware test shows, and `borrowed-rules` those the CGB takes from the
+DMG.
+
 The CGB's revision is the same generic: `CGB_E` (the CGB's board's
 default) or `CGB_C`. Where the two differ, the blocks say so.
 
@@ -42,6 +48,9 @@ default) or `CGB_C`. Where the two differ, the blocks say so.
 | Boot ROM | 256 bytes at 0000 to 00FF | 2304 bytes at 0000 to 00FF and 0200 to 08FF | the boot ROM's size; SameBoy, ceres (map) |
 | Crystal | 4 MiHz | 8 MiHz; halved, the 4 MiHz clock (`clocks.vhd`) | Pan Docs |
 
+Rules: `cgb-vram-in-chip`, `cgb-work-ram-banks`, `cgb-boot-rom-map`,
+`cgb-double-speed`.
+
 ### Double speed
 
 | What | DMG (netlist) | CGB (model) | Source |
@@ -55,12 +64,16 @@ default) or `CGB_C`. Where the two differ, the blocks say so.
 | The stop's length | | 16 periods of the crystal into double speed, 4 out of it | fitted to ceres, whose times pass Gambatte's `speedchange` tests: with them, `speedchange2_div_1`, `_div_2` and `speedchange2_key1` make the same accesses as on ceres through two switches |
 | The PPU in a switch | stops with the oscillator | its 4 MiHz clock has a gate of its own (`clocks.vhd`, `speed_switch.vhd`): it stops for 10 periods of the crystal (5 dots) from the stop, either way, while the oscillator may already run | ceres and SameBoy (`speed_switch_freeze`: 5 T-cycles of the normal speed); with it, `lycint_ly_ds_1` makes the same accesses as on ceres |
 
+Rules: `cgb-double-speed`, `cgb-speed-switch`.
+
 ### The CPU
 
 | What | DMG (netlist) | CGB (model) | Source |
 | ---- | ------------- | ----------- | ------ |
 | Leaving HALT | the requests as their latch holds them from the M-cycle's middle (phase E) | the requests as they are at the M-cycle's start: one in an M-cycle's first half wakes the CPU an M-cycle later (`sm83_sequencer.vhd`) | ceres (SameBoy: the DMG samples 2 dots into a halted step, the CGB at its start); with it, cgb-acid2 and Gambatte's `hdma_start` make ceres's accesses |
 | Waiting for HDMA | | the core's clock held in phase A for whole M-cycles (`clocks.vhd`) | guess |
+
+Rules: `cgb-halt-wake`, `cgb-hdma`.
 
 ### HDMA
 
@@ -72,6 +85,8 @@ default) or `CGB_C`. Where the two differ, the blocks say so.
 | How long | 8n + 1 M-cycles for n blocks (16n + 1 in double speed): a byte every half M-cycle (every M-cycle), half an M-cycle to begin and one to end (an M-cycle to begin) | ceres (from SameBoy) |
 | The bytes | read from the cartridge's bus as OAM DMA reads it (ROM, its RAM, the work RAM in SVBK's bank); FF from 8000 to 9FFF and from E000 on; written to VRAM in VBK's bank, whatever the PPU does | ceres |
 | HBlank's blocks | requested when mode 0 begins with the CPU running, when the transfer starts in mode 0, and when the LCD is turned off | ceres |
+
+Rules: `cgb-hdma`.
 
 HDMA sees HBlank a dot after mode 3 ends, where ceres requests the block.
 
@@ -98,6 +113,8 @@ and two with SCX 2 (`hdma_start_scx2_1`, `hdma_late_disable_scx2_1`).
 | FF74 | Keeps any byte in the CGB's mode; FF in the DMG's. | Pan Docs; SameBoy |
 | FF75 | Bits 4 to 6 keep a write; the others read 1. | Pan Docs; SameBoy |
 
+Rules: `cgb-mode-registers`, `cgb-vram-in-chip`, `cgb-work-ram-banks`.
+
 The writes to these registers latch as the write strobe falls, as the DMG's
 own registers do (a guess for each).
 
@@ -120,6 +137,10 @@ own registers do (a guess for each).
 | The pixel | BGP, OBP0, OBP1: a shade on LD0, LD1 | the CGB's mode: the palette and colour; the DMG's: the DMG palettes' shade in the background's palette 0 or the sprites' 0 or 1 | Pan Docs ("Compatibility palettes"); SameBoy |
 | The palettes | | BCPS, BCPD, OCPS, OCPD, two RAMs of 64 bytes (zeros at power-on); locked while the PPU draws, from 3 dots after mode 3 begins (2 on the first line after the LCD is turned on) to 4 dots after it ends (2 in double speed): reads FF, writes lost, the index still moves; data registers dead in the DMG's mode after the boot ROM (`colour_palettes.vhd`) | Pan Docs; SameBoy; ceres (zeros, the lock's edges) |
 | The LCD's pins | LD0, LD1 | 15 bits of colour | Pan Docs (the CGB's LCD) |
+
+Rules: `cgb-vram-in-chip`, `cgb-tile-attributes`, `cgb-sprite-attributes`,
+`cgb-lcdc-bit-0`, `cgb-first-line-vram-lock`, `cgb-wx-match`,
+`cgb-colour-palettes`.
 
 ### The LCD's timing
 
@@ -149,6 +170,9 @@ half dot.
 | Mode 1, read | VBlank's latch (from h = 908 of line 143) | from h = 911; on the CGB-E until 2 half dots after the latch's end |
 | LY, read | the counter | the counter; when it changed at the last edge, old and new ANDed |
 | LY on line 153 | 0 from 4 half dots into the line | the same on the CGB-C; 6 on the CGB-E |
+
+Rules: `cgb-stat-interrupt-timing`, `cgb-lyc-sampled`, `cgb-read-delays`,
+`cgb-ly-read-and`, `cgb-e-line-153`.
 
 Double speed has the same rules for now: its own are not modelled yet.
 

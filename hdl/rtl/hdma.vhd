@@ -26,6 +26,7 @@
 -- halted or switches speed, writes into both banks while the PPU blocks
 -- VRAM, clashes with the PPU's or OAM DMA's accesses, OAM written by HDMA.
 -- How the transfer holds the CPU core is a guess.
+-- @rule cgb-hdma
 
 library ieee;
 use ieee.std_logic_1164.all;

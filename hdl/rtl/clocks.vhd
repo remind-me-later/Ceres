@@ -17,6 +17,7 @@
 -- @hw inferred: Pan Docs ("FF4D — KEY1", "Rendering": dots do not change
 -- with the speed; "Audio": APU ticks neither); the clocks' circuit is a
 -- guess.
+-- @rule cgb-double-speed
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -135,6 +136,7 @@ begin
 
 		-- The 4 MiHz clock of the PPU and the APU, halved from its own gate.
 		-- @hw inferred: guess
+		-- @rule cgb-speed-switch
 		osc_ppu <= ck1 when ppu_ena = '1' else '1';
 
 		halve_ppu : process (osc_ppu)
@@ -220,6 +222,7 @@ begin
 		-- others, and count on.
 		-- @hw inferred: guess (how HDMA stops the CPU core is not known; it
 		-- stops at an opcode fetch, ../hdma.vhd)
+		-- @rule cgb-hdma
 		clk_core <= '1' when core_hold = '1' else clk_in;
 
 		core_counter : process (all)

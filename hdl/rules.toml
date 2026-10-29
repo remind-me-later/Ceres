@@ -176,3 +176,156 @@ kind = "unknown"
 status = "missing"
 facts = ["stat-write-glitch-line-154"]
 evidence = "Ceres and the model fail it the same way."
+
+[cgb-vram-in-chip]
+title = "The CGB's VRAM: two banks of 8 KiB inside the chip, MA13 the bank, and bank 1 at bank 0's address on a second data bus"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-memory-arrays"]
+evidence = "Pan Docs (the size); the CGB's board has no VRAM chip; SameBoy (\"the CGB has a 16-bit data bus for the VRAM\"). The die photos neither confirm nor rule out the second bus (doc/hardware-tests.md)."
+
+[cgb-work-ram-banks]
+title = "32 KiB of work RAM on three bank lines, SVBK's bank at D000"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-work-ram-banks"]
+evidence = "Pan Docs (FF70 SVBK) and SameBoy; the lines are a guess."
+
+[cgb-boot-rom-map]
+title = "The boot ROM answers at 0000 to 00FF and 0200 to 08FF"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-boot-rom-map"]
+evidence = "The CGB's boot ROM is 2304 bytes; SameBoy and ceres map it so, the cartridge's header showing through at 0100 to 01FF."
+
+[cgb-double-speed]
+title = "An 8 MiHz crystal, halved to the 4 MiHz of the PPU and the APU's dividers; the CPU, the divider, the timer, the serial port, OAM DMA and PHI take 8 MiHz in double speed"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-double-speed"]
+evidence = "Pan Docs (FF4D KEY1; dots and APU ticks do not change with the speed; the frame sequencer on DIV bit 5); the clocks' circuit is a guess."
+
+[cgb-speed-switch]
+title = "STOP with KEY1 armed switches the speed while the oscillator stops (16 periods into double speed, 4 out of it), the PPU's clock gated for 5 dots"
+models = ["cgb"]
+kind = "delay"
+status = "applied"
+facts = ["cgb-speed-switch"]
+evidence = "Fitted to ceres, whose times pass Gambatte's speedchange ROMs: with them, speedchange2_div_1, _div_2 and speedchange2_key1 make ceres's accesses through two switches, and lycint_ly_ds_1 with the PPU's gate (SameBoy's speed_switch_freeze)."
+
+[cgb-halt-wake]
+title = "HALT takes the requests as they are at an M-cycle's start, not from its middle"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-halt-wake"]
+evidence = "ceres, from SameBoy's GB_cpu_run; with it cgb-acid2's and Gambatte's hdma_start HALTs end where ceres's do."
+
+[cgb-hdma]
+title = "HDMA holds the CPU core's clock after an opcode fetch and copies 16 bytes a block, a byte each half M-cycle, into VBK's bank"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-hdma"]
+evidence = "ceres (from SameBoy) for the registers, the length, the bytes and HBlank's blocks a dot after mode 3; how the core is held is a guess. Of Gambatte's 94 HDMA ROMs the model covers, 68 pass (hdl/cgb.md)."
+
+[cgb-mode-registers]
+title = "KEY0 picks the DMG's mode from the boot ROM; OPRI's priority sticks after it; FF72 to FF75 keep their bits"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-mode-registers"]
+evidence = "SameBoy (cgb_mode = !(value & 0xC), GB_IO_OPRI, PSWX) and Pan Docs; the writes latch as the strobe falls, as the DMG's registers do (a guess)."
+
+[cgb-tile-attributes]
+title = "The fetcher latches the tile's attributes with its number; the shifter loads the tile flipped, with its palette and priority"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-tile-attributes"]
+evidence = "Pan Docs (BG Map Attributes, BG-to-OBJ priority); SameBoy (the same T-cycle as the tile number); where the shifter loads them is a guess. cgb-acid2 draws as on a real CGB."
+
+[cgb-sprite-attributes]
+title = "A sprite's palette and bank in the CGB's mode, priority by OAM index with OPRI 0, and sprites fetched whatever LCDC bit 1 says"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-sprite-attributes"]
+evidence = "Pan Docs (Byte 3, Object Priority and Conflicts); SameBoy (fifo_overlay_object_row); ceres (the bank in the CGB's mode only; the fetches with LCDC bit 1 clear)."
+
+[cgb-lcdc-bit-0]
+title = "In the CGB's mode, LCDC bit 0 turns off the priorities over sprites and leaves the background"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-lcdc-bit-0"]
+evidence = "Pan Docs (LCDC.0) and SameBoy; cgb-acid2 draws with it."
+
+[cgb-first-line-vram-lock]
+title = "On the first line after the LCD is turned on, at normal speed, mode 3 takes VRAM 10 half dots after it begins"
+models = ["cgb"]
+kind = "delay"
+status = "applied"
+facts = ["cgb-first-line-vram-lock"]
+evidence = "ceres (FirstLineMode3 to FirstLineVramLock, from SameBoy); Gambatte's enable_display/ly0_late_vramr and _vramw: on the CGB-C the access lands, on the DMG-08 it does not."
+
+[cgb-wx-match]
+title = "WX matches the pixel counter only while the window is on"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-wx-match"]
+evidence = "cgb-acid2's picture of a real CGB (its footer, under WX 5F with the window off); ceres (the window's start needs LCDC bit 5)."
+
+[cgb-colour-palettes]
+title = "The pixel leaves as a palette and a colour, through two palette RAMs of 64 bytes, locked from 3 dots into mode 3 to 4 dots after it"
+models = ["cgb"]
+kind = "logic"
+status = "applied"
+facts = ["cgb-colour-palettes"]
+evidence = "Pan Docs (the palettes, the compatibility palettes) and SameBoy; ceres for the RAMs' zeros and the lock's edges, with which Gambatte's cgbpal_m3 ROMs pass on ceres."
+
+[cgb-stat-interrupt-timing]
+title = "STAT's written enables reach the interrupt 3 half dots after the strobe, with VBlank's latch at that edge, and the HBlank source rises as mode 3 ends"
+models = ["cgb"]
+kind = "delay"
+status = "applied"
+races = ["cgb-stat-enables-with-vblank-latch"]
+facts = ["cgb-stat-write-delay", "cgb-stat-write-at-vblank-latch"]
+evidence = "ceres's rules (ceres-core/src/ppu/display/timing.rs), fitted to Gambatte's m0enable, m2enable, m1irq_disable and ly143_late_m2enable ROMs and placed at ceres's half dot; the comments at stat_enable and hblank in rtl/lcd_timing.vhd."
+
+[cgb-lyc-sampled]
+title = "A written LYC reaches the comparison at its first sample 6 half dots or more after ceres's write"
+models = ["cgb"]
+kind = "delay"
+status = "applied"
+facts = ["cgb-lyc-write-sampled"]
+evidence = "ceres's rule, fitted to Gambatte's lycEnable ROMs; no fixed delay passes them (doc/hardware-tests.md)."
+
+[cgb-read-delays]
+title = "A read sees the LY = LYC flag 3 half dots late, mode 2 from h = 909 to 157 and mode 1 from h = 911"
+models = ["cgb"]
+kind = "delay"
+status = "applied"
+facts = ["cgb-read-delays"]
+evidence = "ceres's rules, fitted to Gambatte's lcd_offset and lycint_lycflag ROMs through reads a dot or two off the usual grid."
+
+[cgb-ly-read-and]
+title = "LY read in the half dot it changes gives old and new ANDed"
+models = ["cgb"]
+kind = "delay"
+status = "applied"
+facts = ["cgb-ly-read-during-increment"]
+evidence = "ceres's rule, fitted to three Gambatte lcd_offset ROMs and AGE's spsw-mode0 (doc/hardware-tests.md): what a ripple counter would show."
+
+[cgb-e-line-153]
+title = "On the CGB-E, LY becomes 0 on line 153 a dot later, mode 1 ends 2 half dots later, and the LY = LYC flag holds until the next sample"
+models = ["cgb-e"]
+kind = "delay"
+status = "applied"
+facts = ["cgb-c-against-cgb-e"]
+evidence = "ceres's CGB-D/E rules, fitted to Mooneye's and AGE's CGB-E ROMs (Gambatte's are the CGB-C's)."

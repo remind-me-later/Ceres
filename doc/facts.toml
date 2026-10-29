@@ -462,3 +462,110 @@ hardware = "none"
 open = ["doc/hardware-tests.md#what-the-die-photos-show-of-the-chips-blocks"]
 needs = ["decap", "cgb-e"]
 note = "The CGB's model (hdl/cgb.md) reads VRAM bank 1 at bank 0's address on a second bus, as SameBoy does; the die photos neither confirm nor rule it out."
+
+# The CGB's model beyond its LCD timing (hdl/cgb.md): no netlist, so each
+# rests on documents, emulators and the tests named.
+
+[cgb-work-ram-banks]
+title = "The CGB's 32 KiB of work RAM, in banks at D000 that SVBK picks"
+models = ["cgb"]
+netlist = "none"
+hardware = "none"
+note = "Pan Docs and SameBoy; that the banks are three lines to a RAM on the board is a guess. No test ROM isolates it."
+
+[cgb-boot-rom-map]
+title = "The CGB's boot ROM: 2304 bytes at 0000 to 00FF and 0200 to 08FF"
+models = ["cgb"]
+netlist = "none"
+hardware = "none"
+note = "The boot ROM's size, and SameBoy's and ceres's memory maps."
+
+[cgb-double-speed]
+title = "Double speed: what runs on the CPU's clock and what stays at 4 MiHz"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["gambatte/speedchange"]
+note = "Pan Docs for the divider, the serial port, OAM DMA, PHI, the dots and the APU's ticks; the rest a guess."
+
+[cgb-speed-switch]
+title = "A speed switch: STOP with KEY1 armed, the oscillator's stop and the PPU's own clock gate"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["gambatte/speedchange", "gambatte/lycint_ly"]
+note = "The stop's length is fitted to ceres, whose times pass Gambatte's speedchange ROMs; the PPU's 5 dots come from SameBoy's speed_switch_freeze."
+
+[cgb-halt-wake]
+title = "The CGB's HALT takes the interrupt requests as they are at an M-cycle's start"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["cgb-acid2/cgb-acid2.gbc", "gambatte/dma"]
+note = "SameBoy's GB_cpu_run (the DMG samples 2 dots into a halted step, the CGB at its start), through ceres."
+
+[cgb-hdma]
+title = "HDMA: its registers, where it stops the CPU core, its length and its bytes"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["gambatte/dma"]
+note = "ceres, from SameBoy; how the core is held is a guess. hdl/cgb.md lists what the model leaves out."
+
+[cgb-mode-registers]
+title = "KEY0, OPRI and FF72 to FF75: the CGB's mode and its plain registers"
+models = ["cgb"]
+netlist = "none"
+hardware = "none"
+note = "SameBoy and Pan Docs; ceres reads OPRI as FF after the boot ROM."
+
+[cgb-tile-attributes]
+title = "The tile map's attributes in VRAM's bank 1: bank, flips, palette and priority"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["cgb-acid2/cgb-acid2.gbc"]
+note = "Pan Docs; SameBoy reads them in the same T-cycle as the tile number. Where the shifter loads the flip, the palette and the priority is a guess."
+
+[cgb-sprite-attributes]
+title = "A sprite's CGB palette and bank, priority by OAM index, and sprites fetched with LCDC bit 1 clear"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["cgb-acid2/cgb-acid2.gbc"]
+note = "Pan Docs; SameBoy's fifo_overlay_object_row; ceres."
+
+[cgb-lcdc-bit-0]
+title = "LCDC bit 0 in the CGB's mode: the priorities over sprites off, the background still shown"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["cgb-acid2/cgb-acid2.gbc"]
+note = "Pan Docs and SameBoy; cgb-acid2 draws with it."
+
+[cgb-first-line-vram-lock]
+title = "On the first line after the LCD is turned on, mode 3 takes VRAM from the CPU 5 dots late"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = [
+  "gambatte/enable_display/ly0_late_vramr_2_dmg08_outFF_cgb04c_out55.gbc",
+  "gambatte/enable_display/ly0_late_vramw_2_dmg08_out55_cgb04c_outAA.gbc",
+]
+note = "ceres's FirstLineMode3 to FirstLineVramLock, from SameBoy; the DMG-08 reads FF and keeps 55 there."
+
+[cgb-wx-match]
+title = "WX's match needs the window on, on the CGB"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["cgb-acid2/cgb-acid2.gbc"]
+note = "cgb-acid2's picture of a real CGB: its footer, under WX 5F with the window off, loses no dot."
+
+[cgb-colour-palettes]
+title = "The CGB's palettes: BCPS to OCPD, their RAMs, the compatibility palettes and the lock in mode 3"
+models = ["cgb"]
+netlist = "none"
+hardware = "same"
+tests = ["cgb-acid2/cgb-acid2.gbc", "gambatte/cgbpal_m3"]
+note = "Pan Docs and SameBoy; ceres for the RAMs' zeros at power-on and the lock's edges."

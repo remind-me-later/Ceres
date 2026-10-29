@@ -12,6 +12,7 @@
 -- for the CPU and for OAM DMA, the fetcher's for the PPU. VBK takes writes
 -- in the CGB's mode only, and reads back on any CGB (Pan Docs "FF4F — VBK";
 -- SameBoy's GB_IO_VBK).
+-- @rule cgb-vram-in-chip
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -114,6 +115,7 @@ begin
 		-- @hw inferred: ceres (its FirstLineMode3 to FirstLineVramLock, from
 		-- SameBoy), Gambatte's enable_display/ly0_late_vramr and _vramw (CGB:
 		-- the access lands, DMG: it does not)
+		-- @rule cgb-first-line-vram-lock
 		mode3_count : process (clk4, mode3)
 		begin
 			if mode3 = '0' then
@@ -157,6 +159,7 @@ begin
 	-- @hw die: XANE XEDU, AHOC, and the not_if0 onto ~ma0..~ma12
 	-- @hw inferred: ceres (HDMA's writes ignore the PPU's lock); the
 	-- clashes with the PPU's reads are not modelled
+	-- @rule cgb-hdma
 	address : process (all)
 	begin
 		if REVISION = DMG_B then

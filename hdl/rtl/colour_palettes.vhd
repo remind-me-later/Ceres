@@ -22,6 +22,7 @@
 -- HBlankPalettesUnlock);
 -- the RAMs power up as zeros, as ceres has them (unknown on the chip); the
 -- writes latch as the write strobe falls, as the DMG's registers do.
+-- @rule cgb-colour-palettes
 
 library ieee;
 use ieee.std_logic_1164.all;

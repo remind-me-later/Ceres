@@ -75,6 +75,7 @@ begin
 
 	-- @hw die: TULO TERA TUTU (0000 to 00FF)
 	-- @hw inferred: 0200 to 08FF
+	-- @rule cgb-boot-rom-map
 	boot_sel_i <= '1' when unmapped = '0' and (addr(15 downto 8) = x"00"
 	                       or (REVISION /= DMG_B and addr(15 downto 12) = x"0"
 	                           and unsigned(addr(11 downto 8)) >= 2 and unsigned(addr(11 downto 8)) <= 8)) else '0';

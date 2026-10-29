@@ -440,6 +440,7 @@ begin
 	-- @hw inferred: SameBoy reads them in the same T-cycle as the tile
 	-- number on any CGB ("the CGB has a 16-bit data bus for the VRAM"); the
 	-- latch is a guess, the low byte's latch in count 1
+	-- @rule cgb-tile-attributes
 	cgb_attributes : if REVISION /= DMG_B generate
 		attr_latch : process (all)
 		begin
@@ -457,6 +458,7 @@ begin
 	-- SOBO SETU RALU SOHU (dffsr), LUXA LOZE
 	-- @hw inferred: the flip, the palette and the priority (Pan Docs "BG Map
 	-- Attributes"; where they load is a guess)
+	-- @rule cgb-tile-attributes
 	bg_shifter : process (clkpipe, fetch_reset, bg_low, bg_tile, bg_attr)
 	begin
 		if fetch_reset = '1' then
@@ -510,6 +512,7 @@ begin
 	-- @hw inferred: cgb-acid2's picture of a real CGB (the footer, under WX
 	-- 5F with the window turned off: no dot lost), ceres (the window's start
 	-- needs LCDC bit 5)
+	-- @rule cgb-wx-match
 	wxy_match <= '1' when (REVISION = DMG_B or lcdc(5) = '1') and wy_latch = '1'
 	                      and wx = std_ulogic_vector(px_i) else '0';
 
@@ -774,6 +777,7 @@ begin
 	-- pixel keeps its sprite's index for that, and its CGB palette.
 	-- @hw inferred: SameBoy (fifo_overlay_object_row); Pan Docs ("Object
 	-- Priority and Conflicts")
+	-- @rule cgb-sprite-attributes
 	dmg_sprites : if REVISION = DMG_B generate
 		free_pixels : for i in 0 to 7 generate
 			sprite_on(i) <= loaded and not sp_a(i) and not sp_b(i);
@@ -853,6 +857,7 @@ begin
 	-- In the CGB's mode, LCDC bit 0 does not hide the background.
 	-- @hw inferred: Pan Docs ("LCDC.0 — BG and Window enable/priority");
 	-- SameBoy
+	-- @rule cgb-lcdc-bit-0
 	bg_shown <= lcdc(0) or cgb_mode;
 	bg_a  <= bg_shift_a(7) and lcdc(0) when REVISION = DMG_B else bg_shift_a(7) and bg_shown;
 	bg_b  <= bg_shift_b(7) and lcdc(0) when REVISION = DMG_B else bg_shift_b(7) and bg_shown;
@@ -867,6 +872,7 @@ begin
 	-- CGB's mode, not while LCDC bit 0 is clear.
 	-- @hw inferred: the tile's priority and LCDC bit 0, Pan Docs ("BG-to-OBJ
 	-- Priority in CGB Mode"); SameBoy
+	-- @rule cgb-lcdc-bit-0
 	show_sprite <= (obj_a or obj_b) and not (sp_priority(7) and (bg_a or bg_b)) when REVISION = DMG_B else
 	               (obj_a or obj_b) and not ((sp_priority(7) or bg_priority) and lcdc(0) and (bg_a or bg_b));
 	pixel       <= obj_a & obj_b when show_sprite = '1' else bg_b & bg_a;
@@ -893,6 +899,7 @@ begin
 		-- palette 0 or the sprites' palette 0 or 1.
 		-- @hw inferred: Pan Docs ("Compatibility palettes": BGP, OBP0 and
 		-- OBP1 index into the CGB palettes); SameBoy
+		-- @rule cgb-colour-palettes
 		pixel_obj     <= show_sprite;
 		pixel_colour  <= pixel when cgb_mode = '1' else shade;
 		pixel_palette <= sp_cgb_palette(7) when cgb_mode = '1' and show_sprite = '1' else
@@ -925,6 +932,7 @@ begin
 			-- A tile flipped in Y reads its rows from the bottom; its bank is
 			-- the attributes'.
 			-- @hw inferred: Pan Docs ("BG Map Attributes")
+			-- @rule cgb-tile-attributes
 			row(2 downto 0) := std_ulogic_vector(map_y(2 downto 0)) xor (2 downto 0 => bg_attr(6));
 			ma   <= (bg_tile(7) nor lcdc(4)) & bg_tile & std_logic_vector(row(2 downto 0)) & fetch_count(2);
 			bank <= bg_attr(3);
@@ -943,6 +951,7 @@ begin
 			ma <= '0' & sprite & row(2 downto 0) & vonu;
 			-- The CGB's mode only.
 			-- @hw inferred: Pan Docs ("Byte 3 — Attributes/Flags"); ceres
+			-- @rule cgb-sprite-attributes
 			bank <= attributes(3) and cgb_mode;
 		end if;
 	end process;

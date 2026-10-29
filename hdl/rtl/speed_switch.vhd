@@ -16,6 +16,7 @@
 -- M-cycles of the CPU core's wake) and the reset of DIV. How long the
 -- oscillator stays stopped is fitted to ceres, whose times pass Gambatte's
 -- speedchange tests (CGB-C): longer into double speed than out of it.
+-- @rule cgb-speed-switch
 --
 -- The PPU's clock stops with the oscillator in a plain STOP, as on the DMG,
 -- but in a switch for a time of its own: 10 periods of the crystal (5 dots)

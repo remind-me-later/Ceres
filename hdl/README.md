@@ -478,4 +478,6 @@ is known. A race names the chips whose model has it: the CGB's keeps most
 of the DMG's code, and with it its races. `MODELS` says which chips
 `knowledge.sh` looks at, by default all of them, as the checks need:
 `MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules` lists the CGB's
-rules that no fact about the CGB shows, the ones it takes from the DMG.
+rules that no fact about the CGB shows, the ones it takes from the DMG,
+and `untested-rules` those that no hardware test shows, which rest on
+documents, emulators or a guess.

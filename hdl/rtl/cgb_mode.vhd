@@ -56,6 +56,7 @@ begin
 	-- cartridge without the CGB flag), and so does bit 3 (the "PGB" mode,
 	-- which nobody has described). The CGB's mode at power-on.
 	-- @hw inferred: SameBoy (cgb_mode = !(value & 0xC)); Pan Docs
+	-- @rule cgb-mode-registers
 	key0 : process (write_key0, reset2)
 	begin
 		if reset2 = '1' then
@@ -71,6 +72,7 @@ begin
 	-- keeps a write in the CGB's mode, but the priority stays.
 	-- @hw inferred: SameBoy (GB_IO_OPRI); Pan Docs ("does not have an
 	-- effect ... after the boot ROM has been unmapped", to be verified)
+	-- @rule cgb-mode-registers
 	opri_reg : process (write_opri, reset2)
 	begin
 		if reset2 = '1' then
@@ -91,6 +93,7 @@ begin
 	-- reads FF in the DMG's); FF75 keeps bits 4 to 6.
 	-- @hw inferred: Pan Docs ("FF72-FF73", "FF74", "FF75"); SameBoy (PSWX,
 	-- PSWY on any CGB, PSW in the CGB's mode)
+	-- @rule cgb-mode-registers
 	undocumented : process (write_ff72, write_ff73, write_ff74, write_ff75, reset2)
 	begin
 		if reset2 = '1' then

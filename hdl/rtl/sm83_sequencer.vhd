@@ -182,6 +182,7 @@ begin
 	-- @hw inferred: ceres (from SameBoy's GB_cpu_run: the DMG samples the
 	-- interrupts 2 dots into a halted step, the CGB at its start); with it,
 	-- cgb-acid2's and Gambatte's HALTs end where ceres's do
+	-- @rule cgb-halt-wake
 	-- @hw die: YSBT ZKAI YOII ZORP ZAZA (dff), YNOZ, ZIKS ZUDN, YOLU, ZHZO
 	-- ZKON, YKUA, YNKW (srlatch), ZUMN (srlatch), ZWLM, XWEE ZJBF, YCNF
 	----------------------------------------------------------------------

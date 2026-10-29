@@ -10,6 +10,7 @@
 -- it, ../board/gameboy.vhd on branch hdl) twice as large: the CGB keeps its
 -- VRAM inside the chip, and nothing tells how that RAM differs. The second
 -- bus is SameBoy's reading ("the CGB has a 16-bit data bus for the VRAM").
+-- @rule cgb-vram-in-chip
 
 library ieee;
 use ieee.std_logic_1164.all;

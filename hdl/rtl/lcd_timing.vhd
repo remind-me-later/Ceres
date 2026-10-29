@@ -345,6 +345,7 @@ begin
 		--   the interrupt sees both at once.
 		-- - A written LYC reaches the comparison at its first sample (the rise
 		--   of hclk) 6 half dots or more after ceres's write.
+		-- @rule cgb-lyc-sampled
 		-- - The interrupt's HBlank source rises as mode 3 ends, without the
 		--   DMG's delay (in a half dot, ceres raises it before anything else
 		--   changes: an LYC or STAT write landing there comes after it), and
@@ -355,10 +356,13 @@ begin
 		-- - A read sees mode 2 from h = 909 to 157 (then mode 3), mode 1 from
 		--   h = 911 of line 143 to VBlank's end (2 half dots later on the
 		--   CGB-E).
+		-- @rule cgb-read-delays
 		-- - A read of LY when it has changed at the last edge sees old and new
 		--   ANDed (the bits that fall have fallen, the one that rises has not
 		--   risen yet).
+		-- @rule cgb-ly-read-and
 		-- - On the CGB-E, LY becomes 0 on line 153 a dot later.
+		-- @rule cgb-e-line-153
 		--
 		-- In double speed these are the same for now: the double speed's own
 		-- rules are not modelled yet.
@@ -379,6 +383,7 @@ begin
 
 		-- The enables land 3 ns after the edge, as POPU does (its clock comes
 		-- through vena and nype).
+		-- @rule cgb-stat-interrupt-timing
 		stat_enable <= stat_late(3) after 3 * tco;
 
 		lyc_compared <= lyc_late(5);
@@ -391,6 +396,7 @@ begin
 
 		-- HDMA sees HBlank a dot after mode 3 ends.
 		-- @hw inferred: ceres (HBLANK_HDMA_DELAY, from SameBoy)
+		-- @rule cgb-hdma
 		hblank_hdma <= mode0_hdma(2) and mode0_early;
 
 		-- Mode 2 as a read sees it: from the rise of the clock after nype's

@@ -355,6 +355,7 @@ begin
 	-- The CGB fetches the sprites on the line whatever LCDC bit 1 says (it
 	-- only stops drawing them, ../render.vhd): the DMG's fetches need it.
 	-- @hw inferred: SameBoy, ceres
+	-- @rule cgb-sprite-attributes
 	u_sprite_store : entity work.sprite_store
 		port map (
 			wuvu => wuvu, line_start => line_start, ppu_reset => ppu_reset,
@@ -441,6 +442,7 @@ begin
 	-- 4, or 5 in double speed); its registers are the CPU's.
 	-- @hw inferred: Pan Docs ("Audio": APU ticks do not change with the
 	-- speed; "Audio details": DIV bit 5 in double speed)
+	-- @rule cgb-double-speed
 	apu_div <= shift_right(div, 1) when double_speed = '1' else div;
 
 	u_apu_control : entity work.apu_control
