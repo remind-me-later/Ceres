@@ -84,7 +84,7 @@ impl<A: AudioCallback> Gb<A> {
             ),
             ly: self.read_mem(0xFF44),
             stat_mode: self.read_mem(0xFF41) & 3,
-            oam_blocked: self.dma.blocks_oam_read()
+            oam_blocked: self.dma.blocks_oam()
                 || (self.ppu.debug_state().lcd_on && self.ppu.oam_read_blocked()),
             vram_blocked: self.ppu.vram_read_blocked(),
         };

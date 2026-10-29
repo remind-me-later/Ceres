@@ -117,8 +117,8 @@ The counters and the interrupt's sources are the DMG's (`lcd_timing.vhd`);
 what moves is what the CPU sees of them, and when its writes take effect,
 by a few half dots (edges of the 4 MiHz clock). No circuit is known for
 these: each is ceres's rule, fitted to Gambatte's, SameSuite's, Mooneye's
-and AGE's CGB tests (`doc/cgb-hardware-tests.md`, entries 1 to 6), placed
-at the half dot where ceres has it.
+and AGE's CGB tests (`doc/hardware-tests.md`, "Open questions on the
+CGB"), placed at the half dot where ceres has it.
 
 A CPU access here begins (its strobe, phase E) a half dot after ceres's,
 measured on the PPU's clock, and a read takes the byte as phase H ends, 4
@@ -161,9 +161,9 @@ What the model does not have, and why:
   (`enable_display/ly0_late_scx7_m3stat_scx0_2`), and an HBlank enable
   late on line 143 (`m1/ly143_late_m0enable_2`). Of the 69 LCD ROMs whose
   results differ between the DMG and the CGB, the rest pass.
-- **The CGB-C's other differences** (`doc/cgb-hardware-tests.md`, entry
-  6): the LCD's timing has those that ceres knows (`REVISION`); the rest
-  would be more fitting.
+- **The CGB-C's other differences** (`doc/hardware-tests.md`, "What differs
+  between the CGB-C and the CGB-E"): the LCD's timing has those that ceres
+  knows (`REVISION`); the rest would be more fitting.
 - **The infrared port (RP, FF56), PCM12 and PCM34 (FF76, FF77)**: small
   registers that nothing else depends on.
 - **The APU's other CGB differences** (wave RAM while channel 3 plays,

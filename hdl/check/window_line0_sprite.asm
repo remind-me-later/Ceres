@@ -22,7 +22,8 @@
 ; window's first tiles: mode 3 lasts three M-cycles more than on line 1,
 ; where the window is already on. The next line starts in the window if WX
 ; was 166 at the end of the line before, whether or not the window was on
-; then: in the second pass, line 0 is the window's too (results.md).
+; then: in the second pass, line 0 is the window's too.
+; @fact window-wx-166
 ;
 ; It reports no result, and avoids the byte 40 as an opcode (gameboy_tb's
 ; TEST takes LD B,B for a Mooneye result).

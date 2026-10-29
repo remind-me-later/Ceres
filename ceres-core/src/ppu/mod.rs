@@ -331,17 +331,15 @@ impl Ppu {
     }
 
     /// Runs the display `cycles` T-cycles ahead of the CPU, which will not
-    /// run those cycles again. Unless `any_line`, only done around the end
-    /// of the frame.
+    /// run those cycles again.
     pub(crate) fn run_ahead(
         &mut self,
         ints: &mut Interrupts,
         cgb_mode: CgbMode,
         double_speed: bool,
         cycles: i32,
-        any_line: bool,
     ) {
-        if self.lcdc & LCDC_ON_B == 0 || (self.d.current_line() < 152 && !any_line) {
+        if self.lcdc & LCDC_ON_B == 0 {
             return;
         }
         for _ in 0..cycles {

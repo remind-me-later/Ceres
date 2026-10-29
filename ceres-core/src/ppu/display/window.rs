@@ -37,6 +37,7 @@ pub(super) struct Window {
     pub wx_166_interrupt_glitch: bool,
     /// On the DMG, the window started after the line's last pixel (WX =
     /// 166): an object fetched there waits for the window's first tiles.
+    // @fact window-wx-166
     pub started_after_line: bool,
     /// On the DMG, WX was 166 at the end of a line after WY matched: the next
     /// line starts in the window if the window is on when its mode 3 starts.

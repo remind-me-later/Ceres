@@ -98,7 +98,7 @@ siliconpr0n.org answers scripts with 403; its CGB pages and the
 polysilicon image were fetched through the Internet Archive
 (`web.archive.org/web/2024id_/<url>`). What the CGB's images show, and why
 they cannot be traced, is in
-[doc/cgb-hardware-tests.md](../doc/cgb-hardware-tests.md#9-what-the-die-photos-show-of-the-chips-blocks).
+[doc/hardware-tests.md](../doc/hardware-tests.md#what-the-die-photos-show-of-the-chips-blocks).
 
 ## The readable model
 
@@ -274,6 +274,9 @@ it through the bus traces: `check/stat_vblank_end.asm` (`make` builds it)
 does so with STAT across the end of VBlank, and
 `check/lcd_off_line_start.asm` turns the LCD off at each M-cycle around a
 line's start and reads IF (see [results.md](results.md)).
+`check/stat_dips.asm` is a test of its own, short enough for dmg-sim: it
+reads IF across STAT's dips at VBlank's end and start, and passes with what
+the DMG-08 does (its header says how to run it).
 
 `sweep-cuts.sh NAME < roms.txt` runs this on a list of ROMs, `JOBS` at a
 time, with the environment's `BOOT`, `TEST`, `APU` and `SECS`, writes a
@@ -283,19 +286,8 @@ across the ROMs, as in [results.md](results.md#what-the-blocks-show-each-other).
 1 GiB (a ROM that ends on a locked CPU without a `TEST` to see it); the
 sweep lists such ROMs first.
 
-Over gbmicrotest, ceres and the model make the same accesses in 491 ROMs
-of 513. The others differ in three ways (see also
-[results.md](results.md)):
-
-- The read after HALT, when an interrupt is already pending (7 ROMs, a
-  line each): the chip reads the byte after the HALT, ceres the HALT
-  itself. Both push the HALT's address, in the same M-cycles.
-- The state at power-on (15 ROMs: `poweron_*`, `000-oam_lock`, `temp`):
-  RAM and the registers that no boot ROM writes start as dmg-sim starts
-  them, at 0 in every cell (OAM's bytes are FF, and the board's VRAM holds
-  arbitrary bytes), where ceres has zeros.
-- With quickboot, the timer's enable (`halt_bug`, `004-tima_boot_phase`):
-  the netlist counts on enabling the timer, ceres and the real DMG do not.
+The results of the sweeps, and what each difference turned out to be, are
+in [results.md](results.md#what-the-blocks-show-each-other).
 
 ### Gambatte's ROMs
 
@@ -381,3 +373,94 @@ This branch also held a VHDL translation of dmg-sim itself (until commit
 `d1658a21`), which matched it pin for pin at every picosecond. It was
 retired: the original, on the simulator its delays were fitted on, is the
 better oracle, and the translation had to follow every change to dmg-sim.
+
+### Checking ceres's transcriptions of it
+
+ceres-core's proofs against the netlist (`cargo kani -p ceres-core`) rest
+on Rust transcriptions of some of the model's blocks: `NetTimer`
+(`ceres-core/src/timing/netlist.rs`, of `divider.vhd` and `timer.vhd`),
+`NetIf` (`ceres-core/src/interrupts/netlist.rs`, of `interrupts.vhd` and
+the request latch of `sm83_interrupts.vhd`) and `NetDma`
+(`ceres-core/src/memory/netlist.rs`, of `dma.vhd`, clocked by `dma_phi`,
+which stops while the CPU is halted). `trace-blocks.sh` records those
+blocks at the end of every phase while the model runs a ROM (the testbench's
+`BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in
+`build/blocks` through the transcriptions, phase by phase, with the model's
+accesses and interrupt requests, and lists where a transcription's state
+parts from the model's, and how often the traces exercised each rule:
+
+```sh
+ls ../external/test-roms/gbmicrotest/timer_*.gb | sed 's|^\.\./||' |
+	TEST=gbmicrotest xargs -P 4 -I{} ./trace-blocks.sh {} 0.1
+cargo test -p ceres-core --release netlist_replay -- --ignored --nocapture
+```
+
+A request that rises and falls within a phase (the STAT write's glitch)
+counts as a rise in that phase: the trace notes every rising edge of the
+request lines, not only their values at the phase's end. The results are in
+[results.md](results.md#ceress-transcriptions-of-the-timer-if-and-oam-dma).
+
+### Finding its races
+
+Where the model's outcome rests on its delays rather than on the order of
+its signals, a flip-flop is clocked by, or a latch sees, a pulse much
+shorter than a phase. `find-runts.sh ROM [SECS]` runs a ROM with
+`oracle/runts.c`, a VHPI plugin for nvc that notes every pulse shorter
+than 60 ns on any one-bit signal or bit of a vector, down to the pulses of
+no width (a delta cycle) that a waveform dump leaves out, and prints the
+ones at a signal that clocks a flip-flop or that a latch, a reset or a
+process without a clock tests (`oracle/controls.awk` finds those in
+`rtl/`):
+
+```sh
+ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
+	TEST=gbmicrotest xargs -P 6 -I{} ./find-runts.sh {} 0.25
+./find-runts.sh -s
+```
+
+The 513 gbmicrotest ROMs take 24 minutes at six at a time. Each report is
+`build/runts/reports/<ROM>.txt`, the ROM's path under `external/test-roms`
+(Gambatte's suites reuse names). `BOOT=tiny` runs `build/tinyboot.bin` with
+the VRAM zeroed, as `run-gambatte.sh` does, for Mooneye (`TEST=mooneye`,
+2 s), Mealybug (0.4 s) and Gambatte (0.29 s).
+[races.toml](races.toml) gives each race found, and each delay of `rtl/`,
+a verdict: order, if any delays that keep the order of the signals give
+the same outcome, or width, if the die's physics decides (the `race` of
+[doc/facts.toml](../doc/facts.toml)), with the evidence and the facts that
+rest on it.
+
+## The knowledge database
+
+`knowledge.sh` gathers what the repository knows into one SQLite database,
+`build/knowledge.db`, generated from the sources each time: the model's
+instances, its signals and the ones that control its storage, its delays and its
+`@hw` tags; the short pulses of the reports of `find-runts.sh`; the facts
+of `doc/facts.toml` and their `@fact` tags across the repository (through
+ceres-test-runner's example `facts`); the verdicts of `races.toml`; and the
+rules of `rules.toml` with their `@rule` tags in `rtl/`.
+`knowledge/schema.sql` says what each table holds.
+
+```sh
+./knowledge.sh list            # the saved queries and checks
+./knowledge.sh width-facts     # run one (knowledge/queries/*.sql)
+./knowledge.sh check           # the checks (knowledge/checks/*.sql)
+sqlite3 -column -header build/knowledge.db
+```
+
+A check is a query that must find nothing: a delay or a short pulse at a
+control without a verdict, a verdict naming what `rtl/` does not have, a
+fact on a width race that no race names, a fact that needs a rule and has
+none, an applied rule without its tag, two rules explaining the same facts.
+
+### The rules beyond the die
+
+[rules.toml](rules.toml) lists what the model needs beyond the die's cells
+and wires to do what the hardware does, aiming at the fewest rules that
+explain every behaviour a hardware test shows. The die's connectivity is
+trusted and its delays are not, so an order race needs no rule; the
+outcome of a width race does, and so does what the netlist cannot tell (a
+RAM's cells, the power-on state, the electrical side) or gets wrong. A rule
+is applied (`rtl/` has it, tagged `@rule <id>`), proposed (ceres does it
+and passes the tests, `rtl/` not yet) or missing (nothing known passes).
+A rule is shown needed the way a race's verdict is: the model without it
+fails a hardware test. `./knowledge.sh rules` lists them.

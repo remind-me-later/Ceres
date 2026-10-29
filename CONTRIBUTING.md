@@ -122,6 +122,26 @@ cargo test --release --package ceres-test-runner --test gambatte
 cargo run --release --package ceres-test-runner --example gambatte_runner -- both window
 ```
 
+#### The facts list
+
+`doc/facts.toml` lists the behaviours of the hardware whose evidence is
+missing or contradictory, where ceres departs from the DMG-CPU B's netlist,
+or whose outcome hangs on a race, with the test ROMs and the open questions
+of `doc/hardware-tests.md` that each rests on; its header says what each
+field means. Code that implements a fact says so in a comment, `@fact <id>`.
+The test `facts` checks that the list holds together: that a departure from
+the netlist rests on a hardware test or an open question, that the ROMs, the
+open questions and the tagged facts exist, and that every open question is a
+fact's. When a change departs from the netlist, settles a question or adds
+one, change the list with it.
+
+```bash
+cargo test --package ceres-test-runner --test facts
+# The open questions and what settling them takes, the departures from the
+# netlist, the races, and where the code tags each fact
+cargo run --package ceres-test-runner --example facts
+```
+
 ### CI/CD Pipeline
 
 GitHub Actions runs the tests on pushes and pull requests to `main`. It

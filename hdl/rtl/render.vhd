@@ -241,7 +241,10 @@ begin
 	-- @hw die: XYMU (nor_latch), WEGO, VOGA (dffr), WODU XUGU XENA, TARU
 	----------------------------------------------------------------------
 	-- (The latch sets a little after the scan's stop also clears the
-	-- fetcher: when mode 3 starts, the fetcher's count is already 0.)
+	-- fetcher: when mode 3 starts, the fetcher's count is already 0. For
+	-- that moment OAM is free to the CPU, and a write reaches it: gbmicrotest's
+	-- oam_write_l1_c.)
+	-- @rule oam-free-between-scan-and-mode-3
 	mode3_latch : process (all)
 	begin
 		if ppu_reset = '1' or voga = '1' then
@@ -260,6 +263,8 @@ begin
 	-- a write to LYC that clears the flag at the end of mode 3 drops STAT's
 	-- interrupt line for a moment, and the rise sets IF's flag (Gambatte's
 	-- lycdisable_ff45_3, measured in dmg-sim).
+	-- @fact mode-0-rises-after-lyc-flag, @fact lcd-off-in-vblank-mode-0-source
+	-- @rule mode-0-rises-after-lyc-flag
 	mode0      <= '1' after 14 ns when mode0_i = '1' else '0';
 	mode0_early <= mode0_i;
 
@@ -406,6 +411,8 @@ begin
 	-- of the real DMG do: with this pulse the model draws
 	-- m3_lcdc_win_en_change_multiple_wx and m3_scy_change as the hardware
 	-- does, and without it (a delay on the clock) it does not.
+	-- @fact window-start-tile-register-pulse
+	-- @rule tile-register-takes-the-pulse
 	bg_tile_clock <= myso and not fetch_count(1);
 
 	tile_ff : process (bg_tile_clock)

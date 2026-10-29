@@ -13,8 +13,8 @@
 -- (the clock's edges): see "The CGB's timing" below.
 -- @hw inferred: ceres (ceres-core/src/ppu/display/timing.rs), fitted to
 -- Gambatte's, SameSuite's, Mooneye's and AGE's CGB tests
--- (doc/cgb-hardware-tests.md, entries 1 to 6). No circuit is known: the
--- half-dot delays here only reproduce ceres's.
+-- (doc/hardware-tests.md, "Open questions on the CGB"). No circuit is
+-- known: the half-dot delays here only reproduce ceres's.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -410,6 +410,21 @@ begin
 		end if;
 	end process;
 
+	-- The interrupts. The STAT interrupt is the OR of its enabled sources;
+	-- IF's flag is set when it rises. The OAM source is the end of each line
+	-- outside VBlank (vclk), when the next line's OAM scan begins. The flag
+	-- takes a dip of the OR a flip-flop wide, not one two gates wide. At the
+	-- end of VBlank, mode 1 falls as the mode 2 source rises: on the die
+	-- through two gates (TOLU, TAPA), here in one expression, so that the OR
+	-- does not drop for a delta cycle between them and set the flag again,
+	-- as on the DMG (Gambatte's m2irq_ly00_lcdstat30: no interrupt; dmg-sim
+	-- takes the dip, ../check/stat_dips.asm). At VBlank's start, LY = LYC's
+	-- flag falls a flip-flop before mode 1 rises: the OR drops for that
+	-- time, and its rise sets the flag again, as on the DMG (Gambatte's
+	-- lycint143_m1irq_2: an interrupt).
+	-- @hw die: TAPA, SUKO TUVA VOTY; VYPU
+	-- @fact stat-or-at-vblank-end, @fact stat-or-at-vblank-start
+	-- @rule stat-flag-takes-a-flip-flops-dip
 	int_stat <= (stat_enable(6) and lyc_match) or (stat_enable(5) and vclk_i and not mode1_i) or
 	            (stat_enable(4) and mode1_i) or (stat_enable(3) and hblank);
 	int_vbl  <= mode1_i;

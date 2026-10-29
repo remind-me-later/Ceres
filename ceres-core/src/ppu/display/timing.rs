@@ -18,7 +18,7 @@
 //! The revisions share the structure and differ in a table of phases
 //! (`Phases`) and of CPU access delays (`Delays`). The CGB's were fitted to
 //! the CGB test suites (gambatte's CGB-C checks, SameSuite, Mooneye, AGE);
-//! `doc/cgb-hardware-tests.md` lists what hardware should confirm.
+//! `doc/hardware-tests.md` lists what hardware should confirm.
 //!
 //! Times are in half dots on a line clock (`h`, 912 per line) that the
 //! pixel pipeline resyncs at every line end; `h = 0` is where LY changes for
@@ -78,6 +78,7 @@ pub(super) const VBLANK_H: i32 = LINE_END_H + 4;
 const LY_MATCH_PHASE: i32 = 4;
 /// The half dots from an LCDC write that turns the LCD off to the sources of
 /// the interrupt seeing it.
+// @fact lcd-off-at-line-start
 const LCD_OFF_LATE: u8 = 3;
 
 const LAST_VISIBLE_LINE: u8 = LINES - 1;
@@ -87,7 +88,7 @@ const STAT_ENABLES: u8 = STAT_IF_HBLANK_B | STAT_IF_VBLANK_B | STAT_IF_OAM_B | S
 
 /// Where a revision's signals sit on the clock. The structure is the same
 /// on every model; the CGB's phases were fitted to the CGB test suites (see
-/// `doc/cgb-hardware-tests.md` for what hardware should confirm).
+/// `doc/hardware-tests.md` for what hardware should confirm).
 #[derive(Clone, Copy)]
 struct Phases {
     /// The CGB: no STAT write glitch, writes and reads at the CGB's delays
@@ -124,6 +125,7 @@ const DMG_PHASES: Phases = Phases {
 
 /// The CGB up to revision C (gambatte's tests): the HBlank gate clears and
 /// the OAM scan reads a half dot off the DMG's.
+// @fact cgb-read-delays, @fact cgb-c-against-cgb-e
 const CGB_C_PHASES: Phases = Phases {
     cgb: true,
     hblank_clear: LINE_RESET_H + 1,
@@ -341,6 +343,7 @@ impl LcdTiming {
 
 /// How many half dots after the unit's clock a CPU access lands: writes
 /// reach the unit that much later, reads see it that much ahead.
+// @fact cgb-read-delays, @fact cgb-stat-write-delay, @fact cgb-lyc-write-sampled
 struct Delays {
     stat_write: u8,
     /// On the CGB, at the first LY=LYC sample after it.
@@ -420,6 +423,7 @@ impl Ppu {
             before = t.ly;
             t.unit();
         }
+        // @fact cgb-ly-read-during-increment
         if self.d.timing.phases.cgb && delay > 0 && before != t.ly {
             before & t.ly
         } else {

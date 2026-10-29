@@ -98,8 +98,11 @@ upstream.
 - [Debugger](doc/debugger.md): a console debugger in the style of SameBoy's.
 - [Tracing](doc/tracing.md): a per-instruction trace in Gameboy Doctor's
   format, to diff against other emulators.
-- [CGB hardware tests](doc/cgb-hardware-tests.md): what is left to measure on
-  a real CGB.
+- [Facts](doc/facts.toml): what is known about the hardware where the
+  evidence is missing or contradictory, where ceres departs from the
+  DMG-CPU B's netlist, or where a race decides, and what each rests on.
+- [Hardware tests](doc/hardware-tests.md): what is left to measure on a
+  real DMG or CGB.
 
 ## Folder organization
 

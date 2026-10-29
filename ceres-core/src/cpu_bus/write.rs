@@ -57,8 +57,7 @@ impl<A: AudioCallback> Gb<A> {
                 // In double speed a write to IF lands after the LCD
                 // interrupts of the next cycle (gambatte `updateIrqs(cc + 2)`).
                 if addr == io_addr(IF) && self.key1.is_enabled() && self.ppu.cgb_c_timing() {
-                    self.ppu
-                        .run_ahead(&mut self.ints, self.cgb_mode, true, 1, true);
+                    self.ppu.run_ahead(&mut self.ints, self.cgb_mode, true, 1);
                 }
                 self.write_mem(addr, val);
                 self.time_deferred = 3;
