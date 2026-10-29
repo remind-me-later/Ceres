@@ -1,4 +1,4 @@
--- The rules for this model that no fact about it shows: the model follows another's evidence.
+-- The rules for the chips looked at that no fact about them shows: they follow another chip's evidence.
 SELECT r.status, r.id,
        (SELECT group_concat(model, ' ') FROM rule_model WHERE rule = r.id) AS models,
        (SELECT group_concat(fact, ' ') FROM rule_fact WHERE rule = r.id) AS facts

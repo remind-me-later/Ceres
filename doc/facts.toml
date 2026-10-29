@@ -24,8 +24,8 @@
 # - open: the open questions of doc/hardware-tests.md that would settle it,
 #   as document#anchor.
 # - needs: what settling them takes: flash-cart, logic-analyser-lcd,
-#   logic-analyser-cartridge, scope, camera, the units (dmg-b, dmg-c, cgb-c,
-#   cgb-e) or several-units.
+#   logic-analyser-cartridge, scope, camera, decap (a chip opened and
+#   photographed), the units (dmg-b, dmg-c, cgb-c, cgb-e) or several-units.
 # - note (optional): what the fields do not say.
 #
 # The test `facts` of ceres-test-runner checks that a departure from the
@@ -436,6 +436,7 @@ title = "A STAT write in the half dot of the VBlank latch"
 models = ["cgb"]
 netlist = "none"
 hardware = "same"
+race = "width"
 tests = [
   "gambatte/m1/m1irq_disable_1_dmg08_out3_cgb04c_out1.gbc",
   "gambatte/m1/ly143_late_m2enable_2_dmg08_out3_cgb04c_out1.gbc",
@@ -452,3 +453,12 @@ tests = ["gambatte/ly0", "age-test-roms/ly"]
 open = ["doc/hardware-tests.md#what-differs-between-the-cgb-c-and-the-cgb-e"]
 needs = ["flash-cart", "cgb-c", "cgb-e"]
 note = "Gambatte's tests are a CGB-C's, Mooneye's and AGE's a CGB-D or E's."
+
+[cgb-memory-arrays]
+title = "The CGB's memory arrays: the VRAM's two banks read at once, the palette RAMs' size"
+models = ["cgb"]
+netlist = "none"
+hardware = "none"
+open = ["doc/hardware-tests.md#what-the-die-photos-show-of-the-chips-blocks"]
+needs = ["decap", "cgb-e"]
+note = "The CGB's model (hdl/cgb.md) reads VRAM bank 1 at bank 0's address on a second bus, as SameBoy does; the die photos neither confirm nor rule it out."

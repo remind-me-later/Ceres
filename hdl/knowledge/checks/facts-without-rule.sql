@@ -1,4 +1,4 @@
--- The facts about this model that need a rule of rules.toml for it and have none.
+-- The facts about the chips looked at that need a rule of rules.toml for them and have none.
 SELECT f.id, f.netlist, f.hardware, f.race, f.title
 FROM fact_needing_rule f
 WHERE f.id IN (SELECT id FROM fact_here)

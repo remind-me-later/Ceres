@@ -1,4 +1,4 @@
--- The delays and signals of the races of this model that rtl/ does not have.
+-- The delays and signals of the races of the chips looked at that rtl/ does not have.
 SELECT race, entity, signal, 'delay' AS what
 FROM race_delay rd
 WHERE rd.race IN (SELECT id FROM race_here)

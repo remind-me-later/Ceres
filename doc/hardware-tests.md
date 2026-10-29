@@ -577,6 +577,54 @@ the choices those tests leave open.
   difference that shows up in only one of these reads would point at a
   different mechanism than a uniform shift.
 
+### What the die photos show of the chip's blocks
+
+Not a test ROM: a question for a decapped chip. The images are listed, with
+their sources, in `hdl/README.md` ("Die images").
+
+- **Measure:** decap a CGB of known revision (a CGB-E, the model's default)
+  and photograph it at 20x or more, as the DMG-CPU B was: the top metal,
+  each lower metal layer, then the polysilicon. Count the cells of each RAM
+  and ROM array, and follow the VRAM's data lines.
+- **Why the images don't decide:** the metal photos of the CGB B and C
+  (1000×1070 and 2047×2160) are too coarse to follow a wire. The only sharp
+  image, siliconpr0n's polysilicon scan filed as "cpu-cgb-b" (10x,
+  6045×7755), has no metal left, so no wires, and is at half the DMG's
+  magnification. It may not be a CGB B either: its README says "Best guess
+  at chip. Was mislabeled as DMG-CPU". Its die label is CYUH54, where the
+  CGB B and C dies carry the same other code (CUJ831A or close to it). It is
+  also taller (width to height 0.78, against 0.93 for the CGB B), has about
+  26 pads on its top edge (32 on the CGB B) and one more row of blocks on
+  its left. Its plan is a CGB's, so it may be a later revision (D or E), but
+  nothing says which chip it is.
+- **What the polysilicon scan shows:** the cells repeat every 6.8 pixels down
+  and in strips of 46 pixels across, read here as 8 columns of cells sharing
+  their contacts with their neighbours (the other reading halves each count
+  below).
+  - Four identical arrays, each 16 strips of 8 columns by 256 rows: 16 KiB,
+    the VRAM inside the chip. Each has 16 units across its middle and
+    8 blocks at its foot, as for a byte.
+  - No other array could hold 32 KiB: the work RAM is outside the chip.
+  - An array of 64 by 16 cells, 128 bytes: the high RAM.
+  - A pair of identical arrays, each 64 cells wide by 14 rows (16 if the
+    edges' rows count): 112 or 128 bytes each.
+  - Other arrays, not measured: in the block to the right of the high RAM,
+    and in the two blocks below it.
+- **The model today** (`hdl/cgb.md`): 16 KiB of VRAM inside the chip,
+  with a second data bus that reads bank 1 at bank 0's address (SameBoy's
+  reading); 32 KiB of work RAM outside; 128 bytes of high RAM; two palette
+  RAMs of 64 bytes; the 2304-byte boot ROM; OAM as the DMG's.
+- **Outcomes:**
+  - The VRAM: whether two arrays are read at once (bank 0 and bank 1, as the
+    second bus has it) or one at a time.
+  - The identical pair: palette RAMs of 64 bytes are half their size. The
+    OAM's 160 bytes with the bytes the early CGBs keep behind FEA0 to FEFF
+    (24 on the CGB B, as ceres has them) would fit them better. The
+    palettes would then be in one of the arrays not yet measured, as would
+    the boot ROM.
+  - The CYUH54 die: which chip and revision it is. If it is a CGB D or E,
+    its plan next to the CGB B's shows where the revisions differ.
+
 ## Settled by hardware where the netlist was not enough
 
 - **The tile register at a window start:** the fetch counter's reset gives its

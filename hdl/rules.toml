@@ -13,7 +13,7 @@
 #
 # - title: the rule, in a line.
 # - models: the models it is for, as doc/facts.toml names them. A rule
-#   found on the DMG is the CGB's too where the CGB model (branch hdl_cgb)
+#   found on the DMG is the CGB's too where the CGB's model (hdl/cgb.md)
 #   keeps it and no CGB test contradicts it; the evidence says whether a
 #   CGB test shows it.
 # - kind: delay (a delay's value or range), outcome (which way a pulse of

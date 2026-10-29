@@ -1,4 +1,4 @@
--- The facts about this model on a width race of the netlist that no race of it names.
+-- The facts about the chips looked at on a width race of the netlist that no race of theirs names.
 SELECT f.id, f.title
 FROM fact_here f
 WHERE f.race = 'width' AND f.netlist <> 'none'

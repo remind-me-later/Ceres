@@ -35,8 +35,9 @@
 #
 # Prints, for each name, how many changes each side has, the usual difference
 # of each kind (and the others, with how many changes have them), and the
-# changes only one side has and the pairs off the usual difference, those an
-# M-cycle off counted apart (a change can fall between the two sides' points
+# changes only one side has and the pairs off the usual difference, those up
+# to an M-cycle off counted apart (half an M-cycle in double speed, where
+# M-cycles are numbered in halves) (a change can fall between the two sides' points
 # of sampling). Exits 1 if a change has no pair or a pair is more than an
 # M-cycle off.
 
@@ -179,7 +180,7 @@ awk -v window="${WINDOW:-3}" '
 			far = 0
 			for (p = 2; p <= pairs; p++) {
 				o = off_by(name, p)
-				if (o == 1 || o == -1) near++
+				if (o >= -1 && o <= 1 && o != 0) near++
 				else if (o != 0) far++
 			}
 			printf "%-4s model %d, ceres %d changes; usually %s M-cycles apart", name, m, c, usual == "" ? "?" : usual
@@ -203,7 +204,7 @@ awk -v window="${WINDOW:-3}" '
 			shown = 0
 			for (p = 2; p <= pairs; p++) {
 				o = off_by(name, p)
-				if ((o == 1 || o == -1) && shown < 3) {
+				if (o >= -1 && o <= 1 && o != 0 && shown < 3) {
 					print "     " sprintf("%s: model at %d, ceres at %d (%+d)", value[1, name, pm[p]], \
 						at[1, name, pm[p]], at[2, name, pc[p]], o)
 					shown++

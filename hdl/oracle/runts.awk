@@ -7,9 +7,16 @@
 #   awk -f oracle/runts.awk INSTANCES REPORTS...
 #
 # INSTANCES: lines "entity label entity-of-the-instance" (knowledge/rtl.awk,
-# TABLE=instance), tab-separated.
+# TABLE=instance), tab-separated. A label with two entities is the board's
+# chip (the DMG's first, then the CGB's, ../board/gameboy.vhd): a report
+# under reports/cgb/ is the CGB's, the others the DMG's.
 
-FILENAME == ARGV[1] { split($0, f, "\t"); entity[f[1] " " f[2]] = f[3]; next }
+FILENAME == ARGV[1] {
+	split($0, f, "\t")
+	if ((f[1] " " f[2]) in entity) other[f[1] " " f[2]] = f[3]
+	else entity[f[1] " " f[2]] = f[3]
+	next
+}
 
 # The ROM: the report's path under reports/.
 FNR == 1 {
@@ -27,7 +34,8 @@ FNR == 1 {
 	for (i = 3; i < n; i++) {
 		label = part[i]
 		sub(/\(.*/, "", label)
-		if ((ent " " label) in entity) ent = entity[ent " " label]
+		if ((ent " " label) in other && rom ~ /^cgb\//) ent = other[ent " " label]
+		else if ((ent " " label) in entity) ent = entity[ent " " label]
 	}
 	print rom "\t" ent "\t" part[n] "\t" path "\t" $1 "\t" $2 "\t" $3 "\t" $4
 }

@@ -18,8 +18,12 @@ use ieee.std_logic_1164.all;
 use work.clocking.all;
 use work.sm83_decoder.all;
 use work.sm83_controls.all;
+use work.revisions.all;
 
 entity sm83_sequencer is
+	generic (
+		REVISION : revision_t := DMG_B
+	);
 	port (
 		clk         : in std_ulogic;  -- high in phase A
 		exec_phase  : in std_ulogic;  -- B to H
@@ -38,6 +42,7 @@ entity sm83_sequencer is
 		alu_cond_fail : in std_ulogic;  -- the condition of JR/JP/CALL/RET cc fails
 		int_take    : in std_ulogic;  -- an interrupt is enabled and requested
 		int_pending : in std_ulogic;  -- an interrupt is requested (for HALT)
+		int_now     : in std_ulogic := '0';  -- ... before the latch of data_phase (the CGB's)
 
 		opcode      : out std_ulogic_vector(7 downto 0);
 		mcyc        : out std_ulogic_vector(2 downto 0);
@@ -73,6 +78,7 @@ architecture rtl of sm83_sequencer is
 	signal halt_reset   : std_ulogic;
 	signal any_reset    : std_ulogic;
 	signal pending_delayed : std_ulogic := '0';  -- YOII
+	signal pending_at_start : std_ulogic := '0';
 	signal not_ready    : std_ulogic;  -- ZIKS
 	signal not_ready_1  : std_ulogic := '1';  -- ZORP
 	signal not_ready_2  : std_ulogic := '1';  -- ZAZA
@@ -168,6 +174,14 @@ begin
 	-- M-cycle after their step; an interrupt request clears it, and so does
 	-- the oscillator becoming stable after the reset. STOP stops the
 	-- oscillator until a joypad line goes low.
+	--
+	-- The CGB takes the request for HALT as it is at an M-cycle's start,
+	-- not as the requests' latch holds it from the M-cycle's middle (phase
+	-- E): a request in an M-cycle's second half wakes it an M-cycle later
+	-- than the DMG.
+	-- @hw inferred: ceres (from SameBoy's GB_cpu_run: the DMG samples the
+	-- interrupts 2 dots into a halted step, the CGB at its start); with it,
+	-- cgb-acid2's and Gambatte's HALTs end where ceres's do
 	-- @hw die: YSBT ZKAI YOII ZORP ZAZA (dff), YNOZ, ZIKS ZUDN, YOLU, ZHZO
 	-- ZKON, YKUA, YNKW (srlatch), ZUMN (srlatch), ZWLM, XWEE ZJBF, YCNF
 	----------------------------------------------------------------------
@@ -176,7 +190,12 @@ begin
 		if rising_edge(clk) then
 			halt_delayed    <= s.halt after tco;
 			stop_delayed    <= c.stop after tco;
-			pending_delayed <= int_pending after tco;
+			if REVISION = DMG_B then
+				pending_delayed <= int_pending after tco;
+			else
+				pending_at_start <= int_now after tco;
+				pending_delayed  <= pending_at_start after tco;
+			end if;
 			not_ready_1     <= not_ready after tco;
 			not_ready_2     <= not_ready_1 after tco;
 		end if;

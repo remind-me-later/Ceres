@@ -62,13 +62,12 @@ CREATE TABLE rule_fact (rule TEXT, fact TEXT);
 CREATE TABLE rule_race (rule TEXT, race TEXT);
 CREATE TABLE rule_tag (rule TEXT, file TEXT, line INTEGER);
 
--- The models that rtl/ is (knowledge.sh's MODELS): dmg here, the CGB's on
--- the branch hdl_cgb.
+-- The chips looked at (knowledge.sh's MODELS): by default all that rtl/ has.
 CREATE TABLE tree_model (model TEXT);
 
 -- Views.
 
--- The rules for the model that rtl/ is: the ones its tags and checks are
+-- The rules for the chips looked at: the ones the tags and checks are
 -- about.
 CREATE VIEW rule_here AS
 SELECT *
@@ -76,7 +75,7 @@ FROM rule r
 WHERE EXISTS (SELECT 1 FROM rule_model m JOIN tree_model t ON t.model = m.model
               WHERE m.rule = r.id);
 
--- The races of the model that rtl/ is: the ones that cover its delays and
+-- The races of the chips looked at: the ones that cover their delays and
 -- pulses.
 CREATE VIEW race_here AS
 SELECT *
@@ -84,7 +83,7 @@ FROM race r
 WHERE EXISTS (SELECT 1 FROM race_model m JOIN tree_model t ON t.model = m.model
               WHERE m.race = r.id);
 
--- The facts about the model that rtl/ is.
+-- The facts about the chips looked at.
 CREATE VIEW fact_here AS
 SELECT *
 FROM fact f

@@ -1,20 +1,25 @@
 -- SPDX-License-Identifier: MIT
 --
--- The boot ROM, 256 bytes at 0000 to 00FF, and the register FF50 that
--- unmaps it.
+-- The boot ROM, and the register FF50 that unmaps it: the DMG's 256 bytes
+-- at 0000 to 00FF; the CGB's 2304 at 0000 to 00FF and 0200 to 08FF (the
+-- cartridge's header shows through at 0100 to 01FF).
 --
--- @hw die: dmg-schematics, category bootrom; checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- @hw die: dmg-schematics, category bootrom (the DMG's 256 bytes at 0000 to
+-- 00FF); checked against dmg-sim (../check/chip_tb.vhd).
+-- @hw inferred: the CGB's second range, from the size of its boot ROM and
+-- SameBoy's and Pan Docs' memory maps.
 
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.clocking.all;
+use work.revisions.all;
 
 entity boot_rom is
 	generic (
-		IMAGE : string  -- the file with the boot ROM's 256 bytes
+		IMAGE    : string;                -- the file with the boot ROM's 256 or 2304 bytes
+		REVISION : revision_t := DMG_B
 	);
 	port (
 		reset2  : in std_ulogic;
@@ -27,12 +32,13 @@ entity boot_rom is
 		cpu_rd : in    std_ulogic;
 		cpu_wr : in    std_ulogic;
 
-		boot_sel : out std_ulogic  -- the boot ROM answers, not the cartridge
+		boot_sel : out std_ulogic;  -- the boot ROM answers, not the cartridge
+		boot_on  : out std_ulogic   -- the boot ROM is mapped (for the CGB's blocks)
 	);
 end entity;
 
 architecture rtl of boot_rom is
-	type rom_t is array (0 to 255) of std_ulogic_vector(7 downto 0);
+	type rom_t is array (0 to 2303) of std_ulogic_vector(7 downto 0);
 
 	impure function load(path : string) return rom_t is
 		type byte_file is file of character;
@@ -67,12 +73,16 @@ begin
 		end if;
 	end process;
 
-	-- @hw die: TULO TERA TUTU
-	boot_sel_i <= '1' when unmapped = '0' and addr(15 downto 8) = x"00" else '0';
+	-- @hw die: TULO TERA TUTU (0000 to 00FF)
+	-- @hw inferred: 0200 to 08FF
+	boot_sel_i <= '1' when unmapped = '0' and (addr(15 downto 8) = x"00"
+	                       or (REVISION /= DMG_B and addr(15 downto 12) = x"0"
+	                           and unsigned(addr(11 downto 8)) >= 2 and unsigned(addr(11 downto 8)) <= 8)) else '0';
 	boot_sel   <= boot_sel_i;
+	boot_on    <= not unmapped;
 
 	-- @hw die: YULA YAZA, ZUFA ZADO, boot_rom
-	data_out <= rom(to_integer(to_01(unsigned(addr(7 downto 0))))) when cpu_rd = '1' and boot_sel_i = '1' and t2_only = '0' else
+	data_out <= rom(to_integer(to_01(unsigned(addr(11 downto 0))))) when cpu_rd = '1' and boot_sel_i = '1' and t2_only = '0' else
 	        "ZZZZZZZ" & unmapped when cpu_rd = '1' and addr = x"FF50" else
 	        (others => 'Z');
 end architecture;

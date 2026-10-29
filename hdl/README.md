@@ -83,10 +83,29 @@ These come from dmg-sim:
 - Icarus 13 has no string method `tolower`, which dmg-sim uses only for its
   event files; the build comments it out in its copy of dmg-sim.
 
+## Die images
+
+The photos of the chips' dies. None is stored in the repository.
+
+| Chip | Image | Layer, size | By, licence |
+| ---- | ----- | ----------- | ----------- |
+| DMG-CPU B | [siliconpr0n.org/map/nintendo/dmg-cpu-b/single](https://siliconpr0n.org/map/nintendo/dmg-cpu-b/single/): `nintendo_dmg-cpu-b_mcmaster_mz_mit20x.jpg`, `nintendo_dmg-cpu-b_mcmaster_s1-1_mit20x.jpg` | 20x | John McMaster; the dies that dmg-schematics' overlay of the cells is drawn on |
+| CPU CGB B | [CPU Graveyard](https://happytrees.org/dieshots/Nintendo_-_CPU_CGB_B), from [Siliconinsider's post](https://x.com/Siliconinsid/status/1599887576797585408) | top metal, 1000×1070 | Antoine Bercovici, CC BY-NC-SA 4.0 |
+| CPU CGB C | [CPU Graveyard](https://happytrees.org/dieshots/Nintendo_-_CPU-CGB_C); [siliconpr0n's map](https://siliconpr0n.org/map/nintendo/cpu-cgb-c/) (`mz_5x`, `mz_10x`) and [page](https://siliconpr0n.org/archive/doku.php?id=ryancor:nintendo:cpu-cgb-c) | top metal, 2047×2160 on CPU Graveyard | Ryan Cornateanu, CC BY 4.0 |
+| "CPU CGB B" (die label CYUH54) | [siliconpr0n's map](https://siliconpr0n.org/map/nintendo/cpu-cgb-b/): [`nintendo_cpu-cgb-b_poly_10x.jpg`](https://siliconpr0n.org/map/nintendo/cpu-cgb-b/single/nintendo_cpu-cgb-b_poly_10x.jpg) (directory `drdecap_poly_10x`) | polysilicon, 10x, 6045×7755 | Dr Decap; siliconpr0n's wiki is CC BY 4.0 |
+
+siliconpr0n.org answers scripts with 403; its CGB pages and the
+polysilicon image were fetched through the Internet Archive
+(`web.archive.org/web/2024id_/<url>`). What the CGB's images show, and why
+they cannot be traced, is in
+[doc/hardware-tests.md](../doc/hardware-tests.md#what-the-die-photos-show-of-the-chips-blocks).
+
 ## The readable model
 
 `rtl/` describes the chip in VHDL, one file per block, in the words of
-what each block does rather than of its cells:
+what each block does rather than of its cells. It also describes the CGB's
+chip, from the same blocks with the CGB's differences, which
+[cgb.md](cgb.md) lists with their sources; the tables here are the DMG's.
 
 | File               | Block                                                    |
 | ------------------ | -------------------------------------------------------- |
@@ -148,7 +167,9 @@ cartridge (its ROM and RAM, with no MBC, MBC1 or MBC5), the work RAM, the
 VRAM chip, the buttons, and keepers on the buses (`gameboy.vhd`).
 `gameboy_tb.vhd` runs a ROM on it, recognises the test ROMs' results as
 the oracle's probe does, and can save the last frame on the LCD as a
-picture:
+picture. With the generic `REVISION` (`CGB_C` or `CGB_E`; `DMG_B` by
+default) the board is a Game Boy Color's, around the CGB's chip
+([cgb.md](cgb.md)):
 
 ```bash
 make run-model SECS=0.1 ROM=game.gb SCREEN=screen.pgm
@@ -282,7 +303,11 @@ the file's name. A ROM alone takes 70 s, but a 12-core laptop (8 threads on
 the 4 fast cores, then the slow ones) finishes one every 20 s with 8 or more
 at a time, so the 1747 take about 10 hours and `STRIDE=8` (207 ROMs, 70
 minutes) runs every eighth; `JOBS` sets how many run at a time (default
-six); `BOOT=quick` runs quickboot instead. The results are in
+six); `BOOT=quick` runs quickboot instead. `CHIP=cgb-c` (or `cgb-e`) runs
+the CGB's model on the ROMs with a CGB-C's result (`cgb04c_out`), from
+`build/tinyboot_cgb.bin` ([cgb.md](cgb.md)). `WORK` runs a copy of the
+model's library, so that the model can be rebuilt meanwhile, and `OUT`
+names the results' directory. The results are in
 `build/gambatte/results.txt` (see [results.md](results.md)).
 
 ### Making a run shorter
@@ -447,11 +472,10 @@ A rule is shown needed the way a race's verdict is: the model without it
 fails a hardware test. `./knowledge.sh rules` lists them.
 
 A rule names the models it is for, as the facts do. One found on the DMG
-is the CGB's too where the CGB model (branch `hdl_cgb`) keeps it and no
+is the CGB's too where the CGB's model ([cgb.md](cgb.md)) keeps it and no
 CGB test contradicts it, since the CGB follows the DMG where nothing else
-is known. A race names the models whose readable model has it: the CGB
-model keeps most of the DMG's code, and with it its races. `MODELS` in
-`knowledge.sh` says which model `rtl/` is (`dmg` here): the checks hold
-`rtl/` to the races and the rules for it, and `./knowledge.sh
-borrowed-rules` lists those of its rules that no fact about it shows, the
-ones it takes from another model.
+is known. A race names the chips whose model has it: the CGB's keeps most
+of the DMG's code, and with it its races. `MODELS` says which chips
+`knowledge.sh` looks at, by default all of them, as the checks need:
+`MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules` lists the CGB's
+rules that no fact about the CGB shows, the ones it takes from the DMG.

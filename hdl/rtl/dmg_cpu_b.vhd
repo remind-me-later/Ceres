@@ -128,7 +128,7 @@ architecture rtl of dmg_cpu_b is
 
 	-- The VRAM bus inside the chip (the address and the data that the CPU,
 	-- the PPU and OAM DMA put on it)
-	signal vram_addr : std_logic_vector(12 downto 0);
+	signal vram_addr : std_logic_vector(13 downto 0);  -- bit 13 the CGB's bank, 0
 	signal vram_data : std_logic_vector(7 downto 0);
 
 	-- The bus keeper

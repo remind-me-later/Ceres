@@ -161,6 +161,8 @@ pub enum Need {
     LogicAnalyserCartridge,
     Scope,
     Camera,
+    /// A chip opened and photographed.
+    Decap,
     DmgB,
     DmgC,
     CgbC,
@@ -177,6 +179,7 @@ impl Need {
             Self::LogicAnalyserCartridge => "logic-analyser-cartridge",
             Self::Scope => "scope",
             Self::Camera => "camera",
+            Self::Decap => "decap",
             Self::DmgB => "dmg-b",
             Self::DmgC => "dmg-c",
             Self::CgbC => "cgb-c",

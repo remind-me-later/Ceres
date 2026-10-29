@@ -31,6 +31,17 @@
 # m3_lcdc_obj_en_change, m3_obp0_change and m3_scx_low_3_bits, which draw
 # after about 1.1 s of its logo.
 #
+# CHIP=cgb-e or cgb-c runs the CGB's chip (cgb.md) on the model and on
+# ceres. Its boot ROM is build/tinyboot_cgb.bin, which leaves the machine as
+# the CGB-E's boot ROM does (the same accesses afterwards, on a cartridge
+# for the CGB's mode and one for the DMG's) in a hundredth of its time: 35
+# thousand M-cycles, not 3.26 million. Its VRAM is zeroed by the board. It
+# is not for sound tests nor for the boot ROM's state (the logo, the
+# palettes of a known DMG game): BOOT=real runs the real boot ROM
+# (external/gb-bootroms, cgbE.bin or cgb.bin), about ten minutes of the
+# model more. Double speed has M-cycles of half the length, numbered N.5
+# for the second half of the normal speed's N.
+#
 # PIXELS=1 also compares the pixel pipeline's timeline (model-pixels.txt and
 # ceres-pixels.txt, compare-pixels.sh).
 #
@@ -42,7 +53,9 @@
 # The screen is compared too: every whole frame on the LCD, as the model's
 # LCD pins draw it (FRAMES) and as ceres presents it (bus_trace --frames),
 # in model-frames.txt and ceres-frames.txt (a line of 160 digits per row, 0
-# white to 3 black; the first frame after the LCD is turned on is left out),
+# white to 3 black, or on the CGB of 160 colours, four hexadecimal digits
+# each, the palettes' 15 bits; the first frame after the LCD is turned on is
+# left out),
 # compared by compare-frames.sh: the first picture that
 # differs and how many differ. NOFRAMES=1 skips this. Without TEST, give SECS
 # enough for the ROM to draw. Use BOOT=quick for pictures: fastboot leaves
@@ -58,24 +71,40 @@ set -eu
 
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
-BOOTROM=$HDL/build/fastboot.bin
-[ "${BOOT:-fast}" = quick ] && BOOTROM=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
-[ "${BOOT:-fast}" = real ] && BOOTROM=$ROOT/external/gb-bootroms/bin/dmg.bin
-# BOOT=tiny: quickboot's machine in a ninth of its time, the VRAM zeroed by the
-# board (boot/tinyboot.asm); for the model, which simulates the boot slowly.
+case ${CHIP:=dmg-b} in
+dmg-b) revision=DMG_B ;;
+cgb-c) revision=CGB_C real=cgb.bin ;;
+cgb-e) revision=CGB_E real=cgbE.bin ;;
+*) echo "CHIP is dmg-b, cgb-c or cgb-e" >&2; exit 2 ;;
+esac
 vram_zero=
-if [ "${BOOT:-fast}" = tiny ]; then
-	BOOTROM=$HDL/build/tinyboot.bin
+if [ $revision != DMG_B ]; then
+	BOOTROM=$HDL/build/tinyboot_cgb.bin
 	vram_zero=true
+	if [ "${BOOT:-tiny}" = real ]; then
+		BOOTROM=$ROOT/external/gb-bootroms/bin/$real
+		vram_zero=
+	fi
+else
+	BOOTROM=$HDL/build/fastboot.bin
+	[ "${BOOT:-fast}" = quick ] && BOOTROM=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
+	[ "${BOOT:-fast}" = real ] && BOOTROM=$ROOT/external/gb-bootroms/bin/dmg.bin
+	# BOOT=tiny: quickboot's machine in a ninth of its time, the VRAM zeroed
+	# by the board (boot/tinyboot.asm); for the model, which simulates the
+	# boot slowly.
+	if [ "${BOOT:-fast}" = tiny ]; then
+		BOOTROM=$HDL/build/tinyboot.bin
+		vram_zero=true
+	fi
 fi
 
 [ $# -ge 1 ] || { echo "usage: $0 <ROM> [SECS]" >&2; exit 2; }
 rom=$1
 secs=${2:-0.1}
-dir=$HDL/build/compare/${rom%.gb}
+dir=$HDL/build/compare/${rom%.gb*}
 mkdir -p "$dir"
 
-make -C "$HDL" -s model build/fastboot.bin build/tinyboot.bin
+make -C "$HDL" -s model build/fastboot.bin build/tinyboot.bin build/tinyboot_cgb.bin
 cargo build -q --release --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner --example bus_trace
 
 frames_model= frames_ceres=
@@ -111,7 +140,7 @@ stopped() {
 limit=$(awk -v s="$secs" 'BEGIN { print int(600 + 1200 * s) }')
 rc=0
 (cd "$dir" && timeout "$limit" nvc --std=2008 -H 64m --work="$HDL/build/model/work" -e --jit gameboy_tb \
-	-gBOOTROM="$BOOTROM" ${vram_zero:+"-gVRAM_ZERO=$vram_zero"} ${APU:+"-gWITH_CHANNELS=false"} -gROM="$ROOT/$rom" -gSECS="$secs" -gBUS_TRACE="$dir/model.txt" \
+	-gBOOTROM="$BOOTROM" -gREVISION="$revision" ${vram_zero:+"-gVRAM_ZERO=$vram_zero"} ${APU:+"-gWITH_CHANNELS=false"} -gROM="$ROOT/$rom" -gSECS="$secs" -gBUS_TRACE="$dir/model.txt" \
 	${TEST:+"-gTEST=$TEST"} ${frames_model:+"-gFRAMES=$frames_model"} \
 	${pixels_model:+"-gPIXELS=$pixels_model"} ${cuts_model:+"-gCUTS=$cuts_model"} -r >model.log 2>&1) || rc=$?
 [ $rc -eq 0 ] || stopped $rc model "$limit"
@@ -119,7 +148,7 @@ rc=0
 # The same M-cycles from ceres: up to the model's last, which may be cut.
 mcycles=$(tail -n 1 "$dir/model.txt" | cut -d ' ' -f 1)
 sed -i "/^$mcycles /,\$d" "$dir/model.txt"
-timeout 120 "$ROOT/target/release/examples/bus_trace" "$ROOT/$rom" --bootrom "$BOOTROM" \
+timeout 120 "$ROOT/target/release/examples/bus_trace" "$ROOT/$rom" --bootrom "$BOOTROM" --model "$CHIP" \
 	--mcycles "$mcycles" --out "$dir/ceres.txt" ${frames_ceres:+--frames "$frames_ceres"} \
 	${pixels_ceres:+--pixels "$pixels_ceres"} ${cuts_ceres:+--cuts "$cuts_ceres"} || rc=$?
 [ $rc -eq 0 ] || stopped $rc ceres 120

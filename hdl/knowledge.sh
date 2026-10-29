@@ -14,8 +14,10 @@
 # The sources: rtl/ and board/ (knowledge/rtl.awk, oracle/controls.awk),
 # doc/facts.toml, hdl/races.toml and hdl/rules.toml with the `@fact` and
 # `@rule` tags (the example facts of ceres-test-runner), and the reports of
-# find-runts.sh in build/runts/reports. MODELS are the models that rtl/ is,
-# as doc/facts.toml names them: the checks are about the rules for them.
+# find-runts.sh in build/runts/reports. MODELS are the chips to look at, as
+# doc/facts.toml names them: by default all that rtl/ has (dmg cgb cgb-c
+# cgb-e), which the checks need; MODELS="cgb cgb-c cgb-e" ./knowledge.sh
+# borrowed-rules lists what the CGB's model takes from the DMG's.
 # Open it with
 # `sqlite3 build/knowledge.db` for queries of your own.
 
@@ -24,7 +26,7 @@ set -eu
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
 DB=$HDL/build/knowledge.db
-MODELS="dmg"
+MODELS=${MODELS:-dmg cgb cgb-c cgb-e}
 TABLES=$HDL/build/knowledge
 
 build() {
