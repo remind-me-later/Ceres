@@ -106,6 +106,18 @@ impl ObjectSearch {
         self.count += 1;
     }
 
+    /// The search reads an entry: the OAM's output latches take its Y and X
+    /// (`read`), unless an OAM DMA hides OAM from the search (`None`), and
+    /// the search compares what they hold.
+    // @fact oam-scan-during-dma
+    pub(super) const fn latch(&mut self, read: Option<(u8, u8)>) -> (u8, u8) {
+        if let Some((y, x)) = read {
+            self.y_bus = y;
+            self.x_bus = x;
+        }
+        (self.y_bus, self.x_bus)
+    }
+
     /// The next object to draw, if any.
     pub(super) fn next(&self) -> Option<Entry> {
         self.count.checked_sub(1).map(|i| self.entries[i])
@@ -200,10 +212,13 @@ impl Ppu {
     pub(super) fn add_object_from_index(&mut self, index: u8) {
         let base = u16::from(index) * Oam::ENTRY_SIZE;
         let dma_active = self.search_dma_phase() != DmaPhase::Idle;
-        if !self.dma_hides_object_search() {
-            self.d.objs.y_bus = self.oam_read(base + Oam::ENTRY_Y);
-            self.d.objs.x_bus = self.oam_read(base + Oam::ENTRY_X);
-        }
+        let read = (!self.dma_hides_object_search()).then(|| {
+            (
+                self.oam_read(base + Oam::ENTRY_Y),
+                self.oam_read(base + Oam::ENTRY_X),
+            )
+        });
+        let (y, x) = self.d.objs.latch(read);
 
         if self.d.objs.count == MAX_OBJECTS_PER_LINE {
             return;
@@ -223,7 +238,6 @@ impl Ppu {
             Some(c) if c.line == self.d.current_line => c.large(index),
             _ => self.lcdc & LCDC_OBJ_SIZE_B != 0,
         };
-        let (x, y) = (self.d.objs.x_bus, self.d.objs.y_bus);
         self.d
             .objs
             .consider(index, x, y, on_line(y, self.d.current_line, height_16));

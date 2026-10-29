@@ -20,7 +20,7 @@ use {
     crate::{
         interrupts::netlist::{NetIf, lowest},
         memory::netlist::{NetDma, Phase as DmaPhase},
-        ppu::{NetLcd, NetScan, ScanClocks},
+        ppu::{NetLcd, NetOamLatches, NetScan, OamInputs, ScanClocks},
         timing::netlist::{Access, NetTimer, Phase, Reg},
     },
     std::{
@@ -95,7 +95,19 @@ struct ScanLine {
     tall: bool,
     /// The slots' save strobes, bit `i` for slot `i`.
     save: u16,
+    /// The Y the comparator sees: OAM's second even latches.
     y: u8,
+    /// OAM's first even latches and the sprite fetch's strobes (older traces
+    /// lack them).
+    oam: Option<OamLine>,
+}
+
+/// OAM's first even latches in a line of a trace, and the sprite fetch's
+/// strobes.
+struct OamLine {
+    first: u8,
+    fetch_read: bool,
+    fetch_hold: bool,
 }
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
@@ -214,7 +226,12 @@ fn bit(s: &str, i: usize) -> Option<bool> {
 
 /// The OAM scan's fields of a trace line, after the read.
 fn parse_scan(fields: &[&str]) -> Option<ScanLine> {
-    let [scan_bits, index, count, save, y] = *fields else {
+    let (scan, oam) = match *fields {
+        [_, _, _, _, _] => (fields, None),
+        [ref scan @ .., first, fetch] => (scan, Some((first, fetch))),
+        _ => return None,
+    };
+    let [scan_bits, index, count, save, y] = *scan else {
         return None;
     };
     Some(ScanLine {
@@ -233,6 +250,14 @@ fn parse_scan(fields: &[&str]) -> Option<ScanLine> {
         tall: bit(scan_bits, 8)?,
         save: u16::from_str_radix(save, 16).ok()?,
         y: hex8(y)?,
+        oam: match oam {
+            None => None,
+            Some((first, fetch)) => Some(OamLine {
+                first: hex8(first)?,
+                fetch_read: bit(fetch, 0)?,
+                fetch_hold: bit(fetch, 1)?,
+            }),
+        },
     })
 }
 
@@ -836,7 +861,67 @@ fn replay_scan(name: &str, lines: &[Line], report: &mut Report) {
             );
             net = scan.net;
         }
+        if let Some(previous) = lines.get(n - 1) {
+            replay_oam_latches(previous, line, &place, report);
+        }
         before = after;
+    }
+}
+
+/// OAM's latches of the Y, in a phase: `NetOamLatches`, with the trace's
+/// first latches where they are open (the RAM's byte is not traced). The
+/// CPU's read strobe is not traced either: a phase where the CPU addresses
+/// OAM is left out.
+fn replay_oam_latches(before: &Line, after: &Line, place: &str, report: &mut Report) {
+    let (Some(lcd_before), Some(lcd)) = (before.lcd.as_ref(), after.lcd.as_ref()) else {
+        return;
+    };
+    let (Some(scan_before), Some(scan)) = (lcd_before.scan.as_ref(), lcd.scan.as_ref()) else {
+        return;
+    };
+    let (Some(oam_before), Some(oam), Some(dma_phi)) =
+        (scan_before.oam.as_ref(), scan.oam.as_ref(), after.dma_phi)
+    else {
+        return;
+    };
+    if before.addr >> 8 == 0xFE || after.addr >> 8 == 0xFE {
+        report.saw("OAM: the CPU addresses OAM (left out)");
+        return;
+    }
+    let inputs = OamInputs {
+        scanning: scan.net.scanning,
+        run: after.dma.run,
+        dma_phi,
+        wuvu: lcd.net.wuvu,
+        wosu: lcd.net.wosu,
+        fetch_read: oam.fetch_read,
+        fetch_hold: oam.fetch_hold,
+    };
+    let mut latches = NetOamLatches {
+        first: oam_before.first,
+        second: scan_before.y,
+    };
+    latches.settle(inputs, oam.first);
+    report.phases += 1;
+    if inputs.run && inputs.scanning {
+        report.saw("OAM: OAM DMA hides OAM from the scan");
+    }
+    if inputs.precharge() && latches.second != scan_before.y {
+        report.saw("OAM: the second latches take a new Y");
+    }
+    let model = NetOamLatches {
+        first: oam.first,
+        second: scan.y,
+    };
+    if latches != model || inputs.mode2() != lcd.mode2 {
+        report.differ(
+            format!("OAM latches, phase {}", after.phase),
+            format!(
+                "{place} ({latches:?} mode 2 {}, model {model:?} mode 2 {})",
+                inputs.mode2(),
+                lcd.mode2
+            ),
+        );
     }
 }
 

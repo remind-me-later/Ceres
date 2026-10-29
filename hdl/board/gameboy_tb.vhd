@@ -52,8 +52,9 @@
 -- lyc_match, LX, LY, LYC and STAT's enables; the byte a read takes, the
 -- core's data bus in the middle of phase H; and the OAM scan's start_scan,
 -- anel, scanning, ceno, byba, doba, not_saving, y_match and LCDC bit 2, its
--- index and count, the save strobes and the Y it reads. Values in
--- hexadecimal, bits as 0 or 1.
+-- index and count, the save strobes and the Y it reads (OAM's second even
+-- latches); OAM's first even latches, and the sprite fetch's fetch_read and
+-- fetch_hold. Values in hexadecimal, bits as 0 or 1.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -443,6 +444,9 @@ begin
 		alias not_saving  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.not_saving : std_ulogic >>;
 		alias scan_index  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.index_i : unsigned(5 downto 0) >>;
 		alias scan_count  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam_scan.count : unsigned(3 downto 0) >>;
+		alias first_even  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.first_even : std_ulogic_vector(7 downto 0) >>;
+		alias fetch_read  is << signal .gameboy_tb.u_gameboy.chip.u_chip.fetch_read : std_ulogic >>;
+		alias fetch_hold  is << signal .gameboy_tb.u_gameboy.chip.u_chip.fetch_hold : std_ulogic >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := false;
@@ -496,7 +500,8 @@ begin
 					& ' ' & b01(start_scan) & b01(anel) & b01(scanning) & b01(ceno) & b01(byba) & b01(doba)
 					& b01(not_saving) & b01(y_match) & b01(lcdc(2))
 					& ' ' & hx(std_ulogic_vector(scan_index)) & ' ' & hx(std_ulogic_vector(scan_count))
-					& ' ' & hx(save) & ' ' & hx(sprite_y));
+					& ' ' & hx(save) & ' ' & hx(sprite_y)
+					& ' ' & hx(first_even) & ' ' & b01(fetch_read) & b01(fetch_hold));
 				writeline(f, l);
 			end if;
 			ended := phase;

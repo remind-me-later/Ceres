@@ -394,7 +394,9 @@ line clock, LY, VBlank, LY = LYC, the latches of LYC and STAT's enables,
 and the STAT interrupt line, edge by edge; the first block of the PPU) and
 `NetScan` (`ceres-core/src/ppu/display/objects/netlist.rs`, of
 `oam_scan.vhd`: the scan's start and stop, the sprite index, the Y
-comparator and the save strobes, on `NetLcd`'s clocks).
+comparator and the save strobes, on `NetLcd`'s clocks; and
+`NetOamLatches`, of `oam.vhd`'s two stages of latches of the Y, which
+OAM DMA holds).
 `trace-blocks.sh` records those
 blocks at the end of every phase while the model runs a ROM (the testbench's
 `BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in

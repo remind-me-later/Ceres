@@ -343,8 +343,8 @@ window, at half dots `4i - 1` and `4i` of the line, and sprite 39 in the
 window after index 39, before `ceno` falls. No save comes with index 00:
 the first of a trace comes with index 01 in 58 of them.
 
-The proofs (`cargo kani -p ceres-core --harness netlist_scan`, 3
-harnesses, 2 minutes) then show:
+The proofs (`cargo kani -p ceres-core --harness netlist_scan`, 4
+harnesses, 5 minutes) then show:
 
 - the comparator, Y plus LY's complement, is ceres's `on_line` for every
   Y, visible line and height;
@@ -352,6 +352,10 @@ harnesses, 2 minutes) then show:
   of LCDC bit 2 in any M-cycle around it, saves the first ten sprites on
   the line in index order, one slot each, with the heights ceres's search
   reads, and ends as it started;
+- a whole scan while an OAM DMA runs, from any M-cycle to any later one,
+  with the CPU running: the netlist's comparator and ceres's search see the
+  same Y for every sprite, from any Y OAM's latches hold as the scan
+  starts, and the netlist saves the sprites ceres finds;
 - a step of ceres's search keeps a sprite when it is on the line and the
   list has room, and keeps the rest: sprite after sprite, the same ten.
 
@@ -364,9 +368,46 @@ six runs of `late_sizechange` ROMs), so both give sprite i the new height
 from `i = 2m + 1` on, for the access at `8m`, and a save never sees half a
 write. A read a dot later, or a netlist write in the next phase A,
 fails the proof. Not proved: the half dot of ceres's reads (its state
-machine is outside the proof), the Y the netlist reads from OAM (`oam.vhd`,
-OAM DMA's hold of it, against ceres's `y_bus`), the scan of line 0 after
-the LCD is turned on, and the order of the saved sprites for the fetch.
+machine is outside the proof), the CPU addressing OAM during the scan, the
+three departures below, the scan of line 0 after the LCD is turned on, and
+the order of the saved sprites for the fetch.
+
+OAM DMA hides OAM from the scan, which goes on (fact
+`oam-scan-during-dma`). `NetOamLatches` transcribes OAM's two stages of
+latches of the Y: the DMA turns mode 2 off for OAM, so the first latches,
+open while the scan reads (`wosu` low), close and keep the last Y read;
+the second take the first while `dma_phi` is high. The traces now carry
+the first latches and the sprite fetch's strobes, and the replay finds the
+latches the model's in every phase (274,491 in which the second take a new
+Y, 2,885 with the DMA hiding OAM; the phases where the CPU addresses OAM
+are left out, its read strobe is not traced). The DMA's run changes at the
+A edge, `8m + 5`, which is ceres's read of sprite `2m + 2`: that sprite is
+still compared with its own Y, and the ones after it with its Y until the
+run ends. Ceres's search hides a read when its DMA has written a byte, and
+ceres steps its DMA at the A edge (the DMA proof's mapping), after a read
+at that half dot: in all of Gambatte's DMG `late_sp` traces, the run rose
+in index k's window and ceres hid from sprite k + 1 (k = 0, 2, 38), and
+fell there and ceres hid up to k (k = 0, 2). Comparing the Y each sprite
+is compared with, scan by scan, the model and ceres agree in every scan of
+those ROMs but one, in two of them.
+
+That scan, and two more cases the proof leaves out, are where ceres's
+search departs from the netlist around OAM DMA. No test tells either way.
+
+- The sprite fetch during a DMA: the netlist's first latches take the data
+  lines, which carry the DMA's byte (from the cartridge bus or VRAM), and
+  both latches get it; ceres's fetch reads the OAM pair at the DMA's write
+  position. That sets what the next line's scan compares while the DMA
+  hides OAM: in `late_sp00x_2` and `late_sp39x_2`, `10` in the model, which
+  puts every sprite of line 4 on the line, and `A0` in ceres, which puts
+  none there. The ROMs' results do not depend on that line.
+- A DMA restarted while it runs: the netlist's run stays on, so the scan
+  keeps comparing the held Y and STAT shows mode 0; ceres's DMA is in its
+  start-up again (`DmaPhase::written` is `None`), so for two M-cycles its
+  search reads OAM and STAT shows mode 2.
+- A DMA while the CPU is halted: `dma_phi` stays high, the run stays on and
+  the scan compares the held Y; ceres's DMG skips the search there (from
+  SameBoy, which notes that units before the CGB vary).
 
 ## The model's races
 

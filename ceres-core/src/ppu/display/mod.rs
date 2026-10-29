@@ -28,7 +28,7 @@ mod state;
 mod timing;
 #[cfg(test)]
 pub(crate) use {
-    objects::netlist::{Clocks as ScanClocks, NetScan},
+    objects::netlist::{Clocks as ScanClocks, NetOamLatches, NetScan, OamInputs},
     timing::netlist::NetLcd,
 };
 mod window;

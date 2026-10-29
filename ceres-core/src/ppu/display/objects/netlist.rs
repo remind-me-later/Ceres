@@ -1,15 +1,16 @@
 //! The netlist's OAM scan, transcribed from `hdl/rtl/oam_scan.vhd` edge by
-//! edge, for the proofs against ceres's object search (`netlist_proofs.rs`)
-//! and for the replay of the model's traces (`crate::netlist_replay`),
-//! which checks the transcription.
+//! edge, and OAM's latches of the Y it reads (`hdl/rtl/oam.vhd`), for the
+//! proofs against ceres's object search (`netlist_proofs.rs`) and for the
+//! replay of the model's traces (`crate::netlist_replay`), which checks the
+//! transcription.
 //!
 //! The scan runs on the line timing's clocks (`NetLcd`): `wuvu`, whose
 //! period is two dots, counts the sprites, one a period, and the chip's
-//! clock (`clk`) times the saves. A scan starts as `wuvu` rises at a line's end (vclk),
-//! unless the next line is in VBlank; it reads each sprite's Y from OAM,
-//! and saves the first ten on the line, in index order, in the sprite
-//! store's slots; it stops a `wuvu` period after the last sprite, which
-//! starts mode 3.
+//! clock (`clk`) times the saves. A scan starts as `wuvu` rises at a line's
+//! end (vclk), unless the next line is in VBlank; it reads each sprite's Y
+//! from OAM, and saves the first ten on the line, in index order, in the
+//! sprite store's slots; it stops a `wuvu` period after the last sprite,
+//! which starts mode 3.
 
 // Some of it only the proofs use, which other builds leave out.
 #![cfg_attr(not(kani), allow(dead_code))]
@@ -165,5 +166,70 @@ impl NetScan {
         self.count = 0;
         self.byba = false;
         self.doba = false;
+    }
+}
+
+/// What OAM's latches take in after an edge (`hdl/rtl/oam.vhd`), while the
+/// CPU does not address OAM.
+#[derive(Clone, Copy)]
+#[expect(clippy::struct_excessive_bools, reason = "the strobes' levels")]
+pub(crate) struct OamInputs {
+    /// The scan runs (`NetScan::scanning`).
+    pub(crate) scanning: bool,
+    /// OAM DMA runs, and its clock.
+    pub(crate) run: bool,
+    pub(crate) dma_phi: bool,
+    pub(crate) wuvu: bool,
+    pub(crate) wosu: bool,
+    /// The sprite fetch reads OAM, and holds the second latches.
+    pub(crate) fetch_read: bool,
+    pub(crate) fetch_hold: bool,
+}
+
+impl OamInputs {
+    /// Mode 2 for OAM: OAM DMA hides OAM from the scan.
+    // @hw die: ACYL BOGE
+    pub(crate) const fn mode2(self) -> bool {
+        self.scanning && !self.run
+    }
+
+    /// The first latches are open: the scan reads, while `wosu` is low, or
+    /// the sprite fetch reads.
+    // @hw die: BOTA, AJEP XUJA ASYT BODE
+    pub(crate) const fn latch_open(self) -> bool {
+        (self.mode2() && !self.wosu) || self.fetch_read
+    }
+
+    /// The RAM is precharged, and the second latches take the first: out of
+    /// mode 2 (while OAM DMA runs, only while `dma_phi` is high) unless the
+    /// sprite fetch holds them, and in mode 2 as `wuvu` rises.
+    // @hw die: CUFE XUJY AVER BYCU COTA
+    pub(crate) const fn precharge(self) -> bool {
+        (!self.run || self.dma_phi)
+            && !self.fetch_hold
+            && !(self.mode2() && !(self.wosu && self.wuvu))
+    }
+}
+
+/// OAM's two stages of latches of the even bytes (Y, or a sprite's tile):
+/// the first take the data lines while they are open, the second the first
+/// while the RAM is precharged; the scan's comparator sees the second.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct NetOamLatches {
+    pub(crate) first: u8,
+    pub(crate) second: u8,
+}
+
+impl NetOamLatches {
+    /// After an edge, with what the latches take in after it and the byte
+    /// the data lines carry (the RAM's, while the scan reads it).
+    // @hw die: YDYV..ECED (dlatch), XUSO..DEPO (dlatch_ee)
+    pub(crate) const fn settle(&mut self, inputs: OamInputs, data: u8) {
+        if inputs.latch_open() {
+            self.first = data;
+        }
+        if inputs.precharge() {
+            self.second = self.first;
+        }
     }
 }
