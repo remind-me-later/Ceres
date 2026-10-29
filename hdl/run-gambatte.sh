@@ -27,7 +27,7 @@
 # PATTERNs run, if there are any, and with STRIDE=n only every n-th of them
 # (the 1747 ROMs take about 10 hours on 12 cores: a ROM alone takes 70 s, but
 # the machine does one every 20 s however many run at once, from about 8 on).
-# JOBS sets how many run at a time (6). WORK runs a copy of the model's
+# JOBS sets how many run at a time (8). WORK runs a copy of the model's
 # library (build/model/work), which can then be rebuilt while the ROMs run,
 # and OUT another directory for the results.
 
@@ -141,4 +141,4 @@ find "$GAMBATTE" \( -name '*.gb' -o -name '*.gbc' \) | sort |
 	if [ $# -gt 0 ]; then grep -F "$(printf '%s\n' "$@")"; else cat; fi |
 	if [ "$REVISION" = DMG_B ]; then cat; else awk '/cgb04c_out/ || (/_out/ && !/dmg08_out/)'; fi |
 	awk -v s="${STRIDE:-1}" 'NR % s == 0 || s == 1' |
-	xargs -P "${JOBS:-6}" -I{} "$HDL/run-gambatte.sh" --one {} | tee -a "$OUT/results.txt"
+	xargs -P "${JOBS:-8}" -I{} "$HDL/run-gambatte.sh" --one {} | tee -a "$OUT/results.txt"

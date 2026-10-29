@@ -203,7 +203,7 @@ of them 10 minutes, six at a time:
 
 ```bash
 ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
-	TEST=gbmicrotest NOFRAMES=1 xargs -n 1 -P 6 ./compare-ceres.sh
+	TEST=gbmicrotest NOFRAMES=1 xargs -n 1 -P 8 ./compare-ceres.sh
 ```
 
 The traces go to `build/compare/<ROM>/`: `model.txt` from the model's
@@ -303,7 +303,7 @@ the file's name. A ROM alone takes 70 s, but a 12-core laptop (8 threads on
 the 4 fast cores, then the slow ones) finishes one every 20 s with 8 or more
 at a time, so the 1747 take about 10 hours and `STRIDE=8` (207 ROMs, 70
 minutes) runs every eighth; `JOBS` sets how many run at a time (default
-six); `BOOT=quick` runs quickboot instead. `CHIP=cgb-c` (or `cgb-e`) runs
+eight); `BOOT=quick` runs quickboot instead. `CHIP=cgb-c` (or `cgb-e`) runs
 the CGB's model on the ROMs with a CGB-C's result (`cgb04c_out`), from
 `build/tinyboot_cgb.bin` ([cgb.md](cgb.md)). `WORK` runs a copy of the
 model's library, so that the model can be rebuilt meanwhile, and `OUT`
@@ -432,7 +432,7 @@ process without a clock tests (`oracle/controls.awk` finds those in
 
 ```sh
 ls ../external/test-roms/gbmicrotest/*.gb | sed 's|^\.\./||' |
-	TEST=gbmicrotest xargs -P 6 -I{} ./find-runts.sh {} 0.25
+	TEST=gbmicrotest xargs -P 8 -I{} ./find-runts.sh {} 0.25
 ./find-runts.sh -s
 ```
 

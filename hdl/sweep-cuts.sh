@@ -1,7 +1,7 @@
 #!/bin/sh
 # Compares ceres with the readable model on many ROMs: the accesses and what
 # the chip's blocks show each other (compare-ceres.sh with CUTS=1 and
-# NOFRAMES=1), JOBS at a time (6):
+# NOFRAMES=1), JOBS at a time (8):
 #
 #   sweep-cuts.sh <NAME> < roms.txt
 #
@@ -30,7 +30,7 @@ cargo build -q --release --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner
 
 cd "$HDL"
 export CUTS=1 NOFRAMES=1
-xargs -P "${JOBS:-6}" -I{} sh -c '
+xargs -P "${JOBS:-8}" -I{} sh -c '
 	rom=$1
 	dir=build/compare/${rom%.*}
 	mkdir -p "$dir"

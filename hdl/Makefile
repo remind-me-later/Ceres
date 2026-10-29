@@ -33,7 +33,7 @@ TRACE   ?= trace.txt
 PHASES  ?= phases.txt
 ORACLE  ?=
 SCREEN  ?=
-JOBS    ?= 6
+JOBS    ?= 8
 
 BUILD   := build
 DMG_SIM := ../external/reference-implementations/dmg-sim

@@ -28,7 +28,7 @@ set -eu
 
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
-JOBS=${JOBS:-6}
+JOBS=${JOBS:-8}
 TESTS=${TESTS:-$HDL/tests.txt}
 PHASES=${PHASES:-0}
 QUICKBOOT=$ROOT/external/reference-implementations/dmg-sim/boot/quickboot.bin
