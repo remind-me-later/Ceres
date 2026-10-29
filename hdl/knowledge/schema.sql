@@ -42,10 +42,11 @@ CREATE TABLE fact_need (fact TEXT, need TEXT);
 CREATE TABLE fact_tag (fact TEXT, file TEXT, line INTEGER);
 
 -- The races' verdicts (hdl/races.toml): order or width and the evidence;
--- the facts that rest on each; the delays (signal tco: all the
+-- the models whose readable model has each; the facts that rest on each; the delays (signal tco: all the
 -- flip-flops') and the signals with short pulses that each covers (a
 -- vector's name covers every bit).
 CREATE TABLE race (id TEXT PRIMARY KEY, title TEXT, race TEXT, evidence TEXT);
+CREATE TABLE race_model (race TEXT, model TEXT);
 CREATE TABLE race_fact (race TEXT, fact TEXT);
 CREATE TABLE race_delay (race TEXT, entity TEXT, signal TEXT);
 CREATE TABLE race_signal (race TEXT, entity TEXT, signal TEXT);
@@ -74,6 +75,14 @@ SELECT *
 FROM rule r
 WHERE EXISTS (SELECT 1 FROM rule_model m JOIN tree_model t ON t.model = m.model
               WHERE m.rule = r.id);
+
+-- The races of the model that rtl/ is: the ones that cover its delays and
+-- pulses.
+CREATE VIEW race_here AS
+SELECT *
+FROM race r
+WHERE EXISTS (SELECT 1 FROM race_model m JOIN tree_model t ON t.model = m.model
+              WHERE m.race = r.id);
 
 -- The facts about the model that rtl/ is.
 CREATE VIEW fact_here AS
@@ -111,7 +120,7 @@ GROUP BY entity, signal, kind;
 CREATE VIEW delay_race AS
 SELECT d.*, rd.race
 FROM delay d
-LEFT JOIN race_delay rd
+LEFT JOIN (SELECT * FROM race_delay WHERE race IN (SELECT id FROM race_here)) rd
        ON (rd.entity = '' AND rd.signal = 'tco' AND d.delays = 'tco')
        OR (rd.entity = d.entity AND rd.signal = d.signal);
 
@@ -119,7 +128,7 @@ LEFT JOIN race_delay rd
 CREATE VIEW runt_race AS
 SELECT r.*, rs.race
 FROM runt_at_control_by_signal r
-LEFT JOIN race_signal rs
+LEFT JOIN (SELECT * FROM race_signal WHERE race IN (SELECT id FROM race_here)) rs
        ON rs.entity = r.entity
       AND (rs.signal = r.signal
            OR rs.signal = CASE WHEN instr(r.signal, '(') > 0

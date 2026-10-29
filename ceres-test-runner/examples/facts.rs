@@ -206,6 +206,15 @@ fn race_tables(dir: &Path) {
     };
     table(
         dir,
+        "race_model",
+        races.iter().flat_map(|(id, r)| {
+            r.models
+                .iter()
+                .map(move |m| vec![id.clone(), m.name().to_owned()])
+        }),
+    );
+    table(
+        dir,
         "race_fact",
         races
             .iter()
