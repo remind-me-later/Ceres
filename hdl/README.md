@@ -388,7 +388,10 @@ on Rust transcriptions of some of the model's blocks: `NetTimer`
 `NetIf` (`ceres-core/src/interrupts/netlist.rs`, of `interrupts.vhd` and
 the request latch of `sm83_interrupts.vhd`) and `NetDma`
 (`ceres-core/src/memory/netlist.rs`, of `dma.vhd`, clocked by `dma_phi`,
-which stops while the CPU is halted). `trace-blocks.sh` records those
+which stops while the CPU is halted), and `NetLcd`
+(`ceres-core/src/ppu/display/timing/netlist.rs`, of `lcd_timing.vhd`'s
+line clock, LY, VBlank, LY = LYC and STAT interrupt line, edge by edge;
+the first block of the PPU, not replayed yet). `trace-blocks.sh` records those
 blocks at the end of every phase while the model runs a ROM (the testbench's
 `BLOCKS`), and ceres-core's test `netlist_replay` replays every trace in
 `build/blocks` through the transcriptions, phase by phase, with the model's

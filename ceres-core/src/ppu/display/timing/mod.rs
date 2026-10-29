@@ -24,6 +24,11 @@
 //! pixel pipeline resyncs at every line end; `h = 0` is where LY changes for
 //! a CPU read (gambatte's clock, which its tests are written against).
 
+#[cfg(any(kani, test))]
+mod netlist;
+#[cfg(kani)]
+mod netlist_proofs;
+
 use {
     super::{LAST_LINE, LINE_LENGTH, LINES},
     crate::{
