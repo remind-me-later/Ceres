@@ -88,6 +88,9 @@ fn ceres_m_cycle(
 
 /// From equal IF and IE, an M-cycle with any access and any rises of the
 /// sources gives the same read, the same interrupt taken, and equal IF.
+// @assumes transcription-if
+// @assumes mapping-m-cycle-at-e
+// @discharges if-sees-rises-by-t-cycle
 #[kani::proof]
 #[kani::unwind(9)]
 fn netlist_if_bisimulation() {

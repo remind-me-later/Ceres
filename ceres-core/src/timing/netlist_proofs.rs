@@ -232,6 +232,10 @@ pub(crate) fn known_difference(net: &NetTimer, access: Access) -> bool {
 
 /// From any related pair, an M-cycle with any access gives the same read and
 /// interrupt, and leaves the pair related.
+// @assumes transcription-timer
+// @assumes mapping-timer-a-edge
+// @assumes timer-known-differences
+// @assumes timer-enable-race-outcome
 #[kani::proof]
 #[kani::unwind(9)]
 fn netlist_timer_bisimulation() {

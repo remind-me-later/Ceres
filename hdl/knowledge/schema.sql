@@ -62,6 +62,15 @@ CREATE TABLE rule_fact (rule TEXT, fact TEXT);
 CREATE TABLE rule_race (rule TEXT, race TEXT);
 CREATE TABLE rule_tag (rule TEXT, file TEXT, line INTEGER);
 
+-- What the proofs against the netlist assume (doc/assumptions.toml): the
+-- evidence and how, the facts and assumptions each rests on; ceres-core's
+-- Kani harnesses and their `@assumes` and `@discharges` tags.
+CREATE TABLE assumption (id TEXT PRIMARY KEY, title TEXT, evidence TEXT, how TEXT);
+CREATE TABLE assumption_fact (assumption TEXT, fact TEXT);
+CREATE TABLE assumption_rests (assumption TEXT, "on" TEXT);
+CREATE TABLE harness (name TEXT, file TEXT, line INTEGER);
+CREATE TABLE harness_tag (function TEXT, claim TEXT, assumption TEXT, file TEXT, line INTEGER);
+
 -- The chips looked at (knowledge.sh's MODELS): by default all that rtl/ has.
 CREATE TABLE tree_model (model TEXT);
 

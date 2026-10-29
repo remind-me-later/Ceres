@@ -2,13 +2,15 @@
 //! questions and what settling them takes, where ceres departs from the
 //! netlist and what that rests on, the races, and where the code tags each
 //! fact. `tsv DIR` writes the facts, their tags, the races of
-//! `hdl/races.toml` and the rules of `hdl/rules.toml` as tables, for the
-//! knowledge database (`hdl/knowledge.sh`).
+//! `hdl/races.toml`, the rules of `hdl/rules.toml`, and the assumptions of
+//! the proofs (`doc/assumptions.toml`) with ceres-core's harnesses and their
+//! tags, as tables, for the knowledge database (`hdl/knowledge.sh`).
 //!
 //! Usage: `cargo run -p ceres-test-runner --example facts -- [open|netlist|races|tags|tsv DIR]`
 //! (the first four without an argument).
 
 use ceres_test_runner::{
+    assumptions,
     facts::{Emulators, Facts, Hardware, Need, Netlist, Race, load, repo_root, tags},
     races, rules,
 };
@@ -175,6 +177,7 @@ fn tsv(facts: &Facts, dir: &Path) {
     );
     race_tables(dir);
     rule_tables(dir);
+    assumption_tables(dir);
 }
 
 /// The races and the signals and delays each covers, as tables.
@@ -257,4 +260,56 @@ fn rule_tables(dir: &Path) {
     );
     table(dir, "rule_fact", each_rule(|r| &r.facts));
     table(dir, "rule_race", each_rule(|r| &r.races));
+}
+
+/// The proofs' assumptions, what each points to, and the harnesses with
+/// their tags, as tables.
+fn assumption_tables(dir: &Path) {
+    let root = repo_root();
+    let assumptions = assumptions::load(&root).expect("doc/assumptions.toml");
+    table(
+        dir,
+        "assumption",
+        assumptions.iter().map(|(id, a)| {
+            vec![
+                id.clone(),
+                a.title.clone(),
+                a.evidence.name().to_owned(),
+                a.how.clone().unwrap_or_default(),
+            ]
+        }),
+    );
+    let each = |list: fn(&assumptions::Assumption) -> &Vec<String>| {
+        assumptions
+            .iter()
+            .flat_map(move |(id, a)| list(a).iter().map(move |v| vec![id.clone(), v.clone()]))
+            .collect::<Vec<_>>()
+    };
+    table(dir, "assumption_fact", each(|a| &a.facts));
+    table(dir, "assumption_rests", each(|a| &a.rests_on));
+    let (tags, harnesses) = assumptions::scan(&root).expect("ceres-core's sources");
+    table(
+        dir,
+        "harness",
+        harnesses.iter().map(|h| {
+            vec![
+                h.name.clone(),
+                h.file.display().to_string(),
+                h.line.to_string(),
+            ]
+        }),
+    );
+    table(
+        dir,
+        "harness_tag",
+        tags.iter().map(|t| {
+            vec![
+                t.function.clone(),
+                t.claim.name().to_owned(),
+                t.id.clone(),
+                t.file.display().to_string(),
+                t.line.to_string(),
+            ]
+        }),
+    );
 }

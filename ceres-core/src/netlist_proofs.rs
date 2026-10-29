@@ -31,6 +31,11 @@ use crate::{
 
 /// From any related pair, an M-cycle with any access to the timer or to IF
 /// gives the same reads and interrupt taken, and leaves the pair related.
+// @assumes transcription-timer
+// @assumes transcription-if
+// @assumes mapping-m-cycle-at-e
+// @assumes mapping-timer-a-edge
+// @assumes timer-known-differences
 #[kani::proof]
 #[kani::unwind(9)]
 fn netlist_timer_and_if() {

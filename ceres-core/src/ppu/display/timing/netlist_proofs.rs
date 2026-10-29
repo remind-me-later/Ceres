@@ -179,6 +179,10 @@ fn related_at(net: &NetLcd, t: &LcdTiming, line: u8, h: i32) -> bool {
 
 /// A half dot of a running LCD: the same rise of the STAT interrupt's line
 /// on both sides, and related states after it.
+// @assumes transcription-lcd
+// @assumes mapping-half-dot
+// @assumes resync-only-in-line-0
+// @assumes hblank-source-off
 #[kani::proof]
 fn netlist_lcd_half_dot() {
     let mut t = any_ceres();
@@ -306,6 +310,12 @@ fn net_m_cycle(net: &mut NetLcd, access: Access) -> (Option<u8>, [bool; 8]) {
 /// An M-cycle with any access to STAT, LY or LYC: the same byte read, the
 /// same rises of the interrupt's line in the same half dots, and related
 /// states after it.
+// @assumes transcription-lcd
+// @assumes mapping-half-dot
+// @assumes mapping-access-at-h0
+// @assumes if-sees-rises-by-t-cycle
+// @assumes hblank-source-off
+// @assumes no-access-in-line-0-after-lcd-on
 #[kani::proof]
 #[kani::unwind(10)]
 fn netlist_lcd_access() {
@@ -414,6 +424,10 @@ fn off_related(net: &NetLcd, t: &LcdTiming) -> bool {
 /// rises in those half dots, and two LCDs off that agree. (2 half dots
 /// would do as well here: E's edge changes nothing in this block; 1 is
 /// caught.)
+// @assumes transcription-lcd
+// @assumes mapping-half-dot
+// @assumes mapping-lcdc-write
+// @assumes if-sees-rises-by-t-cycle
 #[kani::proof]
 fn netlist_lcd_off() {
     let mut t = any_ceres();
@@ -452,6 +466,11 @@ fn netlist_lcd_off() {
 /// enable on and the flag clear from before, ceres raises the line at once,
 /// in the M-cycle before, and the netlist at H. Then ceres's clock runs 2
 /// half dots ahead of the netlist's, as the netlist's line 0 began at D.
+// @assumes transcription-lcd
+// @assumes mapping-half-dot
+// @assumes mapping-lcdc-write
+// @assumes if-sees-rises-by-t-cycle
+// @assumes lcd-on-lyc0-invisible
 #[kani::proof]
 fn netlist_lcd_on() {
     let (mut t, mut net) = any_off();
@@ -513,6 +532,9 @@ fn netlist_lcd_on() {
 /// half dots ahead of the netlist's, until the pixel pipeline resyncs it at
 /// the line's end (`Ppu::timing_line_end`, when ceres's clock reaches 895):
 /// the same rises, and then the states related as on any other line.
+// @assumes transcription-lcd
+// @assumes mapping-half-dot
+// @assumes resync-only-in-line-0
 #[kani::proof]
 fn netlist_lcd_line0() {
     let h: i32 = kani::any();

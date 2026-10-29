@@ -1,0 +1,187 @@
+# What the proofs against the netlist assume.
+#
+# ceres-core's Kani harnesses prove ceres's blocks alike to Rust
+# transcriptions of the readable model (hdl/rtl), which is checked against
+# dmg-sim, the DMG-CPU B's netlist. Each proof takes some things as given:
+# that a transcription is the model, how ceres's time maps onto the
+# netlist's, the differences the facts record, the cases it leaves out. One
+# table per such assumption. A harness names what it rests on with a tag in
+# the comment before its `fn`, `@assumes <id>`, and what it proves for the
+# others with `@discharges <id>`.
+#
+# Fields:
+#
+# - title: the assumption, in a line.
+# - evidence: proved (a harness discharges it), replayed (a transcription,
+#   which ceres-core's netlist_replay checks against the model's traces),
+#   measured (on the model's traces, ceres's runs or hardware), fact (ceres
+#   departs from the netlist there, as the facts record) or open (not known
+#   yet: the proofs leave the case out).
+# - how: how it was replayed or measured, or what leaves it open (all but
+#   proved).
+# - facts (optional): the facts of doc/facts.toml it rests on (fact).
+# - rests_on (optional): the assumptions it takes as given in turn.
+#
+# The knowledge base (hdl/knowledge.sh, knowledge/knowledge.dl) follows
+# them from harness to harness: an assumption that a harness discharges
+# brings in what that harness rests on. `knowledge.sh check` finds the tags
+# and fields that name nothing, the netlist harnesses that state nothing,
+# the proved assumptions no harness proves, and the proofs that rest on
+# what they prove; `knowledge.sh assumptions` lists what each harness rests
+# on, and `knowledge.sh open-assumptions` the open ones.
+
+# The readable model and its transcriptions
+
+[readable-model-is-dmg-sim]
+title = "The readable model (hdl/rtl) does what dmg-sim, the DMG-CPU B's netlist, does"
+evidence = "measured"
+how = "make check: check/chip_tb.vhd compares the model with dmg-sim's recorded signals, phase by phase, for every test in build/runs (hdl/README.md)."
+
+[transcription-timer]
+title = "NetTimer is divider.vhd and timer.vhd, phase by phase"
+evidence = "replayed"
+how = "netlist_replay over the timer and interrupt ROMs' traces (gbmicrotest, Mooneye, Gambatte): no difference."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[transcription-if]
+title = "NetIf is interrupts.vhd and the request latch and acknowledge of sm83_interrupts.vhd, phase by phase"
+evidence = "replayed"
+how = "netlist_replay over the timer and interrupt ROMs' traces: no difference."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[transcription-dma]
+title = "NetDma is dma.vhd, phase by phase, clocked by dma_phi"
+evidence = "replayed"
+how = "netlist_replay over 169 ROMs' traces: no difference."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[transcription-lcd]
+title = "NetLcd is lcd_timing.vhd's line clock, LY, VBlank, LY = LYC, LYC's and STAT's latches and the STAT line, edge by edge"
+evidence = "replayed"
+how = "netlist_replay over 169 gbmicrotest LCD ROMs (50.8 million phases), and the sprite, OAM and late_sizechange ROMs: no difference."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[transcription-scan]
+title = "NetScan is oam_scan.vhd, edge by edge, on NetLcd's clocks"
+evidence = "replayed"
+how = "netlist_replay over the 123 ROMs traced with the scan (73,950 saves, 147,423 stops): no difference."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[transcription-oam-latches]
+title = "NetOamLatches is oam.vhd's two stages of latches of the Y, while the CPU does not address OAM"
+evidence = "replayed"
+how = "netlist_replay over the 123 ROMs traced with the scan, the phases where the CPU addresses OAM left out (its read strobe is not traced): no difference."
+rests_on = ["readable-model-is-dmg-sim"]
+
+# How ceres's time maps onto the netlist's
+
+[mapping-m-cycle-at-e]
+title = "Ceres's M-cycle starts at the netlist's E: an IF write lands after its first T-cycle, an interrupt's acknowledge after its second, a source's rise in T-cycle 1, 2 or 3-4 is the netlist's in E-G, H or A-D"
+evidence = "measured"
+how = "The model's traces of m2m1irq_ifw_3 and of the timer ROMs: line 144's STAT rise at D (ceres's T4), VBlank's at H (T2)."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[mapping-timer-a-edge]
+title = "The netlist's A edge falls in ceres's third or fourth T-cycle: the divider counts in the fourth, the timer's interrupt in the third"
+evidence = "measured"
+how = "The model's traces of the timer ROMs, which the timer's replay follows phase by phase."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[mapping-dma-step-at-a]
+title = "Ceres's OAM DMA steps in the M-cycle's third T-cycle, at the netlist's A edge, as dma_phi rises"
+evidence = "measured"
+how = "The model's DMA traces (169 ROMs), which the DMA's replay follows by dma_phi."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[dma-one-run-per-m-cycle]
+title = "Ceres runs its OAM DMA once per M-cycle, over its four T-cycles, as when the CPU accesses memory in every M-cycle"
+evidence = "open"
+how = "The DMA's proof models Gb::run_dma so; M-cycles split around other accesses, the halt and the speed switch are not modelled."
+
+[mapping-half-dot]
+title = "Ceres's half dot is a clock edge of the netlist: D is h = 0 (mod 8), E 1, H 4; vclk rises at 904"
+evidence = "measured"
+how = "netlist_replay's traces of 169 gbmicrotest LCD ROMs, against ceres's LcdTiming."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[mapping-access-at-h0]
+title = "Ceres's CPU accesses to STAT, LY and LYC fall at h = 0 (mod 8), from the end of the first line after the LCD is turned on"
+evidence = "measured"
+how = "All 28 accesses to these registers in 60 gbmicrotest ROMs; in that first line, 35 at h = 2."
+
+[mapping-lcdc-write]
+title = "Ceres lands a DMG LCDC write 2 half dots before its access (OBJ_SIZE with DmgLcdc's second write); the netlist's latch opens in E"
+evidence = "measured"
+how = "Ceres's writes at h = 8m + 6 (temporary prints over six late_sizechange runs); all 46 changes of LCDC bit 2 in the model's traces in E."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[mapping-scan-reads]
+title = "Ceres's object search reads sprite i at half dot 4i - 3 of the line"
+evidence = "measured"
+how = "All 677,840 reads of six runs of late_sizechange ROMs (temporary prints); the state machine is outside the proofs."
+
+[mapping-scan-dma-order]
+title = "Ceres's object search, reading at the A edge, sees its OAM DMA as before that edge's step"
+evidence = "measured"
+how = "Gambatte's DMG late_sp traces: the run rose in index k's window and ceres hid from sprite k + 1 (k = 0, 2, 38), fell there and ceres hid up to k (k = 0, 2)."
+
+[resync-only-in-line-0]
+title = "The pixel pipeline's line-end resync moves ceres's clock only in line 0 after the LCD is turned on (895 to 893); on the other lines it finds 893"
+evidence = "measured"
+how = "The traces of 169 gbmicrotest LCD ROMs, against ceres's clock at each resync."
+
+[scan-latches-equal-at-start]
+title = "OAM's latches hold the same Y in the netlist and in ceres as a scan starts: the line before's last read or sprite fetch"
+evidence = "measured"
+how = "hdl/check/dma_fetch.asm: all 1666 sprite fetches during a DMA take the same byte; Gambatte's late_sp scans agree with the model in every scan."
+rests_on = ["readable-model-is-dmg-sim"]
+
+# Differences the facts record, and what the CPU cannot see
+
+[timer-known-differences]
+title = "The timer's two known differences: a tick lost during the reload, and an overflow unseen after it"
+evidence = "fact"
+how = "timing/netlist_proofs.rs, known_difference: the harness leaves those M-cycles out."
+facts = ["tima-reload-tick", "tima-reload-unseen-overflow"]
+
+[timer-enable-race-outcome]
+title = "Enabling the timer with TAC does not count the race's tick, as on the DMG ceres follows"
+evidence = "fact"
+how = "The proof's netlist takes enable_race_counts = false."
+facts = ["timer-enable-race"]
+
+[lcd-on-lyc0-invisible]
+title = "With LYC 0, its enable on and the flag clear, ceres raises the STAT line an M-cycle before the netlist as the LCD is turned on, which the CPU cannot see"
+evidence = "measured"
+how = "hdl/check/lcd_on_lyc0.asm enters the handler after the same instruction on the model and on ceres."
+
+# What the proofs prove for each other
+
+[if-sees-rises-by-t-cycle]
+title = "A source's rise in a T-cycle of ceres reaches IF as the netlist's in the phases that T-cycle maps to"
+evidence = "proved"
+
+[dma-runs-is-netlist-run]
+title = "Dma::runs is the netlist's run, after the CPU's access and after the M-cycle, a restart included"
+evidence = "proved"
+
+[search-keeps-first-ten]
+title = "Ceres's object search keeps the first ten sprites on the line: a step adds a sprite when it is on the line and the list has room"
+evidence = "proved"
+
+# What the proofs leave out
+
+[hblank-source-off]
+title = "The HBlank source of STAT is off"
+evidence = "open"
+how = "render.vhd's mode 0 is not transcribed: the line timing's harnesses hold its enable off."
+
+[no-access-in-line-0-after-lcd-on]
+title = "No access to STAT, LY or LYC in the first line after the LCD is turned on"
+evidence = "open"
+how = "There ceres's accesses fall at h = 2, off the netlist's phases, until the resync; the access harness leaves the line out."
+
+[cpu-does-not-address-oam]
+title = "The CPU does not address OAM (FExx) during the OAM scan"
+evidence = "open"
+how = "Its read strobe opens OAM's first latches, and its address changes the precharge (oam.vhd); the scan's harnesses leave it out."

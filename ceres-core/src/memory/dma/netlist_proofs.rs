@@ -195,6 +195,11 @@ fn related(net: &NetDma, ceres: &Ceres) -> bool {
 /// From any related pair, an M-cycle with any access to FF46 gives the same
 /// read, OAM write and blocking of the CPU's OAM accesses, and leaves the
 /// pair related.
+// @assumes transcription-dma
+// @assumes mapping-m-cycle-at-e
+// @assumes mapping-dma-step-at-a
+// @assumes dma-one-run-per-m-cycle
+// @discharges dma-runs-is-netlist-run
 #[kani::proof]
 #[kani::unwind(5)]
 fn netlist_dma_bisimulation() {

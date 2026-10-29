@@ -7,6 +7,7 @@
 //! that sweep a directory compare their failures with a list in `tests/`
 //! (see [`check_known_failures`]).
 
+pub mod assumptions;
 pub mod checks;
 pub mod facts;
 pub mod gambatte;

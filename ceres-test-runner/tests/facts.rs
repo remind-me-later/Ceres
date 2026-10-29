@@ -12,6 +12,14 @@ fn facts_hold_together() {
 }
 
 #[test]
+fn assumptions_parse() {
+    let root = repo_root();
+    let assumptions = ceres_test_runner::assumptions::load(&root).expect("doc/assumptions.toml");
+    assert!(!assumptions.is_empty(), "no assumptions");
+    ceres_test_runner::assumptions::scan(&root).expect("ceres-core's sources");
+}
+
+#[test]
 fn races_hold_together() {
     let root = repo_root();
     let facts = load(&root).expect("doc/facts.toml");

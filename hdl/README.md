@@ -471,10 +471,36 @@ sqlite3 -column -header build/knowledge.db
 A check is a relation that must be empty: a delay or a short pulse at a
 control without a verdict, a verdict naming what `rtl/` does not have, a
 fact on a width race that no race names, a fact that needs a rule and has
-none, an applied rule without its tag, two rules explaining the same facts.
+none, an applied rule without its tag, two rules explaining the same facts,
+and the proofs' assumptions below.
 Each was a query of SQL before (2026-10-29); on the same tables, and on a
 dozen copies broken so that each check finds something, the two found the
 same rows.
+
+### What the proofs assume
+
+ceres-core's proofs against the netlist each take some things as given: a
+transcription of a block of `rtl/` (checked by `netlist_replay`), a
+mapping of ceres's time onto the netlist's (measured on traces), a
+difference the facts record, or a case left out. Each is an entry of
+[../doc/assumptions.toml](../doc/assumptions.toml), with its evidence:
+proved, replayed, measured, fact or open. A harness names what it rests on
+with `@assumes` tags before its `fn`, and what it proves for the others
+with `@discharges` tags. The knowledge base follows them recursively:
+`netlist_scan_dma` assumes `dma-runs-is-netlist-run`, which
+`netlist_dma_bisimulation` discharges, so the scan's proof also rests on
+what the DMA's assumes, such as the open `dma-one-run-per-m-cycle`.
+
+```sh
+./knowledge.sh assumptions        # what each proof rests on, and the evidence
+./knowledge.sh open-assumptions   # the open ones, and the proofs resting on each
+```
+
+`knowledge.sh check` finds the tags and fields that name nothing, a
+harness against the netlist with no tag, a proved assumption no harness
+proves (or one that is not proved and is discharged), an entry nothing
+uses, and a proof that rests, through the others, on what it proves. So
+what is not proved is written down: open, measured or a fact.
 
 ### The rules beyond the die
 

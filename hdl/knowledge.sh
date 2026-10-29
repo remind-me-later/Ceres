@@ -7,7 +7,8 @@
 #   knowledge.sh check          build it, and run the checks: the relations of
 #                               knowledge/knowledge.dl (Soufflé), each of
 #                               which must be empty (exits 1 if one is not)
-#   knowledge.sh NAME           build it, and run knowledge/queries/NAME.sql
+#   knowledge.sh NAME           build it, and run knowledge/queries/NAME.sql,
+#                               or the query NAME of knowledge/knowledge.dl
 #   knowledge.sh list           the queries and the checks, with what each
 #                               finds
 #
@@ -50,11 +51,27 @@ build() {
 		cat knowledge/schema.sql
 		echo ".mode tabs"
 		for table in instance signal control delay hw_tag runt fact fact_model fact_test fact_open \
-			fact_need fact_tag race race_model race_fact race_delay race_signal rule rule_model rule_fact rule_race rule_tag tree_model; do
+			fact_need fact_tag race race_model race_fact race_delay race_signal rule rule_model rule_fact rule_race rule_tag \
+			assumption assumption_fact assumption_rests harness harness_tag tree_model; do
 			echo ".import $TABLES/$table.tsv $table"
 		done
 	} | sqlite3 "$DB.new"
 	mv "$DB.new" "$DB"
+}
+
+# Runs knowledge/knowledge.dl on the tables, into build/knowledge-dl.
+datalog() {
+	command -v souffle >/dev/null || { echo "knowledge.sh needs Soufflé (souffle) for this" >&2; exit 2; }
+	out=$HDL/build/knowledge-dl
+	rm -rf "$out"
+	mkdir -p "$out"
+	souffle -F "$TABLES" -D "$out" "$HDL/knowledge/knowledge.dl"
+}
+
+# The checks' or the queries' facts of knowledge/knowledge.dl:
+# RELATION("NAME",\n "TITLE"), as NAME<tab>TITLE.
+dl_list() {
+	sed -n "/^$1(\"/{N;s/^$1(\"\([^\"]*\)\",\n *\"\(.*\)\")\.\$/\1\t\2/p}" "$HDL/knowledge/knowledge.dl"
 }
 
 # Runs a query file, with its first comment line as a title.
@@ -71,19 +88,16 @@ list)
 	for f in "$HDL"/knowledge/queries/*.sql; do
 		printf '%-40s %s\n' "queries/$(basename "$f" .sql)" "$(sed -n '1s/^-- //p' "$f")"
 	done
-	# The checks' facts: check("NAME",\n "TITLE").
-	sed -n '/^check("/{N;s/^check("\([^"]*\)",\n *"\(.*\)")\.$/\1\t\2/p}' "$HDL/knowledge/knowledge.dl" |
-		while IFS='	' read -r name title; do
-			printf '%-40s %s\n' "checks/$name" "$title"
-		done
+	dl_list query | while IFS='	' read -r name title; do
+		printf '%-40s %s\n' "queries/$name" "$title"
+	done
+	dl_list check | while IFS='	' read -r name title; do
+		printf '%-40s %s\n' "checks/$name" "$title"
+	done
 	;;
 check)
-	command -v souffle >/dev/null || { echo "knowledge.sh check needs Soufflé (souffle)" >&2; exit 2; }
 	build
-	out=$HDL/build/knowledge-checks
-	rm -rf "$out"
-	mkdir -p "$out"
-	souffle -F "$TABLES" -D "$out" "$HDL/knowledge/knowledge.dl"
+	datalog
 	failed=0
 	while IFS='	' read -r name title; do
 		# A header, then a row for each thing the check finds.
@@ -97,8 +111,17 @@ check)
 	exit $failed
 	;;
 *)
-	[ -f "$HDL/knowledge/queries/$1.sql" ] || { echo "no query $1 (knowledge.sh list)" >&2; exit 2; }
-	build
-	query "$HDL/knowledge/queries/$1.sql"
+	if [ -f "$HDL/knowledge/queries/$1.sql" ]; then
+		build
+		query "$HDL/knowledge/queries/$1.sql"
+	elif title=$(dl_list query | awk -F '	' -v n="$1" '$1 == n { print $2; found = 1 } END { exit !found }'); then
+		build
+		datalog
+		echo "$title"
+		column -t -s '	' "$out/$1.tsv"
+	else
+		echo "no query $1 (knowledge.sh list)" >&2
+		exit 2
+	fi
 	;;
 esac

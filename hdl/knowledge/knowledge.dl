@@ -37,6 +37,18 @@
 // The chips looked at (knowledge.sh's MODELS).
 .decl tree_model(model: symbol)
 
+// What the proofs against the netlist assume (doc/assumptions.toml): the
+// evidence (proved, replayed, measured, fact or open) and how; the facts
+// each rests on and the assumptions it takes as given in turn; ceres-core's
+// Kani harnesses, and their tags: what each assumes, and what it
+// discharges (proves for the others).
+.decl assumption(id: symbol, title: symbol, evidence: symbol, how: symbol)
+.decl assumption_fact(assumption: symbol, fact: symbol)
+.decl assumption_rests(assumption: symbol, on: symbol)
+.decl harness(name: symbol, file: symbol, line: number)
+.decl harness_tag(function: symbol, claim: symbol, assumption: symbol, file: symbol,
+                  line: number)
+
 .input signal(IO=file, filename="signal.tsv")
 .input control(IO=file, filename="control.tsv")
 .input delay(IO=file, filename="delay.tsv")
@@ -53,6 +65,11 @@
 .input rule_fact(IO=file, filename="rule_fact.tsv")
 .input rule_tag(IO=file, filename="rule_tag.tsv")
 .input tree_model(IO=file, filename="tree_model.tsv")
+.input assumption(IO=file, filename="assumption.tsv")
+.input assumption_fact(IO=file, filename="assumption_fact.tsv")
+.input assumption_rests(IO=file, filename="assumption_rests.tsv")
+.input harness(IO=file, filename="harness.tsv")
+.input harness_tag(IO=file, filename="harness_tag.tsv")
 
 // What the tables say, for the chips looked at. schema.sql has the same
 // views for the queries (rule_here, race_here, fact_here, runt_at_control,
@@ -107,6 +124,18 @@ fact_needing_rule(f) :- fact(f, _, "differs", "same", _, _, _).
 fact_needing_rule(f) :- fact(f, _, "same", "differs", _, _, _).
 fact_needing_rule(f) :- fact(f, _, "silent", h, _, _, _), h != "none".
 fact_needing_rule(f) :- fact(f, _, n, h, _, "width", _), n != "none", h != "none".
+
+// What a proof rests on: what its harness assumes, what those rest on in
+// turn, and what the harnesses that prove them rest on (recursively: a
+// proof that discharges an assumption brings in its own).
+.decl assumes(harness: symbol, assumption: symbol)
+assumes(h, a) :- harness_tag(h, "assumes", a, _, _).
+.decl discharges(harness: symbol, assumption: symbol)
+discharges(h, a) :- harness_tag(h, "discharges", a, _, _).
+.decl rests(harness: symbol, assumption: symbol)
+rests(h, a) :- assumes(h, a).
+rests(h, b) :- rests(h, a), assumption_rests(a, b).
+rests(h, b) :- rests(h, a), discharges(p, a), rests(p, b).
 
 // The checks: each must find nothing.
 
@@ -188,8 +217,68 @@ fact_with_race_here(f) :- race_fact(r, f), race_here(r).
 width_facts_without_race(f, title) :-
     fact_here(f), fact(f, title, n, _, _, "width", _), n != "none", !fact_with_race_here(f).
 
+// The tags and the fields of doc/assumptions.toml that name nothing: an
+// assumption, a fact.
+.decl assumptions_naming_nothing(place: symbol, names: symbol)
+.decl assumption_id(id: symbol)
+assumption_id(a) :- assumption(a, _, _, _).
+.decl fact_id(id: symbol)
+fact_id(f) :- fact(f, _, _, _, _, _, _).
+assumptions_naming_nothing(cat(file, ":", to_string(line)), a) :-
+    harness_tag(_, _, a, file, line), !assumption_id(a).
+assumptions_naming_nothing(cat("doc/assumptions.toml [", a, "] rests_on"), b) :-
+    assumption_rests(a, b), !assumption_id(b).
+assumptions_naming_nothing(cat("doc/assumptions.toml [", a, "] facts"), f) :-
+    assumption_fact(a, f), !fact_id(f).
+
+// The tags on what is not a Kani harness, and the harnesses against the
+// netlist (named netlist_*) that state nothing they assume or prove.
+.decl harnesses_stating_nothing(harness: symbol, problem: symbol)
+.decl harness_name(name: symbol)
+harness_name(h) :- harness(h, _, _).
+.decl stating(harness: symbol)
+stating(h) :- harness_tag(h, _, _, _, _).
+harnesses_stating_nothing(h, cat("tagged at ", file, ":", to_string(line), ", not a harness")) :-
+    harness_tag(h, _, _, file, line), !harness_name(h).
+harnesses_stating_nothing(h, "a harness against the netlist with no tag") :-
+    harness(h, _, _), match("netlist_.*", h), !stating(h).
+
+// The assumptions whose evidence does not hold: proved that no harness
+// proves, a fact that names no fact, the others without a how; and the
+// entries nothing assumes, proves or rests on.
+.decl assumptions_without_evidence(assumption: symbol, problem: symbol)
+.decl discharged(assumption: symbol)
+discharged(a) :- discharges(_, a).
+.decl with_fact(assumption: symbol)
+with_fact(a) :- assumption_fact(a, _).
+.decl used(assumption: symbol)
+used(a) :- harness_tag(_, _, a, _, _).
+used(b) :- assumption_rests(_, b).
+assumptions_without_evidence(a, "proved, and no harness discharges it") :-
+    assumption(a, _, "proved", _), !discharged(a).
+assumptions_without_evidence(a, "a fact, and names none") :-
+    assumption(a, _, "fact", _), !with_fact(a).
+assumptions_without_evidence(a, cat(e, ", and says not how")) :-
+    assumption(a, _, e, ""), e != "proved".
+assumptions_without_evidence(a, "discharged, but not proved") :-
+    assumption(a, _, e, _), e != "proved", discharged(a).
+assumptions_without_evidence(a, "nothing assumes, proves or rests on it") :-
+    assumption_id(a), !used(a).
+
+// The proofs that rest on what they prove, through the others.
+.decl proofs_resting_on_themselves(harness: symbol, assumption: symbol)
+proofs_resting_on_themselves(h, a) :- discharges(h, a), rests(h, a).
+
 // The checks' names and what each finds, for ../knowledge.sh.
 .decl check(name: symbol, title: symbol)
+check("assumptions-naming-nothing",
+      "The tags of the proofs and the fields of doc/assumptions.toml that name no assumption or fact.").
+check("assumptions-without-evidence",
+      "The assumptions whose evidence does not hold, and those nothing uses.").
+check("harnesses-stating-nothing",
+      "The tags that are not on a Kani harness, and the harnesses against the netlist with no tag.").
+check("proofs-resting-on-themselves",
+      "The proofs that rest, through the others, on what they prove.").
 check("applied-rules-without-tag",
       "The rules applied in rtl/ that no `@rule` tag shows, and the tags that name no rule applied here.").
 check("delays-without-verdict",
@@ -206,6 +295,11 @@ check("width-facts-without-race",
       "The facts about the chips looked at on a width race of the netlist that no race of theirs names.").
 .output check(IO=file, filename="checks.tsv")
 
+.output assumptions_naming_nothing(IO=file, filename="assumptions-naming-nothing.tsv", headers=true)
+.output assumptions_without_evidence(IO=file, filename="assumptions-without-evidence.tsv", headers=true)
+.output harnesses_stating_nothing(IO=file, filename="harnesses-stating-nothing.tsv", headers=true)
+.output proofs_resting_on_themselves(IO=file, filename="proofs-resting-on-themselves.tsv", headers=true)
+
 .output applied_rules_without_tag(IO=file, filename="applied-rules-without-tag.tsv", headers=true)
 .output delays_without_verdict(IO=file, filename="delays-without-verdict.tsv", headers=true)
 .output facts_without_rule(IO=file, filename="facts-without-rule.tsv", headers=true)
@@ -213,3 +307,21 @@ check("width-facts-without-race",
 .output races_naming_nothing(IO=file, filename="races-naming-nothing.tsv", headers=true)
 .output rules_explaining_the_same(IO=file, filename="rules-explaining-the-same.tsv", headers=true)
 .output width_facts_without_race(IO=file, filename="width-facts-without-race.tsv", headers=true)
+
+// The queries in Datalog, for ../knowledge.sh NAME (the others are SQL, in
+// queries/).
+.decl query(name: symbol, title: symbol)
+query("assumptions",
+      "What each proof against the netlist rests on, directly or through the proofs of what it assumes, and the evidence.").
+query("open-assumptions",
+      "The open assumptions, and the proofs that rest on each.").
+.output query(IO=file, filename="queries.tsv")
+
+.decl assumptions(harness: symbol, assumption: symbol, evidence: symbol, via: symbol)
+assumptions(h, a, e, "directly") :- assumes(h, a), assumption(a, _, e, _).
+assumptions(h, a, e, "through others") :- rests(h, a), !assumes(h, a), assumption(a, _, e, _).
+.output assumptions(IO=file, filename="assumptions.tsv", headers=true)
+
+.decl open_assumptions(assumption: symbol, harness: symbol, title: symbol)
+open_assumptions(a, h, title) :- rests(h, a), assumption(a, title, "open", _).
+.output open_assumptions(IO=file, filename="open-assumptions.tsv", headers=true)

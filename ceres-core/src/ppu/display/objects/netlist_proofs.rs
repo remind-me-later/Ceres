@@ -52,6 +52,7 @@ const LINES: u8 = 144;
 
 /// A Y that the netlist's comparator puts on `line` is one ceres puts there,
 /// for both heights.
+// @assumes transcription-scan
 #[kani::proof]
 fn netlist_scan_y_match() {
     let y: u8 = kani::any();
@@ -227,6 +228,14 @@ fn ceres_search(
 /// A whole scan of a visible line with any Ys, and a write of LCDC bit 2 in
 /// any M-cycle around it: the netlist saves the first ten sprites on the
 /// line, in index order, with the heights ceres's search reads.
+// @assumes transcription-scan
+// @assumes transcription-oam-latches
+// @assumes mapping-half-dot
+// @assumes mapping-scan-reads
+// @assumes mapping-lcdc-write
+// @assumes search-keeps-first-ten
+// @assumes cpu-does-not-address-oam
+// @assumes scan-latches-equal-at-start
 #[kani::proof]
 #[kani::unwind(200)]
 fn netlist_scan_selection() {
@@ -271,6 +280,16 @@ fn netlist_scan_selection() {
 /// before the DMA for the sprites it hides, and the netlist saves the first
 /// ten sprites on the line that ceres's search finds. The Y OAM's latches
 /// hold as the scan starts is any, the same on both.
+// @assumes transcription-scan
+// @assumes transcription-oam-latches
+// @assumes mapping-half-dot
+// @assumes mapping-scan-reads
+// @assumes mapping-scan-dma-order
+// @assumes mapping-dma-step-at-a
+// @assumes dma-runs-is-netlist-run
+// @assumes search-keeps-first-ten
+// @assumes cpu-does-not-address-oam
+// @assumes scan-latches-equal-at-start
 #[kani::proof]
 #[kani::unwind(200)]
 fn netlist_scan_dma() {
@@ -323,6 +342,7 @@ fn netlist_scan_dma() {
 /// of up to ten sprites, `consider` adds the sprite when it is on the line and
 /// the list has room, and keeps the rest. Sprite after sprite, from the empty
 /// list at the start of the scan, it keeps the ten the netlist saves.
+// @discharges search-keeps-first-ten
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_scan_consider() {
