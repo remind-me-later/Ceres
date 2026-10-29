@@ -81,6 +81,10 @@ impl Status {
 pub struct Rule {
     pub title: String,
     pub models: Vec<ModelName>,
+    /// The models that would follow one of `models` and do not: the CGB
+    /// follows the DMG where nothing says otherwise.
+    #[serde(default)]
+    pub not_on: Vec<ModelName>,
     pub kind: Kind,
     pub status: Status,
     #[serde(default)]
@@ -111,6 +115,11 @@ pub fn problems(rules: &Rules, facts: &Facts, races: &Races) -> Vec<String> {
         }
         if rule.facts.is_empty() {
             problem("explains no fact".to_owned());
+        }
+        for model in &rule.not_on {
+            if rule.models.iter().any(|m| m.overlaps(*model)) {
+                problem(format!("not on {}, which its models name", model.name()));
+            }
         }
         for fact_id in &rule.facts {
             match facts.get(fact_id) {

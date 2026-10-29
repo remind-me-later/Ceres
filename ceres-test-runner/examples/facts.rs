@@ -258,6 +258,15 @@ fn rule_tables(dir: &Path) {
                 .map(move |m| vec![id.clone(), m.name().to_owned()])
         }),
     );
+    table(
+        dir,
+        "rule_not_on",
+        rules.iter().flat_map(|(id, r)| {
+            r.not_on
+                .iter()
+                .map(move |m| vec![id.clone(), m.name().to_owned()])
+        }),
+    );
     table(dir, "rule_fact", each_rule(|r| &r.facts));
     table(dir, "rule_race", each_rule(|r| &r.races));
 }

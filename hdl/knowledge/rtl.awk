@@ -12,13 +12,15 @@
 #       the file, the line, the entity, the kind of `@hw` tag (die,
 #       measured, inferred) and what it says
 #   awk -v TABLE=rule -f knowledge/rtl.awk rtl/*.vhd
-#       a rule of rules.toml that an `@rule` tag names, the file and the
-#       line
+#       a rule of rules.toml that an `@rule` tag names, the file, the line,
+#       the entity, and the chips the code it is in is for: all, or the
+#       DMG's (dmg) or the CGB's (cgb) of an `if REVISION = DMG_B generate`
+#       or `if REVISION /= DMG_B generate` and its `else generate`
 #
 # The file names are relative to the repository (they are given relative
 # to hdl/).
 
-FNR == 1 { entity = ""; file = "hdl/" FILENAME; stmt = ""; first = 0 }
+FNR == 1 { entity = ""; file = "hdl/" FILENAME; stmt = ""; first = 0; depth = 0; branch[0] = "all" }
 
 {
 	raw = $0
@@ -28,6 +30,29 @@ FNR == 1 { entity = ""; file = "hdl/" FILENAME; stmt = ""; first = 0 }
 		comment = substr(raw, RSTART + 2)
 		line = substr(line, 1, RSTART - 1)
 	}
+}
+
+# The generate statements the line is in, and the chips each is for: an
+# opening pushes its branch (another generate keeps the one it is in), an
+# else swaps the DMG's and the CGB's, an end pops.
+line ~ /:[ \t]*if[ \t]+revision[ \t]*=[ \t]*dmg_b[ \t]+generate/ {
+	branch[++depth] = "dmg"
+}
+line ~ /:[ \t]*if[ \t]+revision[ \t]*\/=[ \t]*dmg_b[ \t]+generate/ {
+	branch[++depth] = "cgb"
+}
+line ~ /:[ \t]*(if|for)[ \t].*generate/ && line !~ /revision[ \t]*\/?=[ \t]*dmg_b/ {
+	branch[depth + 1] = branch[depth]
+	depth++
+}
+line ~ /^[ \t]*else[ \t]+generate/ {
+	if (branch[depth] == "dmg")
+		branch[depth] = "cgb"
+	else if (branch[depth] == "cgb")
+		branch[depth] = "dmg"
+}
+line ~ /^[ \t]*end[ \t]+generate/ && depth > 0 {
+	depth--
 }
 
 match(line, /^entity[ \t]+[a-z0-9_]+/) {
@@ -62,7 +87,15 @@ TABLE == "rule" {
 	while (match(s, /@rule[ \t]+[a-z0-9-]+/)) {
 		id = substr(s, RSTART, RLENGTH)
 		sub(/@rule[ \t]+/, "", id)
-		print id "\t" file "\t" FNR
+		# A tag before the entity (in the file's header) is the file's,
+		# whose name is its entity's.
+		e = entity
+		if (e == "") {
+			e = FILENAME
+			sub(/.*\//, "", e)
+			sub(/\.vhd$/, "", e)
+		}
+		print id "\t" file "\t" FNR "\t" e "\t" branch[depth]
 		s = substr(s, RSTART + RLENGTH)
 	}
 }

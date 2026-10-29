@@ -12,10 +12,14 @@
 # Fields:
 #
 # - title: the rule, in a line.
-# - models: the models it is for, as doc/facts.toml names them. A rule
-#   found on the DMG is the CGB's too where the CGB's model (hdl/cgb.md)
-#   keeps it and no CGB test contradicts it; the evidence says whether a
-#   CGB test shows it.
+# - models: the models it is stated for, as doc/facts.toml names them (a
+#   CGB's covers its revisions). The CGB follows the DMG where nothing says
+#   otherwise (as the MGB and the SGB do): a rule stated for the DMG holds
+#   on the CGB too, unless not_on names it. knowledge.sh followed-rules
+#   lists the rules that hold on a model only so.
+# - not_on (optional): the models that would follow one of models and do
+#   not, where a test of theirs or their own rule says otherwise; the
+#   evidence says what.
 # - kind: delay (a delay's value or range), outcome (which way a pulse of
 #   no width goes), logic (a gate or latch beyond the die's), ram (what a
 #   RAM's cells do that the netlist does not model), state (the power-on
@@ -72,11 +76,12 @@ evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3
 [stat-mode-2-falls-after-mode-3]
 title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"
 models = ["dmg"]
+not_on = ["cgb"]
 kind = "delay"
 status = "applied"
 races = ["stat-mode-2-into-mode-3"]
 facts = ["stat-mode-2-until-mode-3"]
-evidence = "The comment at stat_mode2 in rtl/lcd_timing.vhd: gbmicrotest's oam_write_l1_a and lcdon_to_stat3_c read mode 2 or 3, never 0."
+evidence = "The comment at stat_mode2 in rtl/lcd_timing.vhd: gbmicrotest's oam_write_l1_a and lcdon_to_stat3_c read mode 2 or 3, never 0. Not on the CGB: its model reads the mode bits on a path of its own (cgb-read-delays: mode 2 until h = 157, then mode 3), so that a read never sees 0 between them either."
 
 [stat-flag-takes-a-flip-flops-dip]
 title = "IF's STAT flag takes a dip of STAT's interrupt line a flip-flop wide, not one two gates wide"
@@ -108,10 +113,11 @@ evidence = "Ceres matches the screenshots of Mealybug's m3_bgp_change and m3_win
 [dma-source-fe00-ff00]
 title = "An OAM DMA from FE00 or FF00 copies FF and 00, as ceres does"
 models = ["dmg"]
+not_on = ["cgb"]
 kind = "unknown"
 status = "proposed"
 facts = ["dma-from-fe00-ff00"]
-evidence = "Gambatte's oamdma_srcFE00 and oamdma_srcFF00 ROMs: ceres passes, the model and dmg-sim copy 83 or 64."
+evidence = "Gambatte's oamdma_srcFE00 and oamdma_srcFF00 ROMs: ceres passes, the model and dmg-sim copy 83 or 64. Not on the CGB: the srcFF00 ROMs expect another result there (out1 on the DMG-08, out0 on the CGB-04C), which ceres gives with the CGB's DMA reading FF from E000 up."
 
 [dma-holds-external-bus]
 title = "Cartridge RAM read while an OAM DMA has the external bus gives the DMA's byte"
@@ -140,26 +146,29 @@ evidence = "gbmicrotest's poweron_oam_000, poweron_dma_000, poweron_obp0_000 and
 [wave-ram-trigger-collision]
 title = "A trigger of channel 3 while it reads wave RAM corrupts its first bytes"
 models = ["dmg"]
+not_on = ["cgb"]
 kind = "ram"
 status = "proposed"
 facts = ["wave-ram-corruption"]
-evidence = "Blargg's dmg_sound 10-wave trigger while on: ceres passes; the netlist does not model the RAM's cells."
+evidence = "Blargg's dmg_sound 10-wave trigger while on: ceres passes; the netlist does not model the RAM's cells. Not on the CGB: its cgb_sound 10 shows no corruption, and ceres passes it on the CGB-C and the CGB-E without one."
 
 [oam-corruption-values]
 title = "The values the OAM corruption bug writes"
 models = ["dmg"]
+not_on = ["cgb"]
 kind = "ram"
 status = "missing"
 facts = ["oam-corruption-bug"]
-evidence = "Blargg's oam_bug 7-timing_effect fails on ceres, as on SameBoy."
+evidence = "Blargg's oam_bug 7-timing_effect fails on ceres, as on SameBoy. Not on the CGB: on it, Blargg's oam_bug fails the tests that need the corruption (oam_bug-cgb.png: 2, 4, 5, 7 and 8, with code 2), and ceres's CGB has none (the suites run oam_bug on the DMG only)."
 
 [bg-enable-in-mode-3]
 title = "The background's enable written in mode 3, at column 0"
 models = ["dmg"]
+not_on = ["cgb"]
 kind = "unknown"
 status = "missing"
 facts = ["bg-enable-change-column-0"]
-evidence = "Ceres and the model are 4 pixels off the DMG-blob screenshot of Mealybug's m3_lcdc_bg_en_change and 232 off the DMG-CPU B one: the units differ."
+evidence = "Ceres and the model are 4 pixels off the DMG-blob screenshot of Mealybug's m3_lcdc_bg_en_change and 232 off the DMG-CPU B one: the units differ. Not on the CGB: its LCDC bit 0 has a rule of its own (cgb-lcdc-bit-0)."
 
 [halt-op-dupe-delay]
 title = "gbmicrotest's halt_op_dupe_delay"

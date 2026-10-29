@@ -59,12 +59,15 @@
 // kind (delay, outcome, logic, ram, state, analogue, unknown), status
 // (applied, proposed, missing) and the evidence; the models each is for,
 // the facts it explains, the width races it settles, and the `@rule` tags
-// of rtl/.
+// of rtl/ (with the entity and the chips the code is for: all, dmg or cgb,
+// by the `REVISION` generate it is in); the models that would follow one
+// of its models and do not (not_on).
 .decl rule(id: symbol, title: symbol, kind: symbol, status: symbol, evidence: symbol)
 .decl rule_model(rule: symbol, model: symbol)
+.decl rule_not_on(rule: symbol, model: symbol)
 .decl rule_fact(rule: symbol, fact: symbol)
 .decl rule_race(rule: symbol, race: symbol)
-.decl rule_tag(rule: symbol, file: symbol, line: number)
+.decl rule_tag(rule: symbol, file: symbol, line: number, entity: symbol, branch: symbol)
 
 // What the proofs against the netlist assume (doc/assumptions.toml): the
 // evidence (proved, replayed, measured, fact or open) and how; the facts
@@ -100,6 +103,7 @@
 .input race_signal(IO=file, filename="race_signal.tsv")
 .input rule(IO=file, filename="rule.tsv")
 .input rule_model(IO=file, filename="rule_model.tsv")
+.input rule_not_on(IO=file, filename="rule_not_on.tsv")
 .input rule_fact(IO=file, filename="rule_fact.tsv")
 .input rule_race(IO=file, filename="rule_race.tsv")
 .input rule_tag(IO=file, filename="rule_tag.tsv")
@@ -110,15 +114,67 @@
 .input harness_tag(IO=file, filename="harness_tag.tsv")
 .input tree_model(IO=file, filename="tree_model.tsv")
 
+// The models, as doc/facts.toml names them, and how they stand to each
+// other: the CGB-C and the CGB-E are revisions of the CGB, and what is
+// said of the CGB is said of them. The CGB follows the DMG where nothing
+// says otherwise (hdl/rules.toml's header), and the MGB and the SGB do,
+// as they have the DMG-CPU's logic.
+.decl model(model: symbol)
+model("dmg"). model("mgb"). model("sgb"). model("cgb"). model("cgb-c"). model("cgb-e").
+.decl revision_of(revision: symbol, model: symbol)
+revision_of("cgb-c", "cgb").
+revision_of("cgb-e", "cgb").
+.decl follows(model: symbol, other: symbol)
+follows("cgb", "dmg").
+follows("mgb", "dmg").
+follows("sgb", "dmg").
+
+// What is said of a model is said of it and of its revisions; two names
+// overlap where one covers the other.
+.decl covers(model: symbol, other: symbol)
+covers(m, m) :- model(m).
+covers(m, r) :- covers(m, n), revision_of(r, n).
+.decl overlaps(model: symbol, other: symbol)
+overlaps(m, n) :- covers(m, n).
+overlaps(m, n) :- covers(n, m).
+
+// Where a rule holds: on the models its entry states, with their
+// revisions; and, recursively, on a model that follows one it holds on,
+// with its revisions, unless the entry says not_on.
+.decl rule_holds(rule: symbol, model: symbol)
+rule_holds(r, n) :- rule_model(r, m), covers(m, n).
+rule_holds(r, n) :- rule_holds(r, m), follows(n, m), !rule_not_on(r, n).
+rule_holds(r, k) :- rule_holds(r, n), revision_of(k, n), !rule_not_on(r, k).
+// Where it is stated, and where it would hold with no not_on.
+.decl rule_stated(rule: symbol, model: symbol)
+rule_stated(r, n) :- rule_model(r, m), covers(m, n).
+.decl rule_reaches(rule: symbol, model: symbol)
+rule_reaches(r, n) :- rule_stated(r, n).
+rule_reaches(r, n) :- rule_reaches(r, m), follows(n, m).
+rule_reaches(r, k) :- rule_reaches(r, n), revision_of(k, n).
+
+// The chips of rtl/: each top's entity, and every entity it reaches
+// through instances (recursively); a rule is applied on a chip where a tag
+// of it is in an entity the chip reaches, outside the other chip's branch.
+.decl chip_top(model: symbol, entity: symbol)
+chip_top("dmg", "dmg_cpu_b").
+chip_top("cgb", "cgb_cpu").
+.decl in_chip(model: symbol, entity: symbol)
+in_chip(m, e) :- chip_top(m, e).
+in_chip(m, e) :- in_chip(m, p), instance(p, _, e).
+.decl rule_applied_on(rule: symbol, model: symbol)
+rule_applied_on(r, m) :-
+    rule_tag(r, _, _, e, b), in_chip(c, e), (b = "all" ; b = c), covers(c, m).
+
 // What the tables say, for the chips looked at.
 
 // The rules, races and facts of the chips looked at.
 .decl rule_here(rule: symbol)
-rule_here(r) :- rule_model(r, m), tree_model(m).
+rule_here(r) :- rule_holds(r, m), tree_model(m).
 .decl race_here(race: symbol)
-race_here(r) :- race_model(r, m), tree_model(m).
+race_here(r) :- race_model(r, m), tree_model(n), overlaps(m, n).
 .decl fact_here(fact: symbol)
-fact_here(f) :- fact_model(f, m), tree_model(m).
+fact_here(f) :- fact_model(f, m), tree_model(n), overlaps(m, n).
 
 // A signal's name without its bit: "lines" for "lines(4)".
 .decl runt_signal(signal: symbol)
@@ -180,12 +236,12 @@ rests(h, b) :- rests(h, a), discharges(p, a), rests(p, b).
 // name no rule applied here.
 .decl applied_rules_without_tag(rule: symbol, problem: symbol)
 .decl rule_tagged(rule: symbol)
-rule_tagged(r) :- rule_tag(r, _, _).
+rule_tagged(r) :- rule_tag(r, _, _, _, _).
 .decl rule_applied_here(rule: symbol)
 rule_applied_here(r) :- rule(r, _, _, "applied", _), rule_here(r).
 applied_rules_without_tag(r, "no tag") :- rule_applied_here(r), !rule_tagged(r).
 applied_rules_without_tag(r, cat("tag at ", file, ":", to_string(line), " of a rule not applied here")) :-
-    rule_tag(r, file, line), !rule_applied_here(r).
+    rule_tag(r, file, line, _, _), !rule_applied_here(r).
 
 // The delays of rtl/ that no race of races.toml covers.
 .decl delays_without_verdict(file: symbol, line: number, entity: symbol, signal: symbol,
@@ -306,6 +362,21 @@ assumptions_without_evidence(a, "nothing assumes, proves or rests on it") :-
 .decl proofs_resting_on_themselves(harness: symbol, assumption: symbol)
 proofs_resting_on_themselves(h, a) :- discharges(h, a), rests(h, a).
 
+// The applied rules that hold on a chip looked at and that rtl/ applies
+// only on others, and those that rtl/ applies where not_on says they do
+// not hold.
+.decl applied_rules_off_their_models(rule: symbol, model: symbol, problem: symbol)
+applied_rules_off_their_models(r, m, "holds there, and rtl/ applies it only on other chips") :-
+    rule(r, _, _, "applied", _), rule_holds(r, m), tree_model(m), !rule_applied_on(r, m).
+applied_rules_off_their_models(r, m, "not_on names it, and rtl/ applies it there") :-
+    rule_applied_on(r, m), rule_not_on(r, n), covers(n, m), tree_model(m).
+
+// The models a rule's not_on names that it states, or that it would not
+// reach anyway.
+.decl rules_not_on_nothing(rule: symbol, model: symbol, problem: symbol)
+rules_not_on_nothing(r, m, "its models name it") :- rule_not_on(r, m), rule_stated(r, m).
+rules_not_on_nothing(r, m, "it would not follow there") :- rule_not_on(r, m), !rule_reaches(r, m).
+
 // The checks' names and what each finds, for ../knowledge.sh.
 .decl check(name: symbol, title: symbol)
 check("assumptions-naming-nothing",
@@ -316,6 +387,10 @@ check("harnesses-stating-nothing",
       "The tags that are not on a Kani harness, and the harnesses against the netlist with no tag.").
 check("proofs-resting-on-themselves",
       "The proofs that rest, through the others, on what they prove.").
+check("applied-rules-off-their-models",
+      "The applied rules that hold on a chip looked at and that rtl/ applies only on others, or that rtl/ applies where not_on says they do not hold.").
+check("rules-not-on-nothing",
+      "The models a rule's not_on names that its models name, or that it would not follow to.").
 check("applied-rules-without-tag",
       "The rules applied in rtl/ that no `@rule` tag shows, and the tags that name no rule applied here.").
 check("delays-without-verdict",
@@ -337,6 +412,8 @@ check("width-facts-without-race",
 .output harnesses_stating_nothing(IO=file, filename="harnesses-stating-nothing.tsv", headers=true)
 .output proofs_resting_on_themselves(IO=file, filename="proofs-resting-on-themselves.tsv", headers=true)
 
+.output applied_rules_off_their_models(IO=file, filename="applied-rules-off-their-models.tsv", headers=true)
+.output rules_not_on_nothing(IO=file, filename="rules-not-on-nothing.tsv", headers=true)
 .output applied_rules_without_tag(IO=file, filename="applied-rules-without-tag.tsv", headers=true)
 .output delays_without_verdict(IO=file, filename="delays-without-verdict.tsv", headers=true)
 .output facts_without_rule(IO=file, filename="facts-without-rule.tsv", headers=true)
@@ -366,7 +443,7 @@ joined(l, k, t) :- joining(l, k, a, t), !has_next(l, k, a).
 
 member("rule-models", r, m) :- rule_model(r, m).
 member("rule-facts", r, f) :- rule_fact(r, f).
-member("rule-tags", r, cat(file, ":", to_string(line))) :- rule_tag(r, file, line).
+member("rule-tags", r, cat(file, ":", to_string(line))) :- rule_tag(r, file, line, _, _).
 member("race-models", r, m) :- race_model(r, m).
 member("race-delays", r, cat(e, ".", s)) :- race_delay(r, e, s).
 member("race-signals", r, cat(e, ".", s)) :- race_signal(r, e, s).
@@ -405,6 +482,8 @@ query("delays",
       "The delays of rtl/ other than the flip-flops', with their race.").
 query("departures",
       "Where ceres departs from the netlist, and what each rests on.").
+query("followed-rules",
+      "The rules that hold on a chip looked at only as it follows another (the CGB the DMG), and what they explain.").
 query("needs",
       "What settling the open questions takes, by how many open facts it serves.").
 query("open-assumptions",
@@ -448,6 +527,12 @@ delays(e, s, d, cat(file, ":", to_string(line)), r) :- delay_race(file, line, e,
 departures(f, h, tests, open, title) :-
     fact(f, title, "differs", h, _, _, _),
     tests = count : { fact_test(f, _) }, open = count : { fact_open(f, _) }.
+
+.decl followed_rules(model: symbol, rule: symbol, status: symbol, follows: symbol,
+                    facts: symbol)
+followed_rules(m, r, status, from, facts) :-
+    rule_holds(r, m), tree_model(m), !rule_stated(r, m), rule(r, _, _, status, _),
+    follows(top, from), covers(top, m), rule_holds(r, from), list("rule-facts", r, facts).
 
 .decl needs(rank: number, need: symbol, facts: number, which: symbol)
 needs(-n, need, n, which) :-
@@ -502,6 +587,7 @@ width_facts(f, "", "", tags) :-
 .output borrowed_rules(IO=file, filename="borrowed-rules.tsv", headers=true)
 .output delays(IO=file, filename="delays.tsv", headers=true)
 .output departures(IO=file, filename="departures.tsv", headers=true)
+.output followed_rules(IO=file, filename="followed-rules.tsv", headers=true)
 .output needs(IO=file, filename="needs.tsv", headers=true)
 .output open_assumptions(IO=file, filename="open-assumptions.tsv", headers=true)
 .output pulses(IO=file, filename="pulses.tsv", headers=true)

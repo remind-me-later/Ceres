@@ -526,10 +526,18 @@ and passes the tests, `rtl/` not yet) or missing (nothing known passes).
 A rule is shown needed the way a race's verdict is: the model without it
 fails a hardware test. `./knowledge.sh rules` lists them.
 
-A rule names the models it is for, as the facts do. One found on the DMG
-is the CGB's too where the CGB's model ([cgb.md](cgb.md)) keeps it and no
-CGB test contradicts it, since the CGB follows the DMG where nothing else
-is known. A race names the chips whose model has it: the CGB's keeps most
+A rule names the models it is stated for, as the facts do (the CGB's
+cover its revisions). The CGB follows the DMG where nothing else is known,
+and the knowledge base derives it, recursively: a rule holds on the
+models it names, on their revisions, and on a model that follows one it
+holds on, unless its `not_on` names that model; the evidence then says
+which CGB test or which rule of the CGB's says otherwise.
+`./knowledge.sh followed-rules` lists the rules that hold on a chip only
+so. `rtl/` must agree: a check finds an applied rule that holds on a chip
+whose code does not apply it (the chips that reach the entity of its tag
+through instances, outside the other chip's `REVISION` generate), or that
+the code applies where `not_on` says it does not hold. A race names the
+chips whose model has it: the CGB's keeps most
 of the DMG's code, and with it its races. `MODELS` says which chips
 `knowledge.sh` looks at, by default all of them, as the checks need:
 `MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules` lists the CGB's
