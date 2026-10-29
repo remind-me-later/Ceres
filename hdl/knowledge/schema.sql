@@ -50,6 +50,15 @@ CREATE TABLE race_fact (race TEXT, fact TEXT);
 CREATE TABLE race_delay (race TEXT, entity TEXT, signal TEXT);
 CREATE TABLE race_signal (race TEXT, entity TEXT, signal TEXT);
 
+-- The rules the model needs beyond the die's connectivity (hdl/rules.toml):
+-- kind (delay, outcome, logic, ram, state, analogue, unknown), status
+-- (applied, proposed, missing) and the evidence; the facts each explains,
+-- the width races it settles, and the `@rule` tags of rtl/.
+CREATE TABLE rule (id TEXT PRIMARY KEY, title TEXT, kind TEXT, status TEXT, evidence TEXT);
+CREATE TABLE rule_fact (rule TEXT, fact TEXT);
+CREATE TABLE rule_race (rule TEXT, race TEXT);
+CREATE TABLE rule_tag (rule TEXT, file TEXT, line INTEGER);
+
 -- Views.
 
 -- A signal's name without its bit.
@@ -95,3 +104,15 @@ LEFT JOIN race_signal rs
            OR rs.signal = CASE WHEN instr(r.signal, '(') > 0
                                THEN substr(r.signal, 1, instr(r.signal, '(') - 1)
                                ELSE r.signal END);
+
+-- The facts that need a rule: the model misses a hardware test (netlist
+-- differs from ceres where ceres matches the hardware, or both miss it), is
+-- silent where a test shows the outcome, or rests on a width race that a
+-- test shows.
+CREATE VIEW fact_needing_rule AS
+SELECT *
+FROM fact
+WHERE (netlist = 'differs' AND hardware = 'same')
+   OR (netlist = 'same' AND hardware = 'differs')
+   OR (netlist = 'silent' AND hardware <> 'none')
+   OR (race = 'width' AND netlist <> 'none' AND hardware <> 'none');

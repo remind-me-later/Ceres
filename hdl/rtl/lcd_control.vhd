@@ -45,6 +45,8 @@ begin
 	-- It opens 3 ns after the CPU's strobe and the address, as dmg-sim's gates
 	-- do, and closes with it: opening at once showed a change of the sprites'
 	-- size to the OAM scan that dmg-sim does not (Gambatte's late_sizechange2).
+	-- @fact lcdc-write-latch-delay
+	-- @rule lcdc-latch-opens-after-strobe
 	write_lcdc <= '1' after 3 ns when cpu_wr = '1' and addr = x"FF40" else '0';
 
 	lcdc_latch : process (all)

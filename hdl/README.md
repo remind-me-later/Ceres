@@ -414,7 +414,8 @@ rest on it.
 instances, its signals and the ones that control its storage, its delays and its
 `@hw` tags; the short pulses of the reports of `find-runts.sh`; the facts
 of `doc/facts.toml` and their `@fact` tags across the repository (through
-ceres-test-runner's example `facts`); and the verdicts of `races.toml`.
+ceres-test-runner's example `facts`); the verdicts of `races.toml`; and the
+rules of `rules.toml` with their `@rule` tags in `rtl/`.
 `knowledge/schema.sql` says what each table holds.
 
 ```sh
@@ -426,4 +427,18 @@ sqlite3 -column -header build/knowledge.db
 
 A check is a query that must find nothing: a delay or a short pulse at a
 control without a verdict, a verdict naming what `rtl/` does not have, a
-fact on a width race that no race names.
+fact on a width race that no race names, a fact that needs a rule and has
+none, an applied rule without its tag, two rules explaining the same facts.
+
+### The rules beyond the die
+
+[rules.toml](rules.toml) lists what the model needs beyond the die's cells
+and wires to do what the hardware does, aiming at the fewest rules that
+explain every behaviour a hardware test shows. The die's connectivity is
+trusted and its delays are not, so an order race needs no rule; the
+outcome of a width race does, and so does what the netlist cannot tell (a
+RAM's cells, the power-on state, the electrical side) or gets wrong. A rule
+is applied (`rtl/` has it, tagged `@rule <id>`), proposed (ceres does it
+and passes the tests, `rtl/` not yet) or missing (nothing known passes).
+A rule is shown needed the way a race's verdict is: the model without it
+fails a hardware test. `./knowledge.sh rules` lists them.

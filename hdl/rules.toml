@@ -1,0 +1,165 @@
+# The rules that the readable model (rtl/) needs beyond the die's
+# connectivity to do what the hardware does.
+#
+# The die's cells and wires are trusted; their delays are not (dmg-sim's are
+# estimates). Where the outcome rests on the order of signals only, any
+# delays that keep it give the same outcome and no rule is needed (an order
+# race of races.toml). Every other behaviour that a hardware test shows
+# needs a rule here: the outcome of a width race, a gate or a latch the die
+# does not show, what a RAM's cells or the analogue side do, the power-on
+# state. The goal is the fewest rules that explain every such behaviour.
+#
+# Fields:
+#
+# - title: the rule, in a line.
+# - kind: delay (a delay's value or range), outcome (which way a pulse of
+#   no width goes), logic (a gate or latch beyond the die's), ram (what a
+#   RAM's cells do that the netlist does not model), state (the power-on
+#   state) or analogue (the electrical side: buses with two drivers or none,
+#   the sound's output), or unknown (the mechanism is not known yet).
+# - status: applied (rtl/ has it, tagged `@rule <id>` where it is), proposed
+#   (ceres does it and passes the tests; rtl/ does not have it yet) or
+#   missing (nothing known passes the tests).
+# - races (optional): the width races of races.toml it settles.
+# - facts: the facts of doc/facts.toml it explains.
+# - evidence: what shows the rule, and that it is needed.
+#
+# knowledge.sh check lists the facts that need a rule and have none (where
+# the model misses a hardware test, is silent where one shows the outcome,
+# or rests on a width race that one shows), the applied rules without a tag
+# and the rules that explain the same facts as another.
+
+[tile-register-takes-the-pulse]
+title = "The tile register takes its clock's pulse of no width at a window start"
+kind = "outcome"
+status = "applied"
+races = ["tile-register-at-window-start"]
+facts = ["window-start-tile-register-pulse"]
+evidence = "The comment at bg_tile_clock in rtl/render.vhd: with the pulse the model draws Mealybug's m3_lcdc_win_en_change_multiple_wx and m3_scy_change as the DMG does, without it (dmg-sim's slower gates) it does not."
+
+[lcdc-latch-opens-after-strobe]
+title = "LCDC's latch opens a few ns (3; more than 0, at most 6 tried) after the CPU's write strobe"
+kind = "delay"
+status = "applied"
+races = ["lcdc-write-latch"]
+facts = ["lcdc-write-latch-delay"]
+evidence = "At 0 ns, three of Gambatte's late_sizechange ROMs show 3, not the DMG-08's 0; at 3 and 6 ns all 23 pass (races.toml, 2026-10-27)."
+
+[oam-free-between-scan-and-mode-3]
+title = "OAM is free to the CPU for a moment (1 ns) between the OAM scan and mode 3, and its data lines reach the RAM within it"
+kind = "delay"
+status = "applied"
+races = ["oam-write-in-free-gap"]
+facts = ["oam-write-as-mode-3-starts"]
+evidence = "gbmicrotest's oam_write_l1_c fails with no gap, with the gap filtered and with the data drivers at 3 ns (races.toml, 2026-10-27)."
+
+[mode-0-rises-after-lyc-flag]
+title = "Mode 0 rises 14 ns after the pixel counter's clock, after LY = LYC's flag has changed"
+kind = "delay"
+status = "applied"
+races = ["mode-0-after-lyc-flag"]
+facts = ["mode-0-rises-after-lyc-flag", "lcd-off-in-vblank-mode-0-source"]
+evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3, with the delay measured in dmg-sim."
+
+[stat-mode-2-falls-after-mode-3]
+title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"
+kind = "delay"
+status = "applied"
+races = ["stat-mode-2-into-mode-3"]
+facts = ["stat-mode-2-until-mode-3"]
+evidence = "The comment at stat_mode2 in rtl/lcd_timing.vhd: gbmicrotest's oam_write_l1_a and lcdon_to_stat3_c read mode 2 or 3, never 0."
+
+[stat-or-holds-at-vblank-end]
+title = "STAT's interrupt line does not drop as mode 1's source falls and mode 2's rises"
+kind = "outcome"
+status = "applied"
+races = ["stat-or-at-vblank-end"]
+facts = ["stat-or-at-vblank-end"]
+evidence = "The comment at int_stat in rtl/lcd_timing.vhd: Gambatte's m2irq_ly00_lcdstat30 shows no interrupt on the DMG-08."
+
+[stat-or-dips-at-vblank-start]
+title = "STAT's interrupt line drops between LY = LYC's flag falling and mode 1 rising at line 144, and IF takes its rise"
+kind = "outcome"
+status = "applied"
+races = ["stat-or-at-vblank-start"]
+facts = ["stat-or-at-vblank-start"]
+evidence = "The comment at int_stat in rtl/lcd_timing.vhd: the flag is one flip-flop after hclk and mode 1 two, and with the dip filtered 7 of Gambatte's lycint143_m1irq, lycint_m1intirq and m1irq ROMs miss the DMG-08's interrupt (races.toml, 2026-10-28). With stat-or-holds-at-vblank-end, perhaps one rule: the OR dips where its sources come a flip-flop apart, not where one gate switches both."
+
+[timer-clock-ignores-the-pulse]
+title = "The timer's clock does not take the pulse of no width as TAC's enable and select change at once"
+kind = "outcome"
+status = "proposed"
+races = ["timer-clock-at-tac-write"]
+facts = ["timer-enable-race"]
+evidence = "gbmicrotest's halt_bug and 004-tima_boot_phase: ceres does not count, as the DMG; the model, as dmg-sim, counts. The tile register takes a pulse of the same kind: which way it goes is the die's, a rule for each."
+
+[write-path-to-pixel-latches]
+title = "A CPU write reaches BGP and WX later, against the pixel clock, than the netlist's delays say"
+kind = "delay"
+status = "proposed"
+races = ["register-write-against-pixel-clock"]
+facts = ["bgp-write-in-mode-3", "window-start-wx-written-every-line"]
+evidence = "Ceres matches the screenshots of Mealybug's m3_bgp_change and m3_window_timing, which the model draws a pixel off; doc/hardware-tests.md expects one cause for both. Scaling the CPU's delays by 0.8 and 1.2 does not move the model's pixels (races.toml): the delay is in the write path's own timings."
+
+[dma-source-fe00-ff00]
+title = "An OAM DMA from FE00 or FF00 copies FF and 00, as ceres does"
+kind = "unknown"
+status = "proposed"
+facts = ["dma-from-fe00-ff00"]
+evidence = "Gambatte's oamdma_srcFE00 and oamdma_srcFF00 ROMs: ceres passes, the model and dmg-sim copy 83 or 64."
+
+[dma-holds-external-bus]
+title = "Cartridge RAM read while an OAM DMA has the external bus gives the DMA's byte"
+kind = "analogue"
+status = "proposed"
+facts = ["dma-reads-external-bus-held"]
+evidence = "Gambatte's oamdma_src0000_srambankchange_1: ceres passes, the model reads 00. Perhaps the same cause as bus-with-two-drivers: then one rule explains both."
+
+[bus-with-two-drivers]
+title = "What the CPU reads and pushes while an OAM DMA drives the bus too"
+kind = "analogue"
+status = "proposed"
+facts = ["bus-with-two-drivers"]
+evidence = "Gambatte's oamdma busypush and busyread ROMs: ceres passes, the model fails 17 of the 207 sampled, as dmg-sim does."
+
+[power-on-values]
+title = "What OAM and the registers that no boot ROM writes hold at power-on"
+kind = "state"
+status = "proposed"
+facts = ["power-on-state"]
+evidence = "gbmicrotest's poweron_oam_000, poweron_dma_000, poweron_obp0_000 and poweron_obp1_000: ceres passes, the model starts every cell at 0 (@hw inferred in rtl/sm83_registers.vhd and sm83_alu.vhd)."
+
+[wave-ram-trigger-collision]
+title = "A trigger of channel 3 while it reads wave RAM corrupts its first bytes"
+kind = "ram"
+status = "proposed"
+facts = ["wave-ram-corruption"]
+evidence = "Blargg's dmg_sound 10-wave trigger while on: ceres passes; the netlist does not model the RAM's cells."
+
+[oam-corruption-values]
+title = "The values the OAM corruption bug writes"
+kind = "ram"
+status = "missing"
+facts = ["oam-corruption-bug"]
+evidence = "Blargg's oam_bug 7-timing_effect fails on ceres, as on SameBoy."
+
+[bg-enable-in-mode-3]
+title = "The background's enable written in mode 3, at column 0"
+kind = "unknown"
+status = "missing"
+facts = ["bg-enable-change-column-0"]
+evidence = "Ceres and the model are 4 pixels off the DMG-blob screenshot of Mealybug's m3_lcdc_bg_en_change and 232 off the DMG-CPU B one: the units differ."
+
+[halt-op-dupe-delay]
+title = "gbmicrotest's halt_op_dupe_delay"
+kind = "unknown"
+status = "missing"
+facts = ["halt-op-dupe-delay"]
+evidence = "Ceres, SameBoy and the model fail it with the same values and the same accesses."
+
+[stat-write-glitch-line-154]
+title = "gbmicrotest's stat_write_glitch_l154_d"
+kind = "unknown"
+status = "missing"
+facts = ["stat-write-glitch-line-154"]
+evidence = "Ceres and the model fail it the same way."

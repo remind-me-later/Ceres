@@ -11,6 +11,9 @@
 #   awk -v TABLE=hw -f knowledge/rtl.awk rtl/*.vhd
 #       the file, the line, the entity, the kind of `@hw` tag (die,
 #       measured, inferred) and what it says
+#   awk -v TABLE=rule -f knowledge/rtl.awk rtl/*.vhd
+#       a rule of rules.toml that an `@rule` tag names, the file and the
+#       line
 #
 # The file names are relative to the repository (they are given relative
 # to hdl/).
@@ -51,6 +54,16 @@ TABLE == "signal" && (line ~ /^[ \t]*signal[ \t]/ ||
 		gsub(/[ \t]/, "", names[i])
 		if (names[i] != "")
 			print entity "\t" names[i]
+	}
+}
+
+TABLE == "rule" {
+	s = comment
+	while (match(s, /@rule[ \t]+[a-z0-9-]+/)) {
+		id = substr(s, RSTART, RLENGTH)
+		sub(/@rule[ \t]+/, "", id)
+		print id "\t" file "\t" FNR
+		s = substr(s, RSTART + RLENGTH)
 	}
 }
 

@@ -11,6 +11,7 @@ pub mod checks;
 pub mod facts;
 pub mod gambatte;
 pub mod races;
+pub mod rules;
 
 use anyhow::{Context as _, Result};
 use ceres_core::{AudioCallback, Button, Gb, GbBuilder, Model, Sample};

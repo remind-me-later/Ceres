@@ -1,16 +1,16 @@
 //! Prints the lists that the facts of `doc/facts.toml` give: the open
 //! questions and what settling them takes, where ceres departs from the
 //! netlist and what that rests on, the races, and where the code tags each
-//! fact. `tsv DIR` writes the facts, their tags and the races of
-//! `hdl/races.toml` as tables, for the knowledge database
-//! (`hdl/knowledge.sh`).
+//! fact. `tsv DIR` writes the facts, their tags, the races of
+//! `hdl/races.toml` and the rules of `hdl/rules.toml` as tables, for the
+//! knowledge database (`hdl/knowledge.sh`).
 //!
 //! Usage: `cargo run -p ceres-test-runner --example facts -- [open|netlist|races|tags|tsv DIR]`
 //! (the first four without an argument).
 
 use ceres_test_runner::{
     facts::{Emulators, Facts, Hardware, Need, Netlist, Race, load, repo_root, tags},
-    races,
+    races, rules,
 };
 use std::{collections::BTreeMap, fs, io::Write as _, path::Path};
 
@@ -124,7 +124,7 @@ fn split_signal(name: &str) -> Vec<String> {
     vec![entity.to_owned(), signal.to_owned()]
 }
 
-/// The facts, their lists and tags, and the races, as tables.
+/// The facts, their lists and tags, the races and the rules, as tables.
 fn tsv(facts: &Facts, dir: &Path) {
     fs::create_dir_all(dir).expect("the directory");
     let opt = |s: Option<&str>| s.unwrap_or("").to_owned();
@@ -173,7 +173,12 @@ fn tsv(facts: &Facts, dir: &Path) {
             ]
         }),
     );
+    race_tables(dir);
+    rule_tables(dir);
+}
 
+/// The races and the signals and delays each covers, as tables.
+fn race_tables(dir: &Path) {
     let races = races::load(&repo_root()).expect("hdl/races.toml");
     table(
         dir,
@@ -208,4 +213,30 @@ fn tsv(facts: &Facts, dir: &Path) {
     );
     table(dir, "race_delay", named(|r| &r.delays));
     table(dir, "race_signal", named(|r| &r.signals));
+}
+
+/// The rules and the facts and races each explains, as tables.
+fn rule_tables(dir: &Path) {
+    let rules = rules::load(&repo_root()).expect("hdl/rules.toml");
+    table(
+        dir,
+        "rule",
+        rules.iter().map(|(id, r)| {
+            vec![
+                id.clone(),
+                r.title.clone(),
+                r.kind.name().to_owned(),
+                r.status.name().to_owned(),
+                r.evidence.clone(),
+            ]
+        }),
+    );
+    let each_rule = |list: fn(&rules::Rule) -> &Vec<String>| {
+        rules
+            .iter()
+            .flat_map(move |(id, r)| list(r).iter().map(move |v| vec![id.clone(), v.clone()]))
+            .collect::<Vec<_>>()
+    };
+    table(dir, "rule_fact", each_rule(|r| &r.facts));
+    table(dir, "rule_race", each_rule(|r| &r.races));
 }

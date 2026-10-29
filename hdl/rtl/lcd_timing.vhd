@@ -265,6 +265,7 @@ begin
 	-- the DMG (Gambatte's lycint143_m1irq_2: an interrupt).
 	-- @hw die: TAPA, SUKO TUVA VOTY; VYPU
 	-- @fact stat-or-at-vblank-end, @fact stat-or-at-vblank-start
+	-- @rule stat-or-holds-at-vblank-end, @rule stat-or-dips-at-vblank-start
 	int_stat <= (stat_enable(6) and lyc_match) or (stat_enable(5) and vclk_i and not mode1_i) or
 	            (stat_enable(4) and mode1_i) or (stat_enable(3) and mode0);
 	int_vbl  <= mode1_i;
@@ -277,6 +278,7 @@ begin
 	-- (gbmicrotest's oam_write_l1_a, lcdon_to_stat3_c).
 	-- @hw die: SADU TEBY, XATY WUGA, RUPO SEGO; the enables PUZO POFO SASY
 	-- POTE; LY: VEGA..WEZE; LYC: RETU..PUFY (not_if0)
+	-- @rule stat-mode-2-falls-after-mode-3
 	stat_mode2 <= '1' when mode2 = '1' else '0' after 2 ns;
 	data_out <= 'Z' & stat_enable & lyc_match & (stat_mode2 or mode3) & (mode3 or mode1_i)
 	            when cpu_rd = '1' and addr = x"FF41" else
