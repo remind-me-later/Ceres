@@ -17,8 +17,9 @@
 #   cargo test -p ceres-netlist --release --test replay -- --ignored
 #
 # replays every trace in build/blocks through ceres-netlist's NetTimer,
-# NetIf, NetDma, NetLcd, NetScan and NetOamLatches (its tests/replay.rs)
-# and reports the phases where one parts from the model.
+# NetIf, NetDma, NetLcd, NetScan, NetOamLatches, NetClocks, NetRender and
+# NetChip (its tests/replay.rs) and reports the phases where one parts from
+# the model (REPLAY_ONLY=a,b: only the traces whose names contain a or b).
 
 set -eu
 

@@ -433,6 +433,28 @@ latches hold. LCDC's latches open after the edge that starts the write's
 first phase (`lcdc-write-latch-delay`): taken at the edge, every LCD
 turned on starts its clocks an edge early.
 
+Render (`render.vhd`, the DMG's part) replays as `NetRender`
+(ceres-netlist's `render`), from the traces that have its fields (the
+trace's last 36: render's flip-flops and latches, what it takes in and
+gives out, and the sprite store). Render runs on clocks it makes from the
+PPU's (the dots, the pixels' clock, the fetcher's, the tile register's), and
+which of them ticks at an edge depends on the order in which the simulator
+settles them, so `NetRender` settles render as the simulator does: each
+concurrent statement is a wire a delta cycle behind its inputs, each
+process reads the current delta cycle, the flip-flops change 1 ns after
+their clock's edge, the other blocks' outputs reach render at 1 ns and
+VRAM's data at 3 ns (the address reaches VRAM 2 ns after it changes). Over
+the 133 traces with render's fields (gbmicrotest's PPU, sprite, OAM, SCX and
+window ROMs, Gambatte's `oamdma` ROMs, 12 of Mealybug's `m3_` ROMs, and
+`check/lcdc.asm` and `check/dma_fetch.asm`) it matches the model in every
+flip-flop and latch, and in its VRAM address and its CP, ST and LD pins:
+mode 3 ends 39028 times, the window starts 10962 times, 23424 sprite
+fetches start. Without the delta cycle between `myso` and the tile
+register's clock, the pulse that clocks the tile register as the window
+starts (`window-start-tile-register-pulse`) is lost, and
+`m3_lcdc_win_en_change_multiple_wx` differs. The sprite store's fields are
+traced but not replayed yet; then render and the store join `NetChip`.
+
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay
 takes only the clocks there, as the other blocks are held in reset.

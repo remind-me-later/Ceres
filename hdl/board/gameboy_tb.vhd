@@ -58,9 +58,20 @@
 -- mreq, write, test_reset, the divider's last bit), their latches and
 -- resets (AFUR, ALEF, APUK, ADYK, TUBO's waiting, osc_stable, sys_reset,
 -- cpu_sys_reset, reset2) and the clocks they make (clk_1mhz, clk_t4,
--- data_phase, exec_phase, pch_phase, cpu_wr_sync, cpu_ext_cs_en, PHI). Values
--- in hexadecimal, bits as 0 or 1. With BLOCKS_FROM_POWER_ON, from the
--- power-on.
+-- data_phase, exec_phase, pch_phase, cpu_wr_sync, cpu_ext_cs_en, PHI);
+-- then render's flip-flops and latches (mode3_i, voga, px9, lyzu, lovy,
+-- fetching, nyka, pory, pygo, started, sary, wy_latch, pyco, nunu, nopa,
+-- in_window, rydy, sovy, puxa, nyze, paho, discard, ryfa, rene,
+-- line_started, sobu, suda, busy, tobu, vonu, seba, tyfo), the pixel
+-- counter, the fetcher's count, the fine count, the sprite fetch's step,
+-- the window's column and line, the tile register, the low byte, the
+-- background shifter, the sprite's bytes, the sprite shifter (its planes,
+-- palette and priority), SCY, SCX, WY, WX, BGP, OBP0 and OBP1; what render
+-- takes in (line_start, stop_scan, x_match, sprite_loaded, rendering,
+-- VRAM's data, OAM's odd byte, the sprite's line) and gives out (its VRAM
+-- address, CP, ST, LD); and the sprite store's scanned index, its fetched
+-- flags, and its slots' X, lines and indexes. Values in hexadecimal, bits
+-- as 0 or 1. With BLOCKS_FROM_POWER_ON, from the power-on.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -73,6 +84,7 @@ use work.clocking.all;
 use work.high_ram_types.all;
 use work.sm83_controls.all;
 use work.revisions.all;
+use work.sprite_slots.all;
 
 entity gameboy_tb is
 	generic (
@@ -481,6 +493,78 @@ begin
 		alias ck_wr_sync    is << signal .gameboy_tb.u_gameboy.chip.u_chip.cpu_wr_sync : std_ulogic >>;
 		alias ck_ext_cs_en  is << signal .gameboy_tb.u_gameboy.chip.u_chip.cpu_ext_cs_en : std_ulogic >>;
 		alias ck_phi        is << signal .gameboy_tb.u_gameboy.chip.u_chip.phi : std_ulogic >>;
+		alias r_mode3_i     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.mode3_i : std_ulogic >>;
+		alias r_voga        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.voga : std_ulogic >>;
+		alias r_px9         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.px9 : std_ulogic >>;
+		alias r_lyzu        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.lyzu : std_ulogic >>;
+		alias r_lovy        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.lovy : std_ulogic >>;
+		alias r_fetching_i  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.fetching_i : std_ulogic >>;
+		alias r_nyka        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.nyka : std_ulogic >>;
+		alias r_pory        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.pory : std_ulogic >>;
+		alias r_pygo        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.pygo : std_ulogic >>;
+		alias r_started     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.started : std_ulogic >>;
+		alias r_sary        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sary : std_ulogic >>;
+		alias r_wy_latch    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.wy_latch : std_ulogic >>;
+		alias r_pyco        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.pyco : std_ulogic >>;
+		alias r_nunu        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.nunu : std_ulogic >>;
+		alias r_nopa        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.nopa : std_ulogic >>;
+		alias r_in_window   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.in_window : std_ulogic >>;
+		alias r_rydy        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.rydy : std_ulogic >>;
+		alias r_sovy        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sovy : std_ulogic >>;
+		alias r_puxa        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.puxa : std_ulogic >>;
+		alias r_nyze        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.nyze : std_ulogic >>;
+		alias r_paho        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.paho : std_ulogic >>;
+		alias r_discard     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.discard : std_ulogic >>;
+		alias r_ryfa        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.ryfa : std_ulogic >>;
+		alias r_rene        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.rene : std_ulogic >>;
+		alias r_line_started is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.line_started : std_ulogic >>;
+		alias r_sobu        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sobu : std_ulogic >>;
+		alias r_suda        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.suda : std_ulogic >>;
+		alias r_busy        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.busy : std_ulogic >>;
+		alias r_tobu        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.tobu : std_ulogic >>;
+		alias r_vonu        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.vonu : std_ulogic >>;
+		alias r_seba        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.seba : std_ulogic >>;
+		alias r_tyfo        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.tyfo : std_ulogic >>;
+		alias r_px          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.px_i : unsigned(7 downto 0) >>;
+		alias r_fetch_count is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.fetch_count : unsigned(2 downto 0) >>;
+		alias r_fine        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.fine : unsigned(2 downto 0) >>;
+		alias r_sprite_step is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sprite_step : unsigned(2 downto 0) >>;
+		alias r_win_x       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.win_x : unsigned(4 downto 0) >>;
+		alias r_win_y       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.win_y : unsigned(7 downto 0) >>;
+		alias r_bg_tile     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.bg_tile : std_ulogic_vector(7 downto 0) >>;
+		alias r_bg_low      is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.bg_low : std_ulogic_vector(7 downto 0) >>;
+		alias r_bg_shift_a  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.bg_shift_a : std_ulogic_vector(7 downto 0) >>;
+		alias r_bg_shift_b  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.bg_shift_b : std_ulogic_vector(7 downto 0) >>;
+		alias r_sp_low_a    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sp_low_a : std_ulogic_vector(7 downto 0) >>;
+		alias r_sp_low_b    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sp_low_b : std_ulogic_vector(7 downto 0) >>;
+		alias r_sp_a        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sp_a : std_ulogic_vector(7 downto 0) >>;
+		alias r_sp_b        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sp_b : std_ulogic_vector(7 downto 0) >>;
+		alias r_sp_palette  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sp_palette : std_ulogic_vector(7 downto 0) >>;
+		alias r_sp_priority is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.sp_priority : std_ulogic_vector(7 downto 0) >>;
+		alias r_scy         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.scy : std_ulogic_vector(7 downto 0) >>;
+		alias r_scx         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.scx : std_ulogic_vector(7 downto 0) >>;
+		alias r_wy          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.wy : std_ulogic_vector(7 downto 0) >>;
+		alias r_wx          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.wx : std_ulogic_vector(7 downto 0) >>;
+		alias r_bgp         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.bgp : std_ulogic_vector(7 downto 0) >>;
+		alias r_obp0        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.obp0 : std_ulogic_vector(7 downto 0) >>;
+		alias r_obp1        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_render.obp1 : std_ulogic_vector(7 downto 0) >>;
+		alias r_line_start  is << signal .gameboy_tb.u_gameboy.chip.u_chip.line_start : std_ulogic >>;
+		alias r_stop_scan   is << signal .gameboy_tb.u_gameboy.chip.u_chip.stop_scan : std_ulogic >>;
+		alias r_x_match     is << signal .gameboy_tb.u_gameboy.chip.u_chip.x_match : std_ulogic >>;
+		alias r_sprite_loaded is << signal .gameboy_tb.u_gameboy.chip.u_chip.sprite_loaded : std_ulogic >>;
+		alias r_rendering   is << signal .gameboy_tb.u_gameboy.chip.u_chip.rendering : std_ulogic >>;
+		alias r_md          is << signal .gameboy_tb.u_gameboy.chip.u_chip.vram_data : std_logic_vector(7 downto 0) >>;
+		alias r_odd         is << signal .gameboy_tb.u_gameboy.chip.u_chip.oam_odd : std_ulogic_vector(7 downto 0) >>;
+		alias r_line        is << signal .gameboy_tb.u_gameboy.chip.u_chip.render_line : std_logic_vector(3 downto 0) >>;
+		alias r_ma          is << signal .gameboy_tb.u_gameboy.chip.u_chip.render_ma : std_logic_vector(12 downto 0) >>;
+		alias r_cp          is << signal .gameboy_tb.u_gameboy.chip.u_chip.cp : std_ulogic >>;
+		alias r_st          is << signal .gameboy_tb.u_gameboy.chip.u_chip.st : std_ulogic >>;
+		alias r_ld          is << signal .gameboy_tb.u_gameboy.chip.u_chip.ld : std_ulogic_vector(1 downto 0) >>;
+		alias s_scanned     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.scanned : std_ulogic_vector(5 downto 0) >>;
+		alias s_fetched     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.fetched : std_ulogic_vector(9 downto 0) >>;
+		alias s_xs          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.xs : x_t >>;
+		alias s_lines       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.lines : line_t >>;
+		alias s_indexes     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.indexes : index_t >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := BLOCKS_FROM_POWER_ON;
@@ -542,6 +626,31 @@ begin
 					& b01(ck_osc_stable) & b01(ck_sys_reset) & b01(ck_cpu_reset) & b01(ck_reset2)
 					& ' ' & b01(ck_1mhz) & b01(ck_t4) & b01(ck_data) & b01(ck_exec) & b01(ck_pch)
 					& b01(ck_wr_sync) & b01(ck_ext_cs_en) & b01(ck_phi));
+				-- Render and the sprite store.
+				write(l, ' ' & b01(r_mode3_i) & b01(r_voga) & b01(r_px9) & b01(r_lyzu) & b01(r_lovy) & b01(r_fetching_i) & b01(r_nyka) & b01(r_pory) & b01(r_pygo) & b01(r_started) & b01(r_sary) & b01(r_wy_latch) & b01(r_pyco) & b01(r_nunu) & b01(r_nopa) & b01(r_in_window) & b01(r_rydy) & b01(r_sovy) & b01(r_puxa) & b01(r_nyze) & b01(r_paho) & b01(r_discard) & b01(r_ryfa) & b01(r_rene) & b01(r_line_started) & b01(r_sobu) & b01(r_suda) & b01(r_busy) & b01(r_tobu) & b01(r_vonu) & b01(r_seba) & b01(r_tyfo)
+					& ' ' & hx(std_ulogic_vector(r_px)) & ' ' & hx(std_ulogic_vector(r_fetch_count))
+					& ' ' & hx(std_ulogic_vector(r_fine)) & ' ' & hx(std_ulogic_vector(r_sprite_step))
+					& ' ' & hx(std_ulogic_vector(r_win_x)) & ' ' & hx(std_ulogic_vector(r_win_y))
+					& ' ' & hx(r_bg_tile) & ' ' & hx(r_bg_low) & ' ' & hx(r_bg_shift_a) & ' ' & hx(r_bg_shift_b)
+					& ' ' & hx(r_sp_low_a) & ' ' & hx(r_sp_low_b) & ' ' & hx(r_sp_a) & ' ' & hx(r_sp_b)
+					& ' ' & hx(r_sp_palette) & ' ' & hx(r_sp_priority)
+					& ' ' & hx(r_scy) & ' ' & hx(r_scx) & ' ' & hx(r_wy) & ' ' & hx(r_wx)
+					& ' ' & hx(r_bgp) & ' ' & hx(r_obp0) & ' ' & hx(r_obp1)
+					& ' ' & b01(r_line_start) & b01(r_stop_scan) & b01(r_x_match) & b01(r_sprite_loaded) & b01(r_rendering)
+					& ' ' & hx(r_md) & ' ' & hx(r_odd) & ' ' & hx(r_line)
+					& ' ' & hx(r_ma) & ' ' & b01(r_cp) & b01(r_st) & ' ' & hx(r_ld)
+					& ' ' & hx(s_scanned) & ' ' & hx(s_fetched) & ' ');
+				for i in 0 to 9 loop
+					write(l, hx(s_xs(i)));
+				end loop;
+				write(l, ' ');
+				for i in 0 to 9 loop
+					write(l, hx(s_lines(i)));
+				end loop;
+				write(l, ' ');
+				for i in 0 to 9 loop
+					write(l, hx(s_indexes(i)));
+				end loop;
 				writeline(f, l);
 			end if;
 			ended := phase;

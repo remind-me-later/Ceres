@@ -2,7 +2,8 @@
 //! DMA, the line timing, the OAM scan and the clocks (`hdl/trace-blocks.sh`,
 //! in `hdl/build/blocks`, and from the power-on in its `power-on/`) through
 //! their transcriptions, `NetTimer`, `NetIf`, `NetDma`, `NetLcd`,
-//! `NetScan`, `NetOamLatches` and `NetClocks`, phase by phase, and reports
+//! `NetScan`, `NetOamLatches`, `NetClocks` and `NetRender` (render's
+//! traces only, in `render/`), phase by phase, and reports
 //! where a transcription parts from the model; and the blocks wired
 //! together (`NetChip`), each taking from the others what the model wires
 //! in, where the trace has the clocks. ceres-core's proofs against ceres
@@ -18,6 +19,9 @@
 //! state again, so that one run lists every kind of difference.
 //!
 //! `cargo test -p ceres-netlist --release --test replay -- --ignored --nocapture`
+//! (with `REPLAY_ONLY=a,b`, only the traces whose names contain a or b).
+
+mod render;
 
 use {
     ceres_netlist::{
@@ -77,6 +81,8 @@ struct Line {
     lcd: Option<LcdLine>,
     /// The clocks and resets (older traces lack them).
     clocks: Option<ClockLine>,
+    /// Render and the sprite store (older traces lack them).
+    render: Option<render::RenderLine>,
 }
 
 /// The clocks in a line of a trace: what they take in, their latches and
@@ -131,7 +137,14 @@ struct OamLine {
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
 fn parse(text: &str) -> Option<Line> {
-    let all: Vec<&str> = text.split_whitespace().collect();
+    let mut all: Vec<&str> = text.split_whitespace().collect();
+    // Render's fields follow the clocks'.
+    let render = if all.len() == render::RENDER_LINE_FIELDS {
+        let fields = all.split_off(CLOCK_LINE_FIELDS);
+        Some(render::parse(&fields)?)
+    } else {
+        None
+    };
     // The clocks' three fields end the lines that have them.
     let (fields, clocks) = match *all.as_slice() {
         [ref fields @ .., inputs, state, made] if all.len() == CLOCK_LINE_FIELDS => {
@@ -206,6 +219,7 @@ fn parse(text: &str) -> Option<Line> {
             ref lcd => Some(parse_lcd(lcd)?),
         },
         clocks,
+        render,
     })
 }
 
@@ -1422,6 +1436,13 @@ fn netlist_replay() {
         .filter(|p| p.extension().is_some_and(|x| x == "txt"))
         .collect();
     traces.sort();
+    // REPLAY_ONLY=a,b replays only the traces whose names contain a or b.
+    if let Ok(only) = std::env::var("REPLAY_ONLY") {
+        traces.retain(|p| {
+            let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
+            only.split(',').any(|part| name.contains(part))
+        });
+    }
     assert!(!traces.is_empty(), "no traces in hdl/build/blocks");
 
     let mut report = Report::default();
@@ -1440,6 +1461,7 @@ fn netlist_replay() {
         replay_scan(name, &lines, &mut report);
         replay_clocks(name, &lines, &mut report, false);
         replay_chip(name, &lines, &mut report);
+        render::replay(name, &lines, &mut report);
     }
     // The traces from the power-on (`FROM=power-on`): the clocks only, as
     // the other blocks are held in their resets.
