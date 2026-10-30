@@ -20,6 +20,7 @@ pub mod chip;
 pub mod clocks;
 pub mod dma;
 pub mod interrupts;
+pub mod lcd_control;
 pub mod lcd_timing;
 pub mod oam;
 pub mod oam_scan;

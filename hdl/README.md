@@ -414,18 +414,24 @@ The blocks also replay wired together, as `dmg_cpu_b.vhd` wires them
 (`NetChip`, ceres-netlist's `chip`): the clocks run the phases the timer,
 IF, OAM DMA and the line timing step on, the divider's last bit ends the
 clocks' power-on wait, the timer's interrupt, the STAT line and VBlank
-rise into IF, the DMA runs on the clocks' `dma_phi`, the OAM scan runs on
+rise into IF, the DMA runs on the clocks' `dma_phi`, LCDC
+(`NetLcdControl`, of `lcd_control.vhd`) holds the line timing and the
+scan in reset and gives the scan the sprites' height, the OAM scan runs on
 the line timing's clocks and compares what OAM's latches hold, and the
 latches follow the scan and the DMA. Only the CPU's access, the other
 interrupt sources, the acknowledges and what the blocks not transcribed
-yet give (render's modes, LCDC's reset and bit 2, the sprite fetch's
-strobes, OAM's RAM) come from the trace. Over the 197 traces with the
-clocks (gbmicrotest's DMA, timer, halt, OAM and sprite ROMs, Gambatte's
-`sprites` and `oamdma` ROMs) it finds no difference in 1.24 billion
-phases: 258 timer interrupts, 11494 rises of the STAT line and 1001 of
-VBlank reach IF, 363 transfers start on the clocks' `dma_phi`, 390623
-reads of STAT, LY and LYC take what the line timing shows, and the scan
-saves 81604 sprites from what the latches hold.
+yet give (render's modes, the sprite fetch's strobes, OAM's RAM) come
+from the trace. Over the 198 traces with the clocks (gbmicrotest's DMA,
+timer, halt, OAM and sprite ROMs, Gambatte's `sprites` and `oamdma` ROMs,
+and `check/lcdc.asm`, which writes every value to LCDC and reads it back)
+it finds no difference in 1.25 billion phases: 258 timer interrupts,
+11494 rises of the STAT line and 1001 of VBlank reach IF, 363 transfers
+start on the clocks' `dma_phi`, LCDC turns the LCD on 890 times and off
+692 times, 816 reads of LCDC and 390623 of STAT, LY and LYC take what
+the registers show, and the scan saves 81604 sprites from what the
+latches hold. LCDC's latches open after the edge that starts the write's
+first phase (`lcdc-write-latch-delay`): taken at the edge, every LCD
+turned on starts its clocks an edge early.
 
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay

@@ -26,6 +26,7 @@ use {
         clocks::{ClockInputs, ClockOutputs, NetClocks},
         dma::NetDma,
         interrupts::{NetIf, lowest},
+        lcd_control::NetLcdControl,
         lcd_timing::NetLcd,
         oam::{NetOamLatches, OamInputs},
         oam_scan::{Clocks as ScanClocks, NetScan},
@@ -1102,8 +1103,7 @@ const fn clocks_shown(
 fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
     let pins = edge.clocks.as_ref()?.inputs;
     let (lcd_edge, lcd) = (edge.lcd.as_ref()?, phase.lcd.as_ref()?);
-    let (scan_edge, scan) = (lcd_edge.scan.as_ref()?, lcd.scan.as_ref()?);
-    let oam = scan.oam.as_ref()?;
+    let oam = lcd.scan.as_ref()?.oam.as_ref()?;
     Some(ChipInputs {
         ck1: pins.ck1,
         reset_pin_n: pins.reset_pin_n,
@@ -1120,13 +1120,9 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
         data: phase.data,
         rises: phase.rose,
         acks: phase.acks,
-        ppu_reset_at_edge: lcd_edge.ppu_reset,
-        ppu_reset: lcd.ppu_reset,
         mode0_at_edge: lcd_edge.mode0,
         mode0: lcd.mode0,
         mode3: lcd.mode3,
-        tall_at_edge: scan_edge.tall,
-        tall: scan.tall,
         fetch_read: oam.fetch_read,
         fetch_hold: oam.fetch_hold,
         oam_data: oam.first,
@@ -1136,11 +1132,14 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
 /// The chip's blocks wired together (`NetChip`): the clocks run the phases
 /// the timer, IF, the DMA and the line timing step on, the divider's last
 /// bit ends the power-on wait, the timer's interrupt, the STAT line and
-/// VBlank rise into IF, the DMA runs on the clocks' `dma_phi`, the OAM scan
-/// runs on the line timing's clocks with what OAM's latches hold, and the
-/// latches follow the scan and the DMA; only the CPU's access, the other
-/// sources, the acknowledges and what render, LCDC, the sprite fetch and
-/// OAM's RAM give come from the trace. A step is an edge and the phase it
+/// VBlank rise into IF, the DMA runs on the clocks' `dma_phi`, LCDC holds
+/// the line timing and the scan in reset and gives the scan the sprites'
+/// height, the OAM scan runs on the line timing's clocks with what OAM's
+/// latches hold, and the latches follow the scan and the DMA; only the
+/// CPU's access, the other sources, the acknowledges and what render, the
+/// sprite fetch and OAM's RAM give come from the trace. LCDC's bits that
+/// the trace lacks (all but 7 and 2) are taken from the first read of it,
+/// if it comes before a write. A step is an edge and the phase it
 /// starts: the clocks are compared with the edge's line, the others with
 /// the next, which ends the phase.
 #[expect(
@@ -1175,6 +1174,10 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         },
         dma: second.dma,
         dma_phi: false,
+        // LCDC's bits that the trace has: the rest are known after a write.
+        control: NetLcdControl {
+            lcdc: if lcd.ppu_reset { 0 } else { 0x80 } | if scan.tall { 0x04 } else { 0 },
+        },
         lcd: NetLcd {
             clk: lcd_edge.clk,
             ..lcd.net
@@ -1189,6 +1192,7 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         read_bus: None,
     };
     chip.dma_phi = NetChip::dma_phi(chip.clocks.outputs(edge.inputs));
+    let mut lcdc_known = false;
     for n in start + 1..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
         let (Some(inputs), Some(clocks)) = (chip_inputs(line, ends), line.clocks.as_ref()) else {
@@ -1197,8 +1201,20 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         let place = format!("{name}:{}", n + 1);
         let before = chip;
         chip.interrupts.ie = ends.ie;
-        let events = chip.edge(inputs);
+        let mut events = chip.edge(inputs);
         report.phases += 1;
+        // LCDC's bits the trace lacks are known once the CPU writes it, or
+        // reads it.
+        lcdc_known |= inputs.wr && inputs.addr == 0xFF40;
+        if let (false, true, Some(taken)) = (
+            lcdc_known,
+            events.read.is_some() && inputs.addr == 0xFF40,
+            ends.lcd.as_ref().and_then(|l| l.read),
+        ) {
+            events.read = Some(taken);
+            chip.control.lcdc = taken;
+            lcdc_known = true;
+        }
         if chip.timer.int_timer && !before.timer.int_timer {
             report.saw("chip: the timer's interrupt rises into IF");
         }
@@ -1255,6 +1271,47 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
     }
 }
 
+/// What `chip`'s LCDC gives the line timing and the scan after the step at
+/// `line`'s edge, against the model at the end of the phase (`ends`).
+fn compare_chip_lcdc(
+    line: &Line,
+    ends: &Line,
+    place: &str,
+    chip: &mut NetChip,
+    report: &mut Report,
+) {
+    let (Some(line_lcd), Some(lcd)) = (line.lcd.as_ref(), ends.lcd.as_ref()) else {
+        return;
+    };
+    let Some(scan) = lcd.scan.as_ref() else {
+        return;
+    };
+    let reset2 = ends.clocks.as_ref().is_some_and(|c| c.net.reset2());
+    let (ppu_reset, tall) = (chip.control.ppu_reset(reset2), chip.control.tall());
+    if ends.wr && ends.addr == 0xFF40 && !line.wr {
+        report.saw("chip: a write of LCDC");
+    }
+    if ppu_reset != line_lcd.ppu_reset {
+        report.saw(if ppu_reset {
+            "chip: LCDC turns the LCD off"
+        } else {
+            "chip: LCDC turns the LCD on"
+        });
+    }
+    if ppu_reset != lcd.ppu_reset || tall != scan.tall {
+        report.differ(
+            format!("chip: LCDC, phase {}", ends.phase),
+            format!(
+                "{place} (reset {ppu_reset} tall {tall}, model {} {})",
+                lcd.ppu_reset, scan.tall
+            ),
+        );
+        chip.control.lcdc = chip.control.lcdc & !0x84
+            | if lcd.ppu_reset { 0 } else { 0x80 }
+            | if scan.tall { 0x04 } else { 0 };
+    }
+}
+
 /// The line timing, the OAM scan and OAM's latches of `chip` after the step
 /// at line `n`'s edge, against the model at the end of the phase (`ends`).
 fn compare_chip_ppu(
@@ -1279,6 +1336,7 @@ fn compare_chip_ppu(
     if events.vblank_rose {
         report.saw("chip: VBlank rises into IF");
     }
+    compare_chip_lcdc(line, ends, &place, chip, report);
     let mut model = lcd.net;
     model.clk = lcd_edge.clk;
     let differ = lcd_differences(&chip.lcd, &model);
@@ -1306,7 +1364,11 @@ fn compare_chip_ppu(
         }
     }
     if let (Some(value), Some(taken)) = (events.read, lcd.read) {
-        report.saw("chip: a read of STAT, LY or LYC");
+        report.saw(if ends.addr == 0xFF40 {
+            "chip: a read of LCDC"
+        } else {
+            "chip: a read of STAT, LY or LYC"
+        });
         if value != taken {
             report.differ(
                 format!("chip: a read of {:04X}", ends.addr),

@@ -2,15 +2,17 @@
 //! edge by edge of the crystal.
 //!
 //! So far the clocks and resets, the divider and the timer, IF, OAM DMA,
-//! the line timing, the OAM scan and OAM's latches of the Y: the clocks run
-//! the phases the others step on, the divider's last bit ends the clocks'
-//! power-on wait, the timer's interrupt, the STAT line and VBlank rise into
-//! IF, the DMA runs on `dma_phi` (`data_phase` inverted), the scan runs on
-//! the line timing's clocks and compares what OAM's latches hold, and the
-//! latches follow the scan and the DMA. What the blocks not transcribed yet
-//! give them comes in with each edge (`ChipInputs`): the CPU core's access
-//! and acknowledges, the other interrupt sources, render's modes, LCDC's
-//! reset and bit 2, the sprite fetch's strobes and OAM's RAM.
+//! LCDC, the line timing, the OAM scan and OAM's latches of the Y: the
+//! clocks run the phases the others step on, the divider's last bit ends
+//! the clocks' power-on wait, the timer's interrupt, the STAT line and
+//! VBlank rise into IF, the DMA runs on `dma_phi` (`data_phase` inverted),
+//! LCDC holds the line timing and the scan in reset and gives the scan the
+//! sprites' height, the scan runs on the line timing's clocks and compares
+//! what OAM's latches hold, and the latches follow the scan and the DMA.
+//! What the blocks not transcribed yet give them comes in with each edge
+//! (`ChipInputs`): the CPU core's access and acknowledges, the other
+//! interrupt sources, render's modes, the sprite fetch's strobes and OAM's
+//! RAM.
 //!
 //! A step is the edge that starts a phase, and what happens in that phase:
 //! the flip-flops clocked by the edge take what was before it, the latches
@@ -21,6 +23,7 @@ use crate::{
     clocks::{ClockInputs, ClockOutputs, NetClocks},
     dma::NetDma,
     interrupts::{NetIf, TIMER},
+    lcd_control::NetLcdControl,
     lcd_timing::NetLcd,
     oam::{NetOamLatches, OamInputs},
     oam_scan::{Clocks as ScanClocks, NetScan},
@@ -30,6 +33,15 @@ use crate::{
 /// IF's VBlank and STAT bits.
 const VBLANK: u8 = 0x01;
 const STAT: u8 = 0x02;
+
+/// What LCDC gives the line timing and the scan.
+#[derive(Clone, Copy)]
+struct Lcdc {
+    /// The PPU's reset: the LCD is off, or the chip is reset.
+    ppu_reset: bool,
+    /// Sprites of 16 lines.
+    tall: bool,
+}
 
 /// What the chip's untranscribed blocks and pins give it at an edge, and in
 /// the phase the edge starts.
@@ -61,16 +73,11 @@ pub struct ChipInputs {
     /// acknowledges in it.
     pub rises: u8,
     pub acks: u8,
-    /// LCDC's reset of the LCD (bit 7 clear) and render's mode 0, at the
-    /// edge and in the phase, and render's mode 3 in the phase.
-    pub ppu_reset_at_edge: bool,
-    pub ppu_reset: bool,
+    /// Render's mode 0, at the edge and in the phase, and its mode 3 in
+    /// the phase.
     pub mode0_at_edge: bool,
     pub mode0: bool,
     pub mode3: bool,
-    /// LCDC bit 2 (sprites of 16 lines), at the edge and in the phase.
-    pub tall_at_edge: bool,
-    pub tall: bool,
     /// The sprite fetch reads OAM, and holds the second latches.
     pub fetch_read: bool,
     pub fetch_hold: bool,
@@ -88,6 +95,7 @@ pub struct NetChip {
     pub dma: NetDma,
     /// `dma_phi` in the last phase.
     pub dma_phi: bool,
+    pub control: NetLcdControl,
     pub lcd: NetLcd,
     pub scan: NetScan,
     pub oam: NetOamLatches,
@@ -95,7 +103,7 @@ pub struct NetChip {
     /// latches a write opens take the bus as it was first.
     pub wr_before: bool,
     pub data_before: u8,
-    /// What a read of STAT, LY or LYC has taken so far: the core's data bus
+    /// What a read of LCDC, STAT, LY or LYC has taken so far: the core's data bus
     /// is precharged high and only pulled low while the read drives it,
     /// from E until it takes it in H.
     pub read_bus: Option<u8>,
@@ -114,13 +122,19 @@ pub struct ChipEvents {
     pub mode2: bool,
     /// The OAM scan's save strobes, bit `i` for slot `i`.
     pub save: u16,
-    /// The byte a read of STAT, LY or LYC takes, in H.
+    /// The byte a read of LCDC, STAT, LY or LYC takes, in H.
     pub read: Option<u8>,
 }
 
 impl NetChip {
     /// An edge of the crystal and the phase it starts.
     pub fn edge(&mut self, inputs: ChipInputs) -> ChipEvents {
+        // LCDC as the edge finds it: its latches open after the edge.
+        // @fact lcdc-write-latch-delay
+        let lcdc_at_edge = Lcdc {
+            ppu_reset: self.control.ppu_reset(self.clocks.reset2()),
+            tall: self.control.tall(),
+        };
         // The clocks, with the divider's last bit as it was at the edge.
         let clock_inputs = self.clock_inputs(inputs);
         self.clocks.step(clock_inputs);
@@ -129,8 +143,14 @@ impl NetChip {
 
         let timer_rose = self.step_timer(phase, inputs);
         self.step_dma(clocks, inputs);
+        let write_lcdc = (inputs.wr && inputs.addr == 0xFF40).then_some(inputs.data);
+        self.control.settle(clocks.reset2, write_lcdc);
+        let lcdc = Lcdc {
+            ppu_reset: self.control.ppu_reset(clocks.reset2),
+            tall: self.control.tall(),
+        };
         let lcd_before = self.lcd;
-        let (stat_rose, vblank_rose) = self.step_lcd(inputs);
+        let (stat_rose, vblank_rose) = self.step_lcd(lcdc_at_edge, lcdc, inputs);
 
         // IF: the sources' rises, the CPU's write and the acknowledges.
         let rises = (inputs.rises & !(TIMER | STAT | VBLANK))
@@ -140,7 +160,7 @@ impl NetChip {
         let write_if = (inputs.wr && inputs.addr == 0xFF0F).then_some(inputs.data);
         self.interrupts.phase(rises, write_if, inputs.acks);
 
-        let (mode2, save) = self.step_scan(lcd_before, inputs);
+        let (mode2, save) = self.step_scan(lcd_before, lcdc_at_edge, lcdc, inputs);
         let read = self.step_read(phase, mode2, inputs);
         self.wr_before = inputs.wr;
         self.data_before = inputs.data;
@@ -213,11 +233,11 @@ impl NetChip {
     /// The line timing: the chip clock's edge (held while LCDC resets the
     /// LCD), the CPU's write of LYC or STAT, the LCD's reset. Whether the
     /// STAT line and VBlank rose.
-    fn step_lcd(&mut self, inputs: ChipInputs) -> (bool, bool) {
+    fn step_lcd(&mut self, at_edge: Lcdc, lcdc: Lcdc, inputs: ChipInputs) -> (bool, bool) {
         let mode1 = self.lcd.mode1;
         let mut rose = false;
         if self.lcd.clk != self.clocks.clk {
-            if inputs.ppu_reset_at_edge {
+            if at_edge.ppu_reset {
                 self.lcd.clk = self.clocks.clk;
             } else {
                 rose = self.lcd.edge(inputs.mode0_at_edge);
@@ -236,7 +256,7 @@ impl NetChip {
                 level = now;
             }
         }
-        if inputs.ppu_reset {
+        if lcdc.ppu_reset {
             self.lcd.reset();
         }
         // Then mode 0, which rises after the edge's flip-flops.
@@ -254,8 +274,14 @@ impl NetChip {
     /// The OAM scan, on the line timing's clocks (`lcd` as the edge found
     /// them), with what OAM's latches held; then the latches. Mode 2 for
     /// OAM and STAT, and the save strobes.
-    fn step_scan(&mut self, lcd: NetLcd, inputs: ChipInputs) -> (bool, u16) {
-        if inputs.ppu_reset_at_edge {
+    fn step_scan(
+        &mut self,
+        lcd: NetLcd,
+        at_edge: Lcdc,
+        lcdc: Lcdc,
+        inputs: ChipInputs,
+    ) -> (bool, u16) {
+        if at_edge.ppu_reset {
             self.scan.reset();
         } else {
             let clocks = ScanClocks {
@@ -266,9 +292,9 @@ impl NetChip {
                 vclk: lcd.vclk,
                 ly: lcd.ly,
             };
-            self.scan.edge(clocks, self.oam.second, inputs.tall_at_edge);
+            self.scan.edge(clocks, self.oam.second, at_edge.tall);
         }
-        if inputs.ppu_reset {
+        if lcdc.ppu_reset {
             self.scan.reset();
         }
         let oam_inputs = OamInputs {
@@ -283,15 +309,18 @@ impl NetChip {
         self.oam.settle(oam_inputs, inputs.oam_data);
         let save = self
             .scan
-            .save(self.lcd.wosu, self.oam.second, self.lcd.ly, inputs.tall)
+            .save(self.lcd.wosu, self.oam.second, self.lcd.ly, lcdc.tall)
             .map_or(0, |slot| 1 << slot);
         (oam_inputs.mode2(), save)
     }
 
-    /// A read of STAT, LY or LYC: the AND of what the register shows from E
-    /// to H, which the core takes in H.
+    /// A read of LCDC, STAT, LY or LYC: the AND of what the register shows
+    /// from E to H, which the core takes in H.
     fn step_read(&mut self, phase: Phase, mode2: bool, inputs: ChipInputs) -> Option<u8> {
-        let shown = self.lcd.read(inputs.addr, mode2, inputs.mode3);
+        let shown = self
+            .control
+            .read(inputs.addr)
+            .or_else(|| self.lcd.read(inputs.addr, mode2, inputs.mode3));
         self.read_bus = match (inputs.rd, phase) {
             (true, Phase::E) => shown,
             (true, Phase::F | Phase::G | Phase::H) => self.read_bus.zip(shown).map(|(a, b)| a & b),

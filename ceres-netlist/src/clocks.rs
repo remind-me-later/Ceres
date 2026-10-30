@@ -232,7 +232,14 @@ impl NetClocks {
             osc_stable: Self::osc_stable(self.waiting, inputs),
             // @hw die: ~RESET (pad_in); AVOR ALUR
             reset: !inputs.reset_pin_n,
-            reset2: self.cpu_sys_reset || self.sys_reset,
+            reset2: self.reset2(),
         }
+    }
+
+    /// `cpu_sys_reset` or `sys_reset`: the reset of most registers, less
+    /// the /RESET pin's.
+    #[must_use]
+    pub const fn reset2(&self) -> bool {
+        self.cpu_sys_reset || self.sys_reset
     }
 }

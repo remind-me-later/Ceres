@@ -54,12 +54,13 @@ LCD_ON_LYC0_ROM := $(BUILD)/lcd_on_lyc0.gb
 LCD_OFF_ROM := $(BUILD)/lcd_off_line_start.gb
 WINDOW_ROM := $(BUILD)/window_line0_sprite.gb
 DMA_FETCH_ROM := $(BUILD)/dma_fetch.gb
+LCDC_ROM := $(BUILD)/lcdc.gb
 
 abs = $(abspath $(1))
 
 .PHONY: all run phases smoke model run-model check clean
 
-all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(TINYBOOT_CGB) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(STAT_DIPS_ROM) $(LCD_ON_LYC0_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM) $(DMA_FETCH_ROM)
+all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(TINYBOOT_CGB) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(STAT_DIPS_ROM) $(LCD_ON_LYC0_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM) $(DMA_FETCH_ROM) $(LCDC_ROM)
 
 # A boot ROM that only turns the LCD on and goes to 0100, for the checks
 # of the readable model, which do not need the boot ROM's timing:
@@ -94,8 +95,9 @@ $(TINYBOOT_CGB): boot/tinyboot_cgb.asm
 # check/lcd_off_line_start.asm, check/window_line0_sprite.asm), and of IF's
 # STAT flag at VBlank's end and start, for run-tests.sh (check/stat_dips.asm),
 # of the LCD turned on with LYC 0, for compare-ceres.sh
-# (check/lcd_on_lyc0.asm), and of the sprite fetch during OAM DMA, for
-# trace-blocks.sh (check/dma_fetch.asm).
+# (check/lcd_on_lyc0.asm), and of the sprite fetch during OAM DMA and of
+# LCDC's writes and reads, for trace-blocks.sh (check/dma_fetch.asm,
+# check/lcdc.asm).
 $(BUILD)/%.gb: check/%.asm
 	mkdir -p $(BUILD)
 	rgbasm -o $(BUILD)/$*.o $<
