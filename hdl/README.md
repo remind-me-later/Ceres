@@ -487,6 +487,26 @@ of VRAM, 363 OAM DMA transfers, 38 CPU reads of OAM and 4 of VRAM (FF
 where the PPU holds them: nothing drives the precharged bus), 168 reads of
 SCY, SCX, BGP, OBP0, OBP1, WY and WX, 25 of FF46.
 
+The bus side (`external_bus.vhd`, `high_ram.vhd`, `boot_rom.vhd`,
+`joypad.vhd`, `serial.vhd`) and the board's work RAM and cartridge (its
+ROM, RAM and MBC) replay as `NetBus` and `NetBoard` (ceres-netlist's
+`bus`), from what the CPU core gives (its address, `read`, `write`,
+`mreq`, the data bus), with the cartridge the ROM that `trace-blocks.sh`
+names beside each trace (`build/blocks/<ROM>.rom`). The traces' last 12
+fields hold the core's request, the pins, the bus side's latches and
+flip-flops, and whether the address latches were open in the phase, for
+however short: as an access inside the chip starts, the core's request
+pulses for a moment, and the latches can take the address and the data pins
+the data bus. That is the core's timing, so the replay takes the latches'
+address from the trace then. As an access ends, the latches take the high
+byte as 00 (the core changes it before its request falls); the serial
+port's half clock is unknown until a write of SC; its eighth bit clears the
+transfer at once. While nothing drives the data pins the board's keeper
+holds them against the pull-ups, as on VRAM's, and the replay compares
+them, and the data latches, only while driven. Over the 269 traces it
+finds no difference: 16 million reads on the cartridge bus, 400 thousand
+writes of HRAM, 189 serial transfers.
+
 `check/ppu_regs.asm` and `check/vram_oam.asm` read back the PPU's
 registers, VRAM and OAM, and check what they read: every register's bits
 with the LCD on and off, FF46 during and after OAM DMA, every byte of VRAM

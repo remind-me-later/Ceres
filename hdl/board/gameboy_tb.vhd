@@ -73,8 +73,14 @@
 -- flags, and its slots' X, lines and indexes; then the data pins, the
 -- CPU core's non_vram_mreq, OAM DMA's dma_addr_ext and vram_to_oam, OAM's
 -- wuje and maka, VRAM's /MCS, /MRD and /MWR, OAM's first odd latches and
--- its two data buses, and VRAM's address. Values in hexadecimal, bits as 0
--- or 1. With BLOCKS_FROM_POWER_ON, from the power-on.
+-- its two data buses, and VRAM's address; then the bus side: the core's
+-- mreq, read and write, /RD, /WR, /CS, the boot ROM's unmapped and
+-- boot_sel, the address pins, the external bus's address and data latches,
+-- the joypad's P1, read latch, debounce history and wake-up latch, its
+-- input pins, and the serial port's SB, transfer, internal clock, half,
+-- output, SCK and SIN, and count; whether the external bus's address
+-- latches were open in the phase, for however short. Values in
+-- hexadecimal, bits as 0 or 1. With BLOCKS_FROM_POWER_ON, from the power-on.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -581,12 +587,41 @@ begin
 		alias x_mcs_n       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mcs_n : std_logic >>;
 		alias x_mrd_n       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mrd_n : std_logic >>;
 		alias x_mwr_n       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mwr_n : std_logic >>;
+		alias y_mreq        is << signal .gameboy_tb.u_gameboy.chip.u_chip.mreq : std_ulogic >>;
+		alias y_read        is << signal .gameboy_tb.u_gameboy.chip.u_chip.read : std_ulogic >>;
+		alias y_write       is << signal .gameboy_tb.u_gameboy.chip.u_chip.write : std_ulogic >>;
+		alias y_a           is << signal .gameboy_tb.u_gameboy.chip.u_chip.a : std_logic_vector(15 downto 0) >>;
+		alias y_rd_n        is << signal .gameboy_tb.u_gameboy.chip.u_chip.rd_n : std_logic >>;
+		alias y_wr_n        is << signal .gameboy_tb.u_gameboy.chip.u_chip.wr_n : std_logic >>;
+		alias y_cs_n        is << signal .gameboy_tb.u_gameboy.chip.u_chip.cs_n : std_ulogic >>;
+		alias y_lat_addr    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_external_bus.latched_addr : std_ulogic_vector(14 downto 0) >>;
+		alias y_lat_data    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_external_bus.latched_data : std_ulogic_vector(7 downto 0) >>;
+		alias y_unmapped    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_boot_rom.unmapped : std_ulogic >>;
+		alias y_boot_sel    is << signal .gameboy_tb.u_gameboy.chip.u_chip.boot_sel : std_ulogic >>;
+		alias y_p1          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_joypad.p1 : std_ulogic_vector(7 downto 0) >>;
+		alias y_jp_read     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_joypad.read_value : std_ulogic_vector(3 downto 0) >>;
+		alias y_jp_hist     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_joypad.history : std_ulogic_vector(3 downto 0) >>;
+		alias y_jp_wake     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_joypad.wakeup : std_ulogic >>;
+		alias y_p10_13      is << signal .gameboy_tb.u_gameboy.chip.u_chip.p10_13 : std_logic_vector(3 downto 0) >>;
+		alias y_sb          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_serial.sb : std_ulogic_vector(7 downto 0) >>;
+		alias y_transfer    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_serial.transfer : std_ulogic >>;
+		alias y_int_clock   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_serial.internal_clock : std_ulogic >>;
+		alias y_half        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_serial.half : std_ulogic >>;
+		alias y_ser_count   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_serial.count : unsigned(3 downto 0) >>;
+		alias y_ser_out     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_serial.ser_out : std_ulogic >>;
+		alias y_sck         is << signal .gameboy_tb.u_gameboy.chip.u_chip.sck : std_logic >>;
+		alias y_addr_latch  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_external_bus.addr_latch : std_ulogic >>;
+		alias y_sin         is << signal .gameboy_tb.u_gameboy.chip.u_chip.sin : std_logic >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := BLOCKS_FROM_POWER_ON;
 		variable ended : phase_t;
 		-- The requests that rose in the phase, also for less than its length.
 		variable rose : std_ulogic_vector(4 downto 0) := (others => '0');
+		-- The external bus's address latches were open in the phase, also
+		-- for less than its length (the core's mreq pulses as an access
+		-- inside the chip starts).
+		variable latch_seen : std_ulogic := '0';
 
 		function b01(b : std_ulogic) return character is
 		begin
@@ -607,7 +642,8 @@ begin
 		file_open(f, BLOCKS, write_mode);
 		ended := phase;
 		loop
-			wait on phase, int_vbl, int_stat, int_timer, int_serial, int_jp;
+			wait on phase, int_vbl, int_stat, int_timer, int_serial, int_jp, y_addr_latch;
+			if y_addr_latch = '1' then latch_seen := '1'; end if;
 			if rising_edge(int_vbl) then rose(0) := '1'; end if;
 			if rising_edge(int_stat) then rose(1) := '1'; end if;
 			if rising_edge(int_timer) then rose(2) := '1'; end if;
@@ -672,10 +708,20 @@ begin
 					& b01(x_wuje) & b01(x_maka) & b01(x_mcs_n) & b01(x_mrd_n) & b01(x_mwr_n)
 					& ' ' & hx(x_first_odd) & ' ' & hx(x_bus_even) & ' ' & hx(x_bus_odd)
 					& ' ' & hx(x_vram_addr));
+				-- The bus side.
+				write(l, ' ' & b01(y_mreq) & b01(y_read) & b01(y_write) & b01(y_rd_n) & b01(y_wr_n)
+					& b01(y_cs_n) & b01(y_unmapped) & b01(y_boot_sel)
+					& ' ' & hx(y_a) & ' ' & hx(y_lat_addr) & ' ' & hx(y_lat_data)
+					& ' ' & hx(y_p1) & ' ' & hx(y_jp_read) & ' ' & hx(y_jp_hist) & b01(y_jp_wake)
+					& ' ' & hx(y_p10_13)
+					& ' ' & hx(y_sb) & ' ' & b01(y_transfer) & b01(y_int_clock) & b01(y_half)
+					& b01(y_ser_out) & b01(y_sck) & b01(y_sin) & ' ' & hx(std_ulogic_vector(y_ser_count))
+					& ' ' & b01(latch_seen));
 				writeline(f, l);
 			end if;
 			ended := phase;
 			rose  := (others => '0');
+			latch_seen := y_addr_latch;
 		end loop;
 	end process;
 

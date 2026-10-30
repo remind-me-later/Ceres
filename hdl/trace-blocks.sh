@@ -9,7 +9,8 @@
 # the chip's reset (0.1 by default) on the model (board/gameboy_tb.vhd,
 # BLOCKS), from build/fastboot.bin, and writes the trace to
 # build/blocks/<ROM>.txt: a line at the end of every phase, from the CPU's
-# first access on. TEST ends the run at a test ROM's result, as in
+# first access on, and the ROM's path in build/blocks/<ROM>.rom (for the
+# replay's cartridge). TEST ends the run at a test ROM's result, as in
 # compare-ceres.sh. FROM=power-on traces from the power-on instead (the
 # clocks' reset and wait), into build/blocks/power-on/<ROM>.txt, which the
 # replay takes for the clocks only. Then
@@ -49,4 +50,6 @@ limit=$(awk -v s="$secs" 'BEGIN { print int(600 + 1200 * s) }')
 	-gBOOTROM="$BOOTROM" -gROM="$ROOT/$rom" -gSECS="$secs" -gBLOCKS="$out" ${TEST:+"-gTEST=$TEST"} \
 	-gBLOCKS_FROM_POWER_ON=$power_on \
 	-r >model.log 2>&1)
+# The ROM, for the replay's cartridge.
+echo "$rom" >"${out%.txt}.rom"
 echo "$(wc -l <"$out") phases in $out"

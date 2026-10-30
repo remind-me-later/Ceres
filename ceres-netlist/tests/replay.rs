@@ -2,8 +2,8 @@
 //! DMA, the line timing, the OAM scan and the clocks (`hdl/trace-blocks.sh`,
 //! in `hdl/build/blocks`, and from the power-on in its `power-on/`) through
 //! their transcriptions, `NetTimer`, `NetIf`, `NetDma`, `NetLcd`,
-//! `NetScan`, `NetOamLatches`, `NetClocks` and `NetRender` (render's
-//! traces only, in `render/`), phase by phase, and reports
+//! `NetScan`, `NetOamLatches`, `NetClocks`, `NetRender` (render's traces
+//! only, in `render/`) and `NetBus` (in `bus/`), phase by phase, and reports
 //! where a transcription parts from the model; and the blocks wired
 //! together (`NetChip`), each taking from the others what the model wires
 //! in, where the trace has the clocks. ceres-core's proofs against ceres
@@ -21,6 +21,7 @@
 //! `cargo test -p ceres-netlist --release --test replay -- --ignored --nocapture`
 //! (with `REPLAY_ONLY=a,b`, only the traces whose names contain a or b).
 
+mod bus;
 mod render;
 
 use {
@@ -84,6 +85,8 @@ struct Line {
     clocks: Option<ClockLine>,
     /// Render and the sprite store (older traces lack them).
     render: Option<render::RenderLine>,
+    /// The bus side (older traces lack it).
+    bus: Option<bus::BusLine>,
 }
 
 /// The clocks in a line of a trace: what they take in, their latches and
@@ -139,6 +142,15 @@ struct OamLine {
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
 fn parse(text: &str) -> Option<Line> {
     let mut all: Vec<&str> = text.split_whitespace().collect();
+    // The bus side's fields follow OAM's and VRAM's; the data pins are
+    // among those, the 6th from their end.
+    let bus = if all.len() == bus::BUS_LINE_FIELDS {
+        let fields = all.split_off(render::OAM_LINE_FIELDS);
+        let d = u8::from_str_radix(all.get(render::OAM_LINE_FIELDS - 6)?, 16).ok()?;
+        Some(bus::parse(&fields, d)?)
+    } else {
+        None
+    };
     // Render's fields follow the clocks'.
     let render = if matches!(
         all.len(),
@@ -224,6 +236,7 @@ fn parse(text: &str) -> Option<Line> {
         },
         clocks,
         render,
+        bus,
     })
 }
 
@@ -1475,6 +1488,7 @@ fn netlist_replay() {
         replay_clocks(name, &lines, &mut report, false);
         replay_chip(name, &lines, &mut report);
         render::replay(name, &lines, &mut report);
+        bus::replay(name, path, &lines, &mut report);
     }
     // The traces from the power-on (`FROM=power-on`): the clocks only, as
     // the other blocks are held in their resets.
