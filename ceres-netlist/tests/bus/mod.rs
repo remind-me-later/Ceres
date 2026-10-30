@@ -6,7 +6,7 @@
 
 use {
     super::{Line, Report, bit, hex8},
-    ceres_netlist::bus::{BusInputs, BusPins, NetBoard, NetBus},
+    ceres_netlist::bus::{BusInputs, BusOutputs, BusPins, NetBoard, NetBus},
     std::{fs, path::Path},
 };
 
@@ -111,9 +111,7 @@ fn inputs(line: &Line) -> Option<BusInputs> {
         p10_13: bus.p10_13,
         sin: bus.sin,
         sck: bus.sck,
-        // The latches opened without a steady request: the core's pulse.
-        latch_glitch: (bus.latch_seen && !(bus.mreq && line.addr >> 13 != 0b100))
-            .then_some(bus.net.latched_addr),
+        latch_glitch: latch_glitch(line),
     })
 }
 
@@ -172,27 +170,12 @@ pub fn replay(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
     let Some(first) = lines.first().and_then(|l| l.bus.as_ref()) else {
         return;
     };
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
-    let (Ok(rom_path), Ok(boot_rom)) = (
-        fs::read_to_string(trace.with_extension("rom")),
-        fs::read(root.join("hdl/build/fastboot.bin")),
-    ) else {
-        report.saw("bus: a trace without its ROM (not replayed)");
+    let Some((mut board, boot_rom)) = board(trace, report) else {
         return;
     };
-    let Ok(rom) = fs::read(root.join(rom_path.trim())) else {
-        report.saw("bus: a ROM that is not there (not replayed)");
-        return;
-    };
-    let mut board = NetBoard::power_on(rom);
-    let mut net = NetBus {
-        half: None,
-        ..first.net
-    };
-    net.before.pins = first.pins;
-    net.before.data = lines[0].data;
+    let mut net = start(first, &lines[0]);
     for (n, line) in lines.iter().enumerate().skip(1) {
-        let (Some(i), Some(model)) = (inputs(line), line.bus.as_ref()) else {
+        let Some(i) = inputs(line) else {
             return;
         };
         let out = net.phase(&i, &mut board, &boot_rom);
@@ -220,13 +203,61 @@ pub fn replay(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
                 report.saw(what);
             }
         }
-        let differ = differences(&net, &model.net);
+        compare(&mut net, &out, line, "bus", &place, report);
+    }
+}
+
+/// The board at power-on with the trace's ROM, and the boot ROM's image.
+pub fn board(trace: &Path, report: &mut Report) -> Option<(NetBoard, Vec<u8>)> {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let (Ok(rom_path), Ok(boot_rom)) = (
+        fs::read_to_string(trace.with_extension("rom")),
+        fs::read(root.join("hdl/build/fastboot.bin")),
+    ) else {
+        report.saw("bus: a trace without its ROM (not replayed)");
+        return None;
+    };
+    let Ok(rom) = fs::read(root.join(rom_path.trim())) else {
+        report.saw("bus: a ROM that is not there (not replayed)");
+        return None;
+    };
+    Some((NetBoard::power_on(rom), boot_rom))
+}
+
+/// The bus side as `first` (the trace's first line, `line`) has it, the
+/// half clock unknown.
+pub const fn start(first: &BusLine, line: &Line) -> NetBus {
+    let mut net = NetBus {
+        half: None,
+        ..first.net
+    };
+    net.before.pins = first.pins;
+    net.before.data = line.data;
+    net
+}
+
+/// The bus side after a phase (`out`, its outputs) against the model at
+/// the end of `line`'s phase; after a difference it takes the model's.
+pub fn compare(
+    net: &mut NetBus,
+    out: &BusOutputs,
+    line: &Line,
+    who: &str,
+    place: &str,
+    report: &mut Report,
+) {
+    let Some(model) = line.bus.as_ref() else {
+        return;
+    };
+    {
+        let place = place.to_owned();
+        let differ = differences(net, &model.net);
         if !differ.is_empty() {
             report.differ(
-                format!("bus, phase {}: {}", line.phase, differ.join(" ")),
+                format!("{who}: bus, phase {}: {}", line.phase, differ.join(" ")),
                 place.clone(),
             );
-            resync(&mut net, &model.net);
+            resync(net, &model.net);
         }
         let ours = BusPins {
             d: if out.pins_driven {
@@ -241,7 +272,7 @@ pub fn replay(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
         }
         if (ours, out.boot_sel) != (model.pins, model.boot_sel) {
             report.differ(
-                format!("bus: pins, phase {}", line.phase),
+                format!("{who}: bus pins, phase {}", line.phase),
                 format!(
                     "{place} ({:04X?} boot_sel {}, model {:04X?} {})",
                     out.pins, out.boot_sel, model.pins, model.boot_sel
@@ -254,12 +285,19 @@ pub fn replay(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
             line.phase,
         ) {
             report.saw("bus: a read the bus side drives");
-            if value != theirs && i.read {
+            if value != theirs && model.read {
                 report.differ(
-                    format!("bus: a read of {:04X}", i.addr & 0xFF00),
+                    format!("{who}: bus, a read of {:04X}", line.addr & 0xFF00),
                     format!("{place} (reads {value:02X}, model {theirs:02X})"),
                 );
             }
         }
     }
+}
+
+/// The address the external bus's latches took in `line`'s phase if they
+/// opened without a steady request: the core's pulse.
+pub fn latch_glitch(line: &Line) -> Option<u16> {
+    let bus = line.bus.as_ref()?;
+    (bus.latch_seen && !(bus.mreq && line.addr >> 13 != 0b100)).then_some(bus.net.latched_addr)
 }

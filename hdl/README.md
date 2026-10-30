@@ -505,7 +505,11 @@ transfer at once. While nothing drives the data pins the board's keeper
 holds them against the pull-ups, as on VRAM's, and the replay compares
 them, and the data latches, only while driven. Over the 269 traces it
 finds no difference: 16 million reads on the cartridge bus, 400 thousand
-writes of HRAM, 189 serial transfers.
+writes of HRAM, 189 serial transfers. Wired into `NetChip` with the rest, they
+leave the chip's inputs the CPU core's (its address, read, write, request,
+data bus, acknowledges, and its request's pulses), the clock pins and the
+world outside (the joypad's lines, SIN, SCK): over the 269 traces the
+closed loop finds no difference either.
 
 `check/ppu_regs.asm` and `check/vram_oam.asm` read back the PPU's
 registers, VRAM and OAM, and check what they read: every register's bits

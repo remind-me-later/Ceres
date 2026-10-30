@@ -27,7 +27,7 @@ mod render;
 use {
     ceres_netlist::{
         Phase,
-        chip::{ChipEvents, ChipInputs, NetChip},
+        chip::{ChipEvents, ChipInputs, ChipMemories, NetChip},
         clocks::{ClockInputs, ClockOutputs, NetClocks},
         dma::NetDma,
         interrupts::{NetIf, lowest},
@@ -1133,7 +1133,7 @@ const fn clocks_shown(
 /// interrupt sources' rises, the acknowledges).
 fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
     let pins = edge.clocks.as_ref()?.inputs;
-    let oam_vram = phase.render.as_ref()?.oam_vram.as_ref()?;
+    let bus = phase.bus.as_ref()?;
     Some(ChipInputs {
         ck1: pins.ck1,
         reset_pin_n: pins.reset_pin_n,
@@ -1145,13 +1145,15 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
         write: pins.write,
         test_reset: pins.test_reset,
         addr: phase.addr,
-        rd: phase.rd,
-        wr: phase.wr,
+        read: bus.read,
+        mreq_in_phase: bus.mreq,
+        write_in_phase: bus.write,
         data: phase.data,
-        rises: phase.rose,
         acks: phase.acks,
-        d: oam_vram.d,
-        non_vram_mreq: oam_vram.non_vram_mreq,
+        latch_glitch: bus::latch_glitch(phase),
+        p10_13: bus.p10_13,
+        sin: bus.sin,
+        sck: bus.sck,
     })
 }
 
@@ -1174,7 +1176,7 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
     clippy::too_many_lines,
     reason = "the start, then the comparison of each block"
 )]
-fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
+fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
     let Some(start) = lines.iter().position(|l| l.clocks.is_some()) else {
         return;
     };
@@ -1192,6 +1194,17 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
     };
     let Some(model_render) = second.render.as_ref().filter(|r| r.oam_vram.is_some()) else {
         return;
+    };
+    let Some(model_bus) = second.bus.as_ref() else {
+        return;
+    };
+    let Some((board, boot_rom)) = bus::board(trace, report) else {
+        return;
+    };
+    let mut memories = ChipMemories {
+        vram: vram_power_on(),
+        board,
+        boot_rom,
     };
     let mut chip = NetChip {
         clocks: NetClocks {
@@ -1222,15 +1235,18 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
             oam: render::oam_from(second).unwrap_or_default(),
             ..model_render.net
         },
+        bus: bus::start(model_bus, second),
+        cpu_wr: false,
+        int_serial: model_bus.net.count & 8 != 0,
+        int_jp: model_bus.net.jp_history & 9 == 9,
     };
     chip.dma_phi = NetChip::dma_phi(chip.clocks.outputs(edge.inputs));
     // Render's wires settle from the model's state.
     let Some(at_start) = render::inputs(first, second, chip.control.lcdc) else {
         return;
     };
-    let mut vram = vram_power_on();
     chip.render.inputs = at_start;
-    chip.render.settle_wires(&vram);
+    chip.render.settle_wires(&memories.vram);
     let mut lcdc_known = false;
     for n in start + 1..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
@@ -1240,11 +1256,11 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         let place = format!("{name}:{}", n + 1);
         let before = chip;
         chip.interrupts.ie = ends.ie;
-        let mut events = chip.edge(inputs, &mut vram);
+        let mut events = chip.edge(inputs, &mut memories);
         report.phases += 1;
         // LCDC's bits the trace lacks are known once the CPU writes it, or
         // reads it.
-        lcdc_known |= inputs.wr && inputs.addr == 0xFF40;
+        lcdc_known |= chip.cpu_wr && inputs.addr == 0xFF40;
         if let (false, true, Some(taken)) = (
             lcdc_known,
             events.read.is_some() && inputs.addr == 0xFF40,
@@ -1256,6 +1272,12 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         }
         if chip.timer.int_timer && !before.timer.int_timer {
             report.saw("chip: the timer's interrupt rises into IF");
+        }
+        if chip.int_serial && !before.int_serial {
+            report.saw("chip: the serial port's interrupt rises into IF");
+        }
+        if chip.int_jp && !before.int_jp {
+            report.saw("chip: the joypad's interrupt rises into IF");
         }
         if chip.dma.enabled && !before.dma.enabled {
             report.saw("chip: a transfer starts on the clocks' dma_phi");
@@ -1307,6 +1329,14 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
             chip.dma = ends.dma;
         }
         compare_chip_ppu(name, n, line, ends, &mut chip, events, report);
+        bus::compare(
+            &mut chip.bus,
+            &events.bus,
+            ends,
+            "chip",
+            &format!("{name}:{}", n + 2),
+            report,
+        );
         if let Some(model) = ends.render.as_ref() {
             let differ = render::differences(&chip.render, &model.net);
             if !differ.is_empty() {
@@ -1314,7 +1344,7 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
                     format!("chip: render, phase {}: {}", ends.phase, differ.join(" ")),
                     format!("{name}:{}", n + 2),
                 );
-                render::resync(&mut chip.render, &model.net, &vram);
+                render::resync(&mut chip.render, &model.net, &memories.vram);
             }
         }
     }
@@ -1419,7 +1449,15 @@ fn compare_chip_ppu(
             0xFF40 => "chip: a read of LCDC",
             0xFF41 | 0xFF44 | 0xFF45 => "chip: a read of STAT, LY or LYC",
             0xFF46 => "chip: a read of FF46",
-            _ => "chip: a read of SCY, SCX, BGP, OBP0, OBP1, WY or WX",
+            0xFF42 | 0xFF43 | 0xFF47..=0xFF49 | 0xFF4A | 0xFF4B => {
+                "chip: a read of SCY, SCX, BGP, OBP0, OBP1, WY or WX"
+            }
+            0xFF80..=0xFFFE => "chip: a read of HRAM",
+            0xFF00..=0xFF02 | 0xFF50 => "chip: a read of the joypad, the serial port or FF50",
+            0x0000..=0x00FF if ends.bus.as_ref().is_some_and(|b| b.boot_sel) => {
+                "chip: a read of the boot ROM"
+            }
+            _ => "chip: a read on the cartridge bus",
         });
         if value != taken {
             report.differ(
@@ -1486,7 +1524,7 @@ fn netlist_replay() {
         replay_lcd(name, &lines, &mut report);
         replay_scan(name, &lines, &mut report);
         replay_clocks(name, &lines, &mut report, false);
-        replay_chip(name, &lines, &mut report);
+        replay_chip(name, path, &lines, &mut report);
         render::replay(name, &lines, &mut report);
         bus::replay(name, path, &lines, &mut report);
     }

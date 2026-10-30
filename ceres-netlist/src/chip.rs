@@ -1,20 +1,16 @@
 //! The chip's blocks, wired together as `hdl/rtl/dmg_cpu_b.vhd` wires them,
 //! edge by edge of the crystal.
 //!
-//! So far the clocks and resets, the divider and the timer, IF, OAM DMA,
-//! LCDC, the line timing, the OAM scan, OAM's latches of the Y, render and
-//! the sprite store: the clocks run the phases the others step on, the
-//! divider's last bit ends the clocks' power-on wait, the timer's
-//! interrupt, the STAT line and VBlank rise into IF, the DMA runs on
-//! `dma_phi` (`data_phase` inverted), LCDC holds the PPU in reset and gives
-//! the scan the sprites' height, the scan runs on the line timing's clocks
-//! and compares what OAM's latches hold, the latches follow the scan, the
-//! DMA and the sprite fetch, render's mode 0 is the STAT line's HBlank
-//! source and its mode 3 STAT's, and render and the store run on what the
-//! line timing, the scan, OAM's latches, the DMA and LCDC give them. What
-//! the blocks not transcribed yet give them comes in with each edge
-//! (`ChipInputs`): the CPU core's access and acknowledges, the other
-//! interrupt sources, OAM's RAM and its odd byte, and VRAM's data.
+//! The clocks and resets, the divider and the timer, IF, OAM DMA, LCDC,
+//! the line timing, the OAM scan, OAM, render, the sprite store, VRAM's
+//! bus, and the bus side (the external bus, HRAM, the boot ROM's mapping,
+//! the joypad, the serial port): everything but the CPU core and the APU.
+//! What comes in with each edge (`ChipInputs`) is the core's (its address,
+//! read, write, request, the data bus, its acknowledges, and its request's
+//! pulses, which the external bus's latches can catch), the clock pins and
+//! the world outside (the joypad's lines, SIN, SCK); the memories (VRAM,
+//! the board's work RAM and cartridge, the boot ROM) are the edge's to
+//! borrow.
 //!
 //! A step is the edge that starts a phase, and what happens in that phase:
 //! the flip-flops clocked by the edge take what was before it, the latches
@@ -22,6 +18,7 @@
 
 use crate::{
     Phase,
+    bus::{BusInputs, BusOutputs, NetBoard, NetBus},
     clocks::{ClockInputs, ClockOutputs, NetClocks},
     dma::NetDma,
     interrupts::{NetIf, TIMER},
@@ -36,6 +33,8 @@ use crate::{
 /// IF's VBlank and STAT bits.
 const VBLANK: u8 = 0x01;
 const STAT: u8 = 0x02;
+const SERIAL: u8 = 0x08;
+const JOYPAD: u8 = 0x10;
 
 /// What LCDC gives the line timing and the scan.
 #[derive(Clone, Copy)]
@@ -65,27 +64,39 @@ pub struct ChipInputs {
     pub mreq: bool,
     pub write: bool,
     pub test_reset: bool,
-    /// The CPU's access in the phase: the address, whether it reads or
-    /// writes, and the data bus.
+    /// The CPU core's access in the phase: its address, its read, and the
+    /// chip's data bus (the core's write strobe and request are `write` and
+    /// `mreq`, above); its acknowledges.
     pub addr: u16,
-    pub rd: bool,
-    pub wr: bool,
+    pub read: bool,
     pub data: u8,
-    /// The interrupt sources not transcribed yet (the serial port, the
-    /// joypad) that rise in the phase, as IF's bits, and the CPU core's
-    /// acknowledges in it.
-    pub rises: u8,
     pub acks: u8,
-    /// The data pins (the cartridge bus, which OAM DMA may read: the work
-    /// RAM and the cartridge are not transcribed), and the CPU core's memory
-    /// request outside VRAM.
-    pub d: u8,
-    pub non_vram_mreq: bool,
+    /// The core's request and write strobe as they are in the phase (the
+    /// clocks take them as they are at the edge, `mreq` and `write`).
+    pub mreq_in_phase: bool,
+    pub write_in_phase: bool,
+    /// The address the external bus's latches took as the core's request
+    /// pulsed inside the phase (the core's timing), if they did.
+    pub latch_glitch: Option<u16>,
+    /// The world outside: the joypad's lines, SIN, and SCK as the other end
+    /// of the link drives it.
+    pub p10_13: u8,
+    pub sin: bool,
+    pub sck: bool,
+}
+
+/// The memories the chip's edge borrows: VRAM, the board (its work RAM and
+/// cartridge) and the boot ROM's image.
+pub struct ChipMemories {
+    pub vram: Box<[u8; 0x2000]>,
+    pub board: NetBoard,
+    pub boot_rom: Vec<u8>,
 }
 
 /// The chip's transcribed blocks, between edges of the crystal. VRAM, on
 /// the board, is the edge's to borrow.
 #[derive(Clone, Copy)]
+#[expect(clippy::struct_excessive_bools, reason = "the strobes' last levels")]
 pub struct NetChip {
     pub clocks: NetClocks,
     pub timer: NetTimer,
@@ -97,6 +108,14 @@ pub struct NetChip {
     pub lcd: NetLcd,
     pub scan: NetScan,
     pub render: NetRender,
+    /// The bus side: the external bus, HRAM, the boot ROM's mapping, the
+    /// joypad, the serial port.
+    pub bus: NetBus,
+    /// The chip's write strobe in the phase (`cpu_wr_sync`).
+    pub cpu_wr: bool,
+    /// The serial port's and the joypad's interrupt lines in the last phase.
+    pub int_serial: bool,
+    pub int_jp: bool,
     /// The CPU's write strobe and the data bus in the last phase: the
     /// latches a write opens take the bus as it was first.
     pub wr_before: bool,
@@ -122,11 +141,13 @@ pub struct ChipEvents {
     pub save: u16,
     /// The byte a read of LCDC, STAT, LY or LYC takes, in H.
     pub read: Option<u8>,
+    /// What the bus side gave in the phase: the pins, its interrupts.
+    pub bus: BusOutputs,
 }
 
 impl NetChip {
     /// An edge of the crystal and the phase it starts.
-    pub fn edge(&mut self, inputs: ChipInputs, vram: &mut [u8; 0x2000]) -> ChipEvents {
+    pub fn edge(&mut self, inputs: ChipInputs, memories: &mut ChipMemories) -> ChipEvents {
         // LCDC as the edge finds it: its latches open after the edge.
         // @fact lcdc-write-latch-delay
         let lcdc_at_edge = Lcdc {
@@ -139,9 +160,11 @@ impl NetChip {
         let phase = self.clocks.phase();
         let clocks = self.clocks.outputs(clock_inputs);
 
+        self.cpu_wr = clocks.cpu_wr_sync;
         let timer_rose = self.step_timer(phase, inputs);
         self.step_dma(clocks, inputs);
-        let write_lcdc = (inputs.wr && inputs.addr == 0xFF40).then_some(inputs.data);
+        let bus = self.step_bus(phase, clocks, inputs, memories);
+        let write_lcdc = (self.cpu_wr && inputs.addr == 0xFF40).then_some(inputs.data);
         self.control.settle(clocks.reset2, write_lcdc);
         let lcdc = Lcdc {
             ppu_reset: self.control.ppu_reset(clocks.reset2),
@@ -154,7 +177,7 @@ impl NetChip {
         let (mut stat_rose, level, vblank_rose) =
             self.step_lcd(lcdc_at_edge, lcdc, mode0_at_edge, inputs);
         let (mode2, save) = self.step_scan(lcd_before, lcdc_at_edge, lcdc);
-        self.step_render(clocks, lcdc, save, inputs, vram);
+        self.step_render(clocks, lcdc, save, inputs, bus, &mut memories.vram);
         // Then mode 0, which rises after the edge's flip-flops.
         let mut level = level;
         for now in [
@@ -166,15 +189,24 @@ impl NetChip {
         }
 
         // IF: the sources' rises, the CPU's write and the acknowledges.
-        let rises = (inputs.rises & !(TIMER | STAT | VBLANK))
-            | if timer_rose { TIMER } else { 0 }
+        let rises = if bus.int_serial && !self.int_serial {
+            SERIAL
+        } else {
+            0
+        } | if bus.int_jp && !self.int_jp {
+            JOYPAD
+        } else {
+            0
+        } | if timer_rose { TIMER } else { 0 }
             | if stat_rose { STAT } else { 0 }
             | if vblank_rose { VBLANK } else { 0 };
-        let write_if = (inputs.wr && inputs.addr == 0xFF0F).then_some(inputs.data);
+        let write_if = (self.cpu_wr && inputs.addr == 0xFF0F).then_some(inputs.data);
         self.interrupts.phase(rises, write_if, inputs.acks);
+        self.int_serial = bus.int_serial;
+        self.int_jp = bus.int_jp;
 
-        let read = self.step_read(phase, mode2, inputs);
-        self.wr_before = inputs.wr;
+        let read = self.step_read(phase, mode2, inputs, bus);
+        self.wr_before = self.cpu_wr;
         self.data_before = inputs.data;
         ChipEvents {
             timer_rose,
@@ -183,6 +215,7 @@ impl NetChip {
             mode2,
             save,
             read,
+            bus,
         }
     }
 
@@ -216,7 +249,7 @@ impl NetChip {
     fn step_timer(&mut self, phase: Phase, inputs: ChipInputs) -> bool {
         let int_timer = self.timer.int_timer;
         let access = match Reg::at(inputs.addr) {
-            Some(reg) if inputs.wr => Access::Write(reg, inputs.data),
+            Some(reg) if self.cpu_wr => Access::Write(reg, inputs.data),
             _ => Access::None,
         };
         self.timer.phase(phase, access);
@@ -226,7 +259,7 @@ impl NetChip {
     /// OAM DMA, on `dma_phi`.
     const fn step_dma(&mut self, clocks: ClockOutputs, inputs: ChipInputs) {
         let dma_phi = Self::dma_phi(clocks);
-        let write = if inputs.wr && inputs.addr == 0xFF46 {
+        let write = if self.cpu_wr && inputs.addr == 0xFF46 {
             Some(inputs.data)
         } else {
             None
@@ -263,7 +296,7 @@ impl NetChip {
             }
         }
         let mut level = self.lcd.int_stat(mode0_at_edge);
-        if inputs.wr && matches!(inputs.addr, 0xFF41 | 0xFF45) {
+        if self.cpu_wr && matches!(inputs.addr, 0xFF41 | 0xFF45) {
             let opens = !self.wr_before;
             for data in [opens.then_some(self.data_before), Some(inputs.data)]
                 .into_iter()
@@ -331,6 +364,41 @@ impl NetChip {
         .mode2()
     }
 
+    /// The bus side, in the phase: the external bus, HRAM, the boot ROM's
+    /// mapping, the joypad and the serial port, with the board on the pins.
+    fn step_bus(
+        &mut self,
+        phase: Phase,
+        clocks: ClockOutputs,
+        inputs: ChipInputs,
+        memories: &mut ChipMemories,
+    ) -> BusOutputs {
+        let bus_inputs = BusInputs {
+            addr: inputs.addr,
+            read: inputs.read,
+            write: inputs.write_in_phase,
+            mreq: inputs.mreq_in_phase,
+            data: inputs.data,
+            clk_t4: clocks.clk_t4,
+            exec_phase: clocks.exec_phase,
+            cpu_wr_sync: clocks.cpu_wr_sync,
+            cpu_ext_cs_en: clocks.cpu_ext_cs_en,
+            clk_1mhz: clocks.clk_1mhz,
+            starts_a: matches!(phase, Phase::A),
+            reset2: clocks.reset2,
+            reset: clocks.reset,
+            dma_addr_ext: self.dma.run && !self.dma_from_vram(),
+            dma_addr: u16::from_be_bytes([self.dma.source, self.dma.count]),
+            div: self.timer.count,
+            p10_13: inputs.p10_13,
+            sin: inputs.sin,
+            sck: inputs.sck,
+            latch_glitch: inputs.latch_glitch,
+        };
+        self.bus
+            .phase(&bus_inputs, &mut memories.board, &memories.boot_rom)
+    }
+
     /// OAM DMA reads VRAM (sources 80 to 9F), else the cartridge bus.
     // @hw die: MUDA LOGO MORY LUMA, MUHO LUFA
     const fn dma_from_vram(&self) -> bool {
@@ -346,6 +414,7 @@ impl NetChip {
         lcdc: Lcdc,
         save: u16,
         inputs: ChipInputs,
+        bus: BusOutputs,
         vram: &mut [u8; 0x2000],
     ) {
         let line_start = self.scan.line_start() || lcdc.ppu_reset;
@@ -359,10 +428,10 @@ impl NetChip {
                 ly: self.lcd.ly,
                 lcdc: self.control.lcdc,
                 addr: inputs.addr,
-                wr: inputs.wr,
+                wr: self.cpu_wr,
                 data: inputs.data,
-                rd: inputs.rd,
-                non_vram_mreq: inputs.non_vram_mreq,
+                rd: inputs.read,
+                non_vram_mreq: bus.non_vram_mreq,
                 write: inputs.write,
                 cpu_wr_sync: clocks.cpu_wr_sync,
                 cpu_ext_cs_en: clocks.cpu_ext_cs_en,
@@ -379,7 +448,7 @@ impl NetChip {
                 wosu: self.lcd.wosu,
                 dma_phi: self.dma_phi,
                 dma_addr_ext: self.dma.run && !self.dma_from_vram(),
-                d: inputs.d,
+                d: bus.pins.d,
                 dma_run: self.dma.run,
                 dma_index: self.dma.count,
                 scanning: self.scan.scanning,
@@ -391,7 +460,13 @@ impl NetChip {
 
     /// A read of the PPU's registers, OAM, VRAM or FF46: the AND of what
     /// drives the bus from E to H, which the core takes in H.
-    fn step_read(&mut self, phase: Phase, mode2: bool, inputs: ChipInputs) -> Option<u8> {
+    fn step_read(
+        &mut self,
+        phase: Phase,
+        mode2: bool,
+        inputs: ChipInputs,
+        bus: BusOutputs,
+    ) -> Option<u8> {
         let shown = self
             .control
             .read(inputs.addr)
@@ -400,21 +475,22 @@ impl NetChip {
             .or_else(|| self.render.read_vram())
             .or_else(|| self.render.oam.read(&self.render.oam_inputs()))
             .or_else(|| (inputs.addr == 0xFF46).then_some(self.dma.source))
+            .or(bus.data_out)
             // VRAM and OAM while the PPU or OAM DMA holds them: nothing
             // drives the precharged bus.
             .or_else(|| matches!(inputs.addr, 0x8000..=0x9FFF | 0xFE00..=0xFE9F).then_some(0xFF));
         // The bus is precharged high; what drives it pulls bits low.
-        let driven = |bus: Option<u8>| match (bus, shown) {
-            (Some(bus), Some(byte)) => Some(bus & byte),
-            (bus, None) => bus,
+        let driven = |held: Option<u8>| match (held, shown) {
+            (Some(held), Some(byte)) => Some(held & byte),
+            (held, None) => held,
             (None, byte) => byte,
         };
-        self.read_bus = match (inputs.rd, phase) {
+        self.read_bus = match (inputs.read, phase) {
             (true, Phase::E) => shown,
             (true, Phase::F | Phase::G | Phase::H) => driven(self.read_bus),
             _ => None,
         };
-        (inputs.rd && matches!(phase, Phase::H))
+        (inputs.read && matches!(phase, Phase::H))
             .then_some(self.read_bus)
             .flatten()
     }
