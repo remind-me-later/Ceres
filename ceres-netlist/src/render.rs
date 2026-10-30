@@ -19,12 +19,17 @@
 //! the PPU's clock runs deltas until nothing changes, then the next
 //! nanosecond's changes, until none are left.
 //!
-//! What render takes from the other blocks (the OAM scan's line start and
-//! stop, the sprite store's match and line, OAM's bytes, the line timing's
-//! hclk, LY and VBlank, LCDC, the CPU's writes) changes with the
-//! flip-flops, 1 ns after the edge; what the scan's flip-flops clocked by
-//! `wuvu` make, a nanosecond later; VRAM's data 2 ns after the flip-flops,
-//! as the address reaches VRAM 2 ns after it changes.
+//! OAM (`crate::oam::NetOam`), the VRAM bus and the board's VRAM settle
+//! with render, as they feed each other within an edge. What they take
+//! from the other blocks reaches them at its time: the clocks decoded from
+//! the phase with the edge; the line timing's, the DMA's and LCDC's
+//! flip-flops 1 ns after it; the scan's flip-flops clocked by `wuvu` (the
+//! line's start, `ceno`, `scanning`, the stop's rise) and the data pins at
+//! 2 ns; the scan's index at 3 ns, a port behind mode 2; the CPU's address,
+//! strobes and data bus at 4 ns, after what drives them. VRAM's data
+//! follows its address 2 ns later (`render_settled`).
+
+use crate::oam::{NetOam, NetOamInputs};
 
 /// What render takes in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -51,18 +56,23 @@ pub struct RenderInputs {
     pub ceno: bool,
     pub save: u16,
     pub scan_line: u8,
-    /// The line timing's `wuvu`, which clocks the sprite store's index.
+    /// The line timing's `wuvu`, which clocks the sprite store's index, and
+    /// `wosu`, for OAM.
     pub wuvu: bool,
+    pub wosu: bool,
     /// What addresses OAM, besides the store: the DMA's index while it
     /// runs, the scan's in mode 2, the CPU's (its address's bits 7 to 2)
     /// otherwise.
     pub dma_run: bool,
     pub dma_index: u8,
-    pub mode2: bool,
+    /// The scan runs: mode 2, unless OAM DMA hides OAM from it.
+    pub scanning: bool,
     pub scan_index: u8,
-    /// OAM's even and odd bytes: the sprite's tile and attributes.
-    pub tile: u8,
-    pub attributes: u8,
+    /// For OAM: the DMA's clock, whether it reads the cartridge bus, and
+    /// the data pins.
+    pub dma_phi: bool,
+    pub dma_addr_ext: bool,
+    pub d: u8,
     /// The CPU's read strobe, its memory request outside VRAM, and the
     /// clocks' `write`, `cpu_wr_sync`, `cpu_ext_cs_en` and `clk_t4`, for the
     /// VRAM bus.
@@ -118,6 +128,8 @@ pub struct Wires {
     pub line: u8,
     /// OAM's address, bits 7 to 2 (`oam_addr` of `hdl/rtl/oam.vhd`).
     pub oam_index: u8,
+    /// Mode 2: the scan runs and OAM DMA does not hide OAM from it.
+    pub mode2: bool,
     /// The VRAM bus's (`hdl/rtl/vram_bus.vhd`) and the board's: render's
     /// address, the CPU addresses VRAM (and writes it), /MCS, /MRD, /MWR, the
     /// data pins (driven, or as the keeper holds them), and VRAM's data as
@@ -133,6 +145,8 @@ pub struct Wires {
     /// keeper takes.
     pub md_driven: bool,
     pub md: u8,
+    /// What drives OAM's data lines, as last scheduled.
+    pub oam_driver: Option<(u8, u8)>,
 }
 
 /// VRAM at power-on: the board's arbitrary bytes, from its 32-bit xorshift
@@ -253,6 +267,9 @@ pub struct NetRender {
     pub vram_ma: u16,
     pub render_settled: Option<u16>,
     pub md_kept: u8,
+    /// OAM, which settles with render: the sprite's tile and attributes are
+    /// its latches.
+    pub oam: NetOam,
     pub wires: Wires,
     /// The inputs as the last delta cycle had them.
     pub inputs: RenderInputs,
@@ -299,6 +316,8 @@ enum Tx {
     Scanned(u8),
     Fetched(u16),
     RenderSettled(Option<u16>),
+    OamBus(u8, u8),
+    Maka(bool),
     SpShift {
         mask: u8,
         a: u8,
@@ -348,6 +367,8 @@ impl Tx {
             Self::Scanned(_) => 33,
             Self::Fetched(_) => 34,
             Self::RenderSettled(_) => 35,
+            Self::OamBus(..) => 36,
+            Self::Maka(_) => 37,
         }
     }
 }
@@ -389,6 +410,15 @@ const INPUTS_AT: u32 = 1;
 /// make (the line's start, `ceno`, the index, the stop's rise) reaches
 /// render 2 ns after the edge.
 const SCAN_AT: u32 = 2;
+/// The scan's index, which leaves it through a port a delta after mode 2:
+/// a nanosecond later here.
+const SCAN_INDEX_AT: u32 = 3;
+/// The CPU's access: its address, strobes and data bus, which settles
+/// after what drives it (a register read takes the modes as they change).
+const DATA_AT: u32 = 4;
+/// The data pins, which follow OAM DMA's address (its count changes 1 ns
+/// after `dma_phi` rises) through the cartridge bus.
+const PINS_AT: u32 = 2;
 
 /// The deltas an edge may take before it is taken to oscillate.
 const MAX_DELTAS: usize = 1000;
@@ -415,7 +445,12 @@ impl NetRender {
             now: 0,
         };
         let mut prev = *self;
+        // The clocks decoded from the phase change with the clock.
         self.inputs.clk = inputs.clk;
+        self.inputs.clk_t4 = inputs.clk_t4;
+        self.inputs.cpu_wr_sync = inputs.cpu_wr_sync;
+        self.inputs.cpu_ext_cs_en = inputs.cpu_ext_cs_en;
+        self.inputs.dma_phi = inputs.dma_phi;
         let mut deltas = 0;
         loop {
             // The deltas of this nanosecond, until nothing changes.
@@ -430,7 +465,7 @@ impl NetRender {
                 assert!(deltas < MAX_DELTAS, "render oscillates");
             }
             // The next nanosecond: the inputs at 1 ns, and the flip-flops.
-            let inputs_due = [INPUTS_AT, SCAN_AT]
+            let inputs_due = [INPUTS_AT, SCAN_AT, SCAN_INDEX_AT, DATA_AT]
                 .into_iter()
                 .find(|&at| at > schedule.now);
             let Some(at) = schedule
@@ -450,15 +485,33 @@ impl NetRender {
                     line_start: was.line_start,
                     ceno: was.ceno,
                     scan_index: was.scan_index,
+                    scanning: was.scanning,
+                    data: was.data,
+                    addr: was.addr,
+                    rd: was.rd,
+                    wr: was.wr,
+                    d: was.d,
                     // stop_scan falls with doba, rises with byba.
                     stop_scan: was.stop_scan && inputs.stop_scan,
                     ..inputs
                 };
             }
+            if at == SCAN_INDEX_AT {
+                self.inputs.scan_index = inputs.scan_index;
+            }
+            if at == DATA_AT {
+                self.inputs.data = inputs.data;
+                self.inputs.addr = inputs.addr;
+                self.inputs.rd = inputs.rd;
+                self.inputs.wr = inputs.wr;
+            }
+            if at == PINS_AT {
+                self.inputs.d = inputs.d;
+            }
             if at == SCAN_AT {
                 self.inputs.line_start = inputs.line_start;
                 self.inputs.ceno = inputs.ceno;
-                self.inputs.scan_index = inputs.scan_index;
+                self.inputs.scanning = inputs.scanning;
                 self.inputs.stop_scan = inputs.stop_scan;
             }
             let (due, later): (Vec<_>, Vec<_>) =
@@ -511,6 +564,11 @@ impl NetRender {
             Tx::Scanned(v) => self.store.scanned = v,
             Tx::Fetched(v) => self.store.fetched = v,
             Tx::RenderSettled(v) => self.render_settled = v,
+            Tx::OamBus(even, odd) => {
+                self.oam.bus_even = even;
+                self.oam.bus_odd = odd;
+            }
+            Tx::Maka(v) => self.oam.maka = v,
             Tx::SpShift {
                 mask,
                 a,
@@ -568,12 +626,15 @@ impl NetRender {
         n.sycu = cur.sprite_step & 1 != 0 && cur.mode3 && !cur.tyfo;
         n.loaded = cur.tyfo && cur.sprite_step & 1 != 0 && cur.seba && cur.vonu;
         n.sprite_cycles = cur.mode3 && (cur.sprite_step & 2 != 0 || cur.vonu);
-        n.sp_data = if i.attributes & 0x20 != 0 && w.sprite_cycles {
+        n.sp_data = if cur.oam.second_odd & 0x20 != 0 && w.sprite_cycles {
             w.md.reverse_bits()
         } else {
             w.md
         };
         n.sprite_on = if w.loaded { !(cur.sp_a | cur.sp_b) } else { 0 };
+
+        // @hw die: ACYL BOGE
+        n.mode2 = i.scanning && !i.dma_run;
 
         // The sprite store's.
         n.rendering = cur.mode3 && !i.ceno;
@@ -589,11 +650,11 @@ impl NetRender {
 
         // OAM's address, bits 7 to 2: the CPU's, the DMA's, the scan's, or
         // the store's index lines in mode 3.
-        n.oam_index = if !i.mode2 && !cur.mode3 && !i.dma_run {
+        n.oam_index = if !w.mode2 && !cur.mode3 && !i.dma_run {
             (i.addr >> 2 & 0x3F) as u8
         } else if i.dma_run {
             i.dma_index >> 2
-        } else if i.mode2 {
+        } else if w.mode2 {
             i.scan_index
         } else {
             store.index
@@ -687,6 +748,63 @@ impl NetRender {
             self.wires = wires;
             deltas += 1;
             assert!(deltas < MAX_DELTAS, "render's wires oscillate");
+        }
+        let oam_inputs = self.oam_inputs();
+        self.oam.settle_wires(&oam_inputs);
+        self.wires.oam_driver = self.oam.bus_drivers(&oam_inputs);
+    }
+
+    /// What OAM takes in: the CPU's access, the DMA's, the scan's, and
+    /// render's mode 3, sprite fetch, index lines and VRAM's data.
+    #[must_use]
+    pub const fn oam_inputs(&self) -> NetOamInputs {
+        let i = &self.inputs;
+        NetOamInputs {
+            addr: i.addr,
+            rd: i.rd,
+            wr: i.wr,
+            data: i.data,
+            clk_t4: i.clk_t4,
+            dma_run: i.dma_run,
+            dma_phi: i.dma_phi,
+            dma_index: i.dma_index,
+            dma_addr_ext: i.dma_addr_ext,
+            vram_to_oam: i.vram_to_oam,
+            d: i.d,
+            md: self.wires.md,
+            mode2: self.wires.mode2,
+            mode3: self.mode3,
+            scan_index: i.scan_index,
+            render_index: self.store.index,
+            wosu: i.wosu,
+            wuvu: i.wuvu,
+            fetch_read: self.fetch_read(),
+            fetch_hold: self.fetch_hold(),
+        }
+    }
+
+    /// OAM's delta cycle: its wires, RAM and latches; MAKA on the clock's
+    /// falling edges; the data lines 1 ns after their driver changes (a
+    /// later change replaces one still pending, as VHDL's inertial delay
+    /// does).
+    // @hw die: MAKA (dffr); CEDE AZAR AZUL APAG
+    fn oam_delta(&self, prev: &Self, next: &mut Self, schedule: &mut Schedule) {
+        let (cur, i) = (self, &self.inputs);
+        let oam_inputs = cur.oam_inputs();
+        next.oam = cur.oam.delta(&oam_inputs);
+        if i.hard_reset {
+            next.oam.maka = false;
+            schedule.cancel(Tx::Maka(false));
+        } else if fell(prev.inputs.clk, i.clk) {
+            schedule.after_tco(Tx::Maka(i.clk_t4));
+        } else {
+            // MAKA holds.
+        }
+        let driver = cur.oam.bus_drivers(&oam_inputs);
+        if driver != cur.wires.oam_driver {
+            next.wires.oam_driver = driver;
+            let (even, odd) = driver.unwrap_or((cur.oam.bus_even, cur.oam.bus_odd));
+            schedule.after(1, Tx::OamBus(even, odd));
         }
     }
 
@@ -1056,8 +1174,16 @@ impl NetRender {
         // @hw die: NYLU..VUPY, NURO..WUFY (dffsr)
         let on = w.sprite_on;
         if on != 0 {
-            let palette = if i.attributes & 0x10 != 0 { 0xFF } else { 0 };
-            let priority = if i.attributes & 0x80 != 0 { 0xFF } else { 0 };
+            let palette = if cur.oam.second_odd & 0x10 != 0 {
+                0xFF
+            } else {
+                0
+            };
+            let priority = if cur.oam.second_odd & 0x80 != 0 {
+                0xFF
+            } else {
+                0
+            };
             next.sp_a = cur.sp_a & !on | cur.sp_low_a & on;
             next.sp_b = cur.sp_b & !on | cur.sp_low_b & on;
             next.sp_palette = cur.sp_palette & !on | palette & on;
@@ -1074,6 +1200,7 @@ impl NetRender {
         }
         self.store_delta(prev, &mut next, schedule);
         self.vram_delta(prev, &mut next, schedule, vram);
+        self.oam_delta(prev, &mut next, schedule);
         next
     }
 
@@ -1091,7 +1218,7 @@ impl NetRender {
             if i.line_start || store.fetched & 1 << slot != 0 {
                 next.store.xs[slot] = 0xFF;
             } else if i.save & 1 << slot != 0 {
-                next.store.xs[slot] = i.attributes;
+                next.store.xs[slot] = cur.oam.second_odd;
             } else {
                 // The latches hold.
             }
@@ -1186,11 +1313,12 @@ impl NetRender {
         } else if self.wires.sprite_cycles {
             // The stored line counts from the bottom: flipped in Y, it is
             // the row; otherwise its inverse is.
-            let row = self.wires.line ^ if i.attributes & 0x40 != 0 { 0 } else { 0x0F };
+            let attributes = self.oam.second_odd;
+            let row = self.wires.line ^ if attributes & 0x40 != 0 { 0 } else { 0x0F };
             let tile = if i.lcdc & 4 != 0 {
-                i.tile & 0xFE | row >> 3 & 1
+                self.oam.second_even & 0xFE | row >> 3 & 1
             } else {
-                i.tile
+                self.oam.second_even
             };
             Some((tile as u16) << 4 | ((row & 7) as u16) << 1 | self.vonu as u16)
         } else {

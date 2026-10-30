@@ -32,7 +32,7 @@ use {
         interrupts::{NetIf, lowest},
         lcd_control::NetLcdControl,
         lcd_timing::NetLcd,
-        oam::{NetOam, NetOamLatches, OamInputs},
+        oam::{NetOamLatches, OamInputs},
         oam_scan::{Clocks as ScanClocks, NetScan},
         render::{NetRender, vram_power_on},
         timer::{Access, NetTimer, Reg},
@@ -1174,14 +1174,10 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
     let (Some(lcd_edge), Some(lcd)) = (first.lcd.as_ref(), second.lcd.as_ref()) else {
         return;
     };
-    let Some((scan, oam)) = lcd.scan.as_ref().and_then(|s| Some((s, s.oam.as_ref()?))) else {
+    let Some(scan) = lcd.scan.as_ref() else {
         return;
     };
-    let Some((model_render, oam_vram)) = second
-        .render
-        .as_ref()
-        .and_then(|r| Some((r, r.oam_vram.as_ref()?)))
-    else {
+    let Some(model_render) = second.render.as_ref().filter(|r| r.oam_vram.is_some()) else {
         return;
     };
     let mut chip = NetChip {
@@ -1205,23 +1201,12 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
             ..lcd.net
         },
         scan: scan.net,
-        oam: NetOam {
-            bus_even: oam_vram.bus_even,
-            bus_odd: oam_vram.bus_odd,
-            first_even: oam.first,
-            first_odd: oam_vram.first_odd,
-            second_even: scan.y,
-            second_odd: model_render.attributes,
-            wuje: oam_vram.wuje,
-            maka: oam_vram.maka,
-            ..NetOam::power_on()
-        },
-        clk_t4: next.outputs.clk_t4,
         wr_before: second.wr,
         data_before: second.data,
         read_bus: None,
         render: NetRender {
             md_kept: 0xFF,
+            oam: render::oam_from(second).unwrap_or_default(),
             ..model_render.net
         },
     };
@@ -1444,59 +1429,7 @@ fn compare_chip_ppu(
         );
         chip.scan = scan.net;
     }
-    compare_chip_oam(ends, &place, chip, report);
-}
-
-/// OAM's latches, data lines, WUJE and MAKA of `chip` after a step, against
-/// the model at the end of the phase (`ends`).
-fn compare_chip_oam(ends: &Line, place: &str, chip: &mut NetChip, report: &mut Report) {
-    let Some((lcd, render)) = ends.lcd.as_ref().zip(ends.render.as_ref()) else {
-        return;
-    };
-    let (Some(scan), Some(oam_vram)) = (lcd.scan.as_ref(), render.oam_vram.as_ref()) else {
-        return;
-    };
-    let Some(oam) = scan.oam.as_ref() else {
-        return;
-    };
-    let ours = &chip.oam;
-    let ours = (
-        ours.first_even,
-        ours.first_odd,
-        ours.second_even,
-        ours.second_odd,
-        ours.bus_even,
-        ours.bus_odd,
-        ours.wuje,
-        ours.maka,
-    );
-    let theirs = (
-        oam.first,
-        oam_vram.first_odd,
-        scan.y,
-        render.attributes,
-        oam_vram.bus_even,
-        oam_vram.bus_odd,
-        oam_vram.wuje,
-        oam_vram.maka,
-    );
-    if ours != theirs {
-        report.differ(
-            format!("chip: OAM, phase {}", ends.phase),
-            format!("{place} (latches and buses {ours:02X?}, model {theirs:02X?})"),
-        );
-        let o = &mut chip.oam;
-        (
-            o.first_even,
-            o.first_odd,
-            o.second_even,
-            o.second_odd,
-            o.bus_even,
-            o.bus_odd,
-            o.wuje,
-            o.maka,
-        ) = theirs;
-    }
+    render::compare_oam(&mut chip.render, ends, "chip", &place, report);
 }
 
 #[test]

@@ -460,22 +460,30 @@ starts (`window-start-tile-register-pulse`) is lost, and
 `m3_lcdc_win_en_change_multiple_wx` differs.
 
 OAM (`oam.vhd`, `NetOam` in ceres-netlist's `oam`) and VRAM's side
-(`vram_bus.vhd` and the board's VRAM chip and keeper, inside `NetRender`)
-complete the PPU, so `NetChip` takes from the trace only the CPU's access,
-the other interrupt sources, the acknowledges, the data pins and the core's
-`non_vram_mreq`; VRAM starts as the board fills it (its xorshift, seed 2)
-and OAM as FF. Both settle delta cycle by delta cycle: as mode 2 starts
-during a CPU write of OAM, the address changes deltas before the write
-ends, and the model writes the scan's word. While nothing drives VRAM's
-data pins, the board's keeper holds them against the pads' pull-ups (the
-bits it holds low resolve to `W`, printed as 00), and which byte it caught
-depends on the deltas through the ports; nothing reads them then, so the
-replay compares VRAM's data only while driven. Open: 10 phases of OAM's
-latches and data lines differ, at the edges of a CPU write as mode 2
-starts (`oam_write_l0_e`, `oam_write_l1_a`), of a DMA write
-(`dma_timing_a`, `late_sp39x_3` and `_4`) and of a read
-(`10spritesPrLine_m2stat_1`): OAM's inputs still arrive all at once, where
-the scan's, the DMA's and the CPU's reach it at different times.
+(`vram_bus.vhd` and the board's VRAM chip and keeper) settle with render,
+in `NetRender`, as render, OAM and VRAM feed each other within an edge;
+they complete the PPU, so `NetChip` takes from the trace only the CPU's
+access, the other interrupt sources, the acknowledges, the data pins and
+the core's `non_vram_mreq`. VRAM starts as the board fills it (its
+xorshift, seed 2), OAM as FF. What reaches render, OAM and VRAM does so at
+its time: the clocks decoded from the phase (`clk_t4`, `cpu_wr_sync`,
+`cpu_ext_cs_en`, `dma_phi`) with the clock's edge; the flip-flops' outputs,
+the line timing's and the DMA's 1 ns after it; the scan's flip-flops clocked
+by `wuvu` (and with them `scanning`, from which render makes mode 2) at
+2 ns, its index at 3 ns, a port behind mode 2; the data pins at 2 ns; the
+CPU's address, strobes and data bus at 4 ns, after what drives them;
+VRAM's data 2 ns after its address. The times decide races the traces
+show: a CPU write of OAM as mode 2 starts also writes the scan's word
+(`oam_write_l0_e`), OAM's data lines catch a STAT read in the moment OAM
+is free between the scan and mode 3 (`oam_write_l1_a`,
+`10spritesPrLine_m2stat_1`), and the first latches catch OAM DMA's first
+byte while a CPU read of OAM ends (`dma_timing_a`). While nothing drives
+VRAM's data pins, the board's keeper holds them against the pads' pull-ups
+(the bits it holds low resolve to `W`, printed as 00), and which byte it
+caught depends on the deltas through the ports; nothing reads them then,
+so the replay compares VRAM's data only while driven. Over the 267 traces
+the replay finds no difference in 1.72 billion phases: 335745 CPU writes
+of VRAM, 363 OAM DMA transfers, 27 CPU reads of OAM.
 
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay

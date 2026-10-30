@@ -128,7 +128,8 @@ pub struct OamWires {
     pub read_ram: bool,
 }
 
-/// The netlist's OAM, settled delta cycle by delta cycle.
+/// The netlist's OAM, settled delta cycle by delta cycle, with render
+/// (`crate::render::NetRender`), whose timing it shares.
 ///
 /// Its RAM (the even bytes, Y and tile, and the odd ones, X and
 /// attributes, of 80 words), its data lines and bit lines, its two stages
@@ -156,6 +157,12 @@ pub struct NetOam {
     pub wires: OamWires,
 }
 
+impl Default for NetOam {
+    fn default() -> Self {
+        Self::power_on()
+    }
+}
+
 /// The deltas a settle may take before OAM is taken to oscillate.
 const MAX_DELTAS: usize = 1000;
 
@@ -179,17 +186,6 @@ impl NetOam {
             maka: false,
             wires: OamWires::default(),
         }
-    }
-
-    /// A falling edge of the chip's clock: MAKA takes `clk_t4` as it was.
-    // @hw die: MAKA (dffr)
-    pub const fn falling_clk(&mut self, clk_t4: bool, hard_reset: bool) {
-        self.maka = !hard_reset && clk_t4;
-    }
-
-    /// The chip's reset holds MAKA.
-    pub const fn reset(&mut self) {
-        self.maka = false;
     }
 
     /// The wires a delta cycle on.
@@ -250,7 +246,8 @@ impl NetOam {
 
     /// What drives the data lines now, which they follow 1 ns later; `None`
     /// while nothing does.
-    const fn bus_drivers(&self, i: &NetOamInputs) -> Option<(u8, u8)> {
+    #[must_use]
+    pub const fn bus_drivers(&self, i: &NetOamInputs) -> Option<(u8, u8)> {
         let w = &self.wires;
         // The CPU's access, unless WUJE (after its write) holds it off.
         let cpu_drives = w.cpu_access && !self.wuje;
@@ -267,41 +264,13 @@ impl NetOam {
         }
     }
 
-    /// OAM after its inputs change to `i`: deltas until nothing changes,
-    /// then the data lines' change 1 ns later, until they hold.
-    ///
-    /// # Panics
-    ///
-    /// If OAM does not settle.
-    pub fn settle(&mut self, i: &NetOamInputs) {
-        let mut deltas = 0;
-        loop {
-            // The deltas of this nanosecond.
-            loop {
-                let next = self.delta(i);
-                if next == *self {
-                    break;
-                }
-                *self = next;
-                deltas += 1;
-                assert!(deltas < MAX_DELTAS, "OAM oscillates");
-            }
-            // The data lines follow their settled driver (a shorter
-            // glitch does not reach them).
-            match self.bus_drivers(i) {
-                Some(driver) if driver != (self.bus_even, self.bus_odd) => {
-                    (self.bus_even, self.bus_odd) = driver;
-                }
-                _ => break,
-            }
-        }
-    }
-
     /// One delta cycle: the wires follow, the latches and the RAM act on
-    /// the wires as they are.
+    /// the wires as they are. The data lines follow their driver
+    /// (`bus_drivers`) 1 ns later: render's schedule moves them.
     // @hw die: WUJE (nor_latch); oam_a oam_b; YDYV..ECED (dlatch),
     // XUSO..DEPO (dlatch_ee)
-    fn delta(&self, i: &NetOamInputs) -> Self {
+    #[must_use]
+    pub fn delta(&self, i: &NetOamInputs) -> Self {
         let (cur, w) = (self, &self.wires);
         let mut next = *cur;
         next.wires = cur.next_wires(i);

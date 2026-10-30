@@ -6,6 +6,7 @@ use {
     super::{Line, Report, bit, hex8},
     ceres_netlist::{
         lcd_control::NetLcdControl,
+        oam::NetOam,
         render::{NetRender, NetSpriteStore, RenderInputs, vram_power_on},
     },
 };
@@ -243,10 +244,12 @@ pub fn inputs(edge: &Line, line: &Line, lcdc: u8) -> Option<RenderInputs> {
         wuvu: lcd.net.wuvu,
         dma_run: line.dma.run,
         dma_index: line.dma.count,
-        mode2: lcd.mode2,
+        scanning: scan.net.scanning,
         scan_index: scan.net.index,
-        tile: scan.y,
-        attributes: render.attributes,
+        wosu: lcd.net.wosu,
+        dma_phi: line.dma_phi?,
+        dma_addr_ext: line.dma.run && !from_vram,
+        d: oam_vram.d,
         rd: line.rd,
         non_vram_mreq: oam_vram.non_vram_mreq,
         write: pins.write,
@@ -350,6 +353,7 @@ pub fn resync(net: &mut NetRender, model: &NetRender, vram: &[u8; 0x2000]) {
         wires: net.wires,
         inputs: net.inputs,
         vram_ma: net.vram_ma,
+        oam: net.oam,
         render_settled: net.render_settled,
         md_kept: net.md_kept,
         store: NetSpriteStore {
@@ -384,6 +388,7 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
     };
     let mut net = NetRender {
         md_kept: 0xFF,
+        oam: oam_from(&lines[start]).unwrap_or_default(),
         ..first.net
     };
     let mut vram = vram_power_on();
@@ -438,6 +443,7 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
             resync(&mut net, &model.net, &vram);
         }
         compare_vram(&net, model, &place, report);
+        compare_oam(&mut net, ends, "render", &place, report);
         let ma = net.ma().unwrap_or(0);
         let (cp, st, ld) = net.pins();
         if net.wires.x_match != model.x_match || net.wires.line != model.sprite_line {
@@ -502,5 +508,77 @@ fn compare_vram(net: &NetRender, model: &RenderLine, place: &str, report: &mut R
             what.to_owned(),
             format!("{place} ({ours:02X?}, model {model:02X?})"),
         );
+    }
+}
+
+/// OAM's latches, data lines, WUJE and MAKA in a line of a trace.
+type OamState = (u8, u8, u8, u8, u8, u8, bool, bool);
+
+fn oam_state(line: &Line) -> Option<OamState> {
+    let (lcd, render) = (line.lcd.as_ref()?, line.render.as_ref()?);
+    let (scan, oam_vram) = (lcd.scan.as_ref()?, render.oam_vram.as_ref()?);
+    let oam = scan.oam.as_ref()?;
+    Some((
+        oam.first,
+        oam_vram.first_odd,
+        scan.y,
+        render.attributes,
+        oam_vram.bus_even,
+        oam_vram.bus_odd,
+        oam_vram.wuje,
+        oam_vram.maka,
+    ))
+}
+
+/// OAM as `line` has it, its RAM as at power-on (the traces start there).
+pub fn oam_from(line: &Line) -> Option<NetOam> {
+    let mut oam = NetOam::power_on();
+    (
+        oam.first_even,
+        oam.first_odd,
+        oam.second_even,
+        oam.second_odd,
+        oam.bus_even,
+        oam.bus_odd,
+        oam.wuje,
+        oam.maka,
+    ) = oam_state(line)?;
+    Some(oam)
+}
+
+/// OAM's latches, data lines, WUJE and MAKA of `net` after a step, against
+/// the model at the end of the phase (`ends`); after a difference they take
+/// the model's.
+pub fn compare_oam(net: &mut NetRender, ends: &Line, who: &str, place: &str, report: &mut Report) {
+    let Some(theirs) = oam_state(ends) else {
+        return;
+    };
+    let ours = (
+        net.oam.first_even,
+        net.oam.first_odd,
+        net.oam.second_even,
+        net.oam.second_odd,
+        net.oam.bus_even,
+        net.oam.bus_odd,
+        net.oam.wuje,
+        net.oam.maka,
+    );
+    if ours != theirs {
+        report.differ(
+            format!("{who}: OAM, phase {}", ends.phase),
+            format!("{place} (latches and buses {ours:02X?}, model {theirs:02X?})"),
+        );
+        let o = &mut net.oam;
+        (
+            o.first_even,
+            o.first_odd,
+            o.second_even,
+            o.second_odd,
+            o.bus_even,
+            o.bus_odd,
+            o.wuje,
+            o.maka,
+        ) = theirs;
+        net.wires.oam_driver = net.oam.bus_drivers(&net.oam_inputs());
     }
 }
