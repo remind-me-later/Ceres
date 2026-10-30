@@ -24,3 +24,5 @@ pub mod lcd_timing;
 pub mod oam;
 pub mod oam_scan;
 pub mod timer;
+
+pub use clocks::Phase;

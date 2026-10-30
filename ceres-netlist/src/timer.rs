@@ -10,6 +10,8 @@
 //! takes the data bus in E and F, and a read takes what the timer drives at
 //! the end of H.
 
+use crate::Phase;
+
 /// TAC: the timer's enable, and the select of its clock.
 const TAC_ENABLE_B: u8 = 0x04;
 const TAC_CLOCK: u8 = 0x03;
@@ -41,17 +43,6 @@ pub enum Access {
     None,
     Read(Reg),
     Write(Reg, u8),
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Phase {
-    B,
-    C,
-    D,
-    E,
-    F,
-    G,
-    H,
 }
 
 /// The netlist's divider and timer, between phases.
@@ -115,9 +106,14 @@ impl NetTimer {
         self.timer_clock = clock;
     }
 
-    /// One phase from B to H, with the CPU's access.
+    /// One phase, with the CPU's access: for A, the edge that starts it
+    /// (`edge_a`), as the CPU accesses the timer only in E to G.
     #[expect(clippy::similar_names, reason = "TMA's and TAC's write strobes")]
     pub fn phase(&mut self, phase: Phase, access: Access) {
+        if matches!(phase, Phase::A) {
+            self.edge_a();
+            return;
+        }
         let (reg, data) = match access {
             Access::Write(reg, data) if (Phase::E..=Phase::G).contains(&phase) => (Some(reg), data),
             _ => (None, 0),

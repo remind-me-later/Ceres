@@ -17,7 +17,7 @@
 //! runs (a restart) is one of the accesses.
 
 use super::{Dma, DmaPhase, DmaStep};
-use ceres_netlist::dma::{NetDma, Phase};
+use ceres_netlist::{Phase, dma::NetDma};
 
 #[derive(Clone, Copy)]
 enum Access {

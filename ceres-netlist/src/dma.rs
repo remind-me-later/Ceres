@@ -11,18 +11,7 @@
 //! `maka` (`clk_t4` half a clock later) are low: E, F and half of G
 //! (`hdl/rtl/oam.vhd`).
 
-/// The phases, in their order from A.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub enum Phase {
-    A,
-    B,
-    C,
-    D,
-    E,
-    F,
-    G,
-    H,
-}
+use crate::Phase;
 
 /// The netlist's OAM DMA, between phases.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]

@@ -17,13 +17,14 @@
 //! follow, and the CPU's access in the phase reaches the registers.
 
 use crate::{
-    clocks::{ClockInputs, ClockOutputs, NetClocks, Phase},
+    Phase,
+    clocks::{ClockInputs, ClockOutputs, NetClocks},
     dma::NetDma,
     interrupts::{NetIf, TIMER},
     lcd_timing::NetLcd,
     oam::{NetOamLatches, OamInputs},
     oam_scan::{Clocks as ScanClocks, NetScan},
-    timer::{Access, NetTimer, Phase as TimerPhase, Reg},
+    timer::{Access, NetTimer, Reg},
 };
 
 /// IF's VBlank and STAT bits.
@@ -182,16 +183,11 @@ impl NetChip {
     /// Whether the interrupt rose.
     fn step_timer(&mut self, phase: Phase, inputs: ChipInputs) -> bool {
         let int_timer = self.timer.int_timer;
-        match timer_phase(phase) {
-            None => self.timer.edge_a(),
-            Some(timer_phase) => {
-                let access = match Reg::at(inputs.addr) {
-                    Some(reg) if inputs.wr => Access::Write(reg, inputs.data),
-                    _ => Access::None,
-                };
-                self.timer.phase(timer_phase, access);
-            }
-        }
+        let access = match Reg::at(inputs.addr) {
+            Some(reg) if inputs.wr => Access::Write(reg, inputs.data),
+            _ => Access::None,
+        };
+        self.timer.phase(phase, access);
         self.timer.int_timer && !int_timer
     }
 
@@ -304,20 +300,5 @@ impl NetChip {
         (inputs.rd && matches!(phase, Phase::H))
             .then_some(self.read_bus)
             .flatten()
-    }
-}
-
-/// The timer's phase for a phase of the clocks: `None` for A, whose edge
-/// the timer takes as such.
-const fn timer_phase(phase: Phase) -> Option<TimerPhase> {
-    match phase {
-        Phase::A => None,
-        Phase::B => Some(TimerPhase::B),
-        Phase::C => Some(TimerPhase::C),
-        Phase::D => Some(TimerPhase::D),
-        Phase::E => Some(TimerPhase::E),
-        Phase::F => Some(TimerPhase::F),
-        Phase::G => Some(TimerPhase::G),
-        Phase::H => Some(TimerPhase::H),
     }
 }

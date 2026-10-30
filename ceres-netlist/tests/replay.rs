@@ -21,14 +21,15 @@
 
 use {
     ceres_netlist::{
+        Phase,
         chip::{ChipEvents, ChipInputs, NetChip},
         clocks::{ClockInputs, ClockOutputs, NetClocks},
-        dma::{NetDma, Phase as DmaPhase},
+        dma::NetDma,
         interrupts::{NetIf, lowest},
         lcd_timing::NetLcd,
         oam::{NetOamLatches, OamInputs},
         oam_scan::{Clocks as ScanClocks, NetScan},
-        timer::{Access, NetTimer, Phase, Reg},
+        timer::{Access, NetTimer, Reg},
     },
     std::{
         collections::BTreeMap,
@@ -365,16 +366,16 @@ impl Report {
     }
 }
 
-const TIMER_PHASES: [(char, Option<Phase>); 8] = [
-    ('b', Some(Phase::B)),
-    ('c', Some(Phase::C)),
-    ('d', Some(Phase::D)),
-    ('e', Some(Phase::E)),
-    ('f', Some(Phase::F)),
-    ('g', Some(Phase::G)),
-    ('h', Some(Phase::H)),
-    // The A edge.
-    ('a', None),
+/// The timer's M-cycle: B to H, then the A edge.
+const TIMER_PHASES: [(char, Phase); 8] = [
+    ('b', Phase::B),
+    ('c', Phase::C),
+    ('d', Phase::D),
+    ('e', Phase::E),
+    ('f', Phase::F),
+    ('g', Phase::G),
+    ('h', Phase::H),
+    ('a', Phase::A),
 ];
 
 /// The timer as the model has it at the end of a phase.
@@ -502,15 +503,12 @@ fn replay_timer(name: &str, lines: &[Line], report: &mut Report) {
         }
         for (k, (line, (letter, phase))) in cycle.iter().zip(TIMER_PHASES).enumerate() {
             let (tima, int_timer) = (net.tima, net.int_timer);
-            match phase {
-                Some(phase) => net.phase(phase, access),
-                None => net.edge_a(),
-            }
+            net.phase(phase, access);
             report.phases += 1;
             if net.int_timer && !int_timer {
                 report.saw("timer: an overflow");
             }
-            if phase.is_some()
+            if phase != Phase::A
                 && matches!(access, Access::Write(Reg::Div | Reg::Tac, _))
                 && net.tima == tima.wrapping_add(1)
             {
@@ -629,15 +627,15 @@ fn replay_if(name: &str, lines: &[Line], report: &mut Report) {
     }
 }
 
-const DMA_PHASES: [(char, DmaPhase); 8] = [
-    ('a', DmaPhase::A),
-    ('b', DmaPhase::B),
-    ('c', DmaPhase::C),
-    ('d', DmaPhase::D),
-    ('e', DmaPhase::E),
-    ('f', DmaPhase::F),
-    ('g', DmaPhase::G),
-    ('h', DmaPhase::H),
+const DMA_PHASES: [(char, Phase); 8] = [
+    ('a', Phase::A),
+    ('b', Phase::B),
+    ('c', Phase::C),
+    ('d', Phase::D),
+    ('e', Phase::E),
+    ('f', Phase::F),
+    ('g', Phase::G),
+    ('h', Phase::H),
 ];
 
 fn replay_dma(name: &str, lines: &[Line], report: &mut Report) {

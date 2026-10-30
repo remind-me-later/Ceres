@@ -15,7 +15,8 @@
 //! later, at the start of A.
 
 /// The phases of the CPU's M-cycle: one per edge of the clock, which is
-/// high in A, C, E and G. The letters are GateBoy's.
+/// high in A, C, E and G. The letters are GateBoy's. Every block steps on
+/// these (the crate's `Phase`).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Phase {
     A,

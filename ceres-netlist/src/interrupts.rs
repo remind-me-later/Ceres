@@ -12,24 +12,15 @@
 //! entry's choice of interrupt, take the flags as they were at the start of
 //! E.
 
+use crate::Phase;
+
 /// IF's five flags (the other bits read as 1).
 const INT_MASK: u8 = 0x1F;
 
 /// The timer's bit of IF.
 pub const TIMER: u8 = 0x04;
 
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Phase {
-    E,
-    F,
-    G,
-    H,
-    A,
-    B,
-    C,
-    D,
-}
-
+/// The phases of an M-cycle as ceres cuts it: from E to the next D.
 pub const PHASES: [Phase; 8] = [
     Phase::E,
     Phase::F,
@@ -43,7 +34,8 @@ pub const PHASES: [Phase; 8] = [
 
 /// Where phase A is in `PHASES`, which lists the phases in their order: a
 /// source that rises at the A edge rises there.
-pub const A: usize = Phase::A as usize;
+pub const A: usize = 4;
+const _: () = assert!(matches!(PHASES[A], Phase::A));
 
 /// The ceres T-cycle (0 to 3) that a netlist phase stands for.
 #[must_use]
@@ -102,11 +94,13 @@ impl NetIf {
         let taken = matches!(access, Access::Entry).then_some(selected);
         for (phase, rise) in PHASES.iter().zip(rises) {
             let write = match access {
-                Access::WriteIf(val) if *phase <= Phase::G => Some(val),
+                Access::WriteIf(val) if matches!(phase, Phase::E | Phase::F | Phase::G) => {
+                    Some(val)
+                }
                 _ => None,
             };
             let ack = match access {
-                Access::Entry if (Phase::G..=Phase::H).contains(phase) => selected,
+                Access::Entry if matches!(phase, Phase::G | Phase::H) => selected,
                 _ => 0,
             };
             self.phase(rise, write, ack);
