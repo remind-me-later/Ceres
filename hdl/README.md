@@ -459,6 +459,24 @@ register's clock, the pulse that clocks the tile register as the window
 starts (`window-start-tile-register-pulse`) is lost, and
 `m3_lcdc_win_en_change_multiple_wx` differs.
 
+OAM (`oam.vhd`, `NetOam` in ceres-netlist's `oam`) and VRAM's side
+(`vram_bus.vhd` and the board's VRAM chip and keeper, inside `NetRender`)
+complete the PPU, so `NetChip` takes from the trace only the CPU's access,
+the other interrupt sources, the acknowledges, the data pins and the core's
+`non_vram_mreq`; VRAM starts as the board fills it (its xorshift, seed 2)
+and OAM as FF. Both settle delta cycle by delta cycle: as mode 2 starts
+during a CPU write of OAM, the address changes deltas before the write
+ends, and the model writes the scan's word. While nothing drives VRAM's
+data pins, the board's keeper holds them against the pads' pull-ups (the
+bits it holds low resolve to `W`, printed as 00), and which byte it caught
+depends on the deltas through the ports; nothing reads them then, so the
+replay compares VRAM's data only while driven. Open: 10 phases of OAM's
+latches and data lines differ, at the edges of a CPU write as mode 2
+starts (`oam_write_l0_e`, `oam_write_l1_a`), of a DMA write
+(`dma_timing_a`, `late_sp39x_3` and `_4`) and of a read
+(`10spritesPrLine_m2stat_1`): OAM's inputs still arrive all at once, where
+the scan's, the DMA's and the CPU's reach it at different times.
+
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay
 takes only the clocks there, as the other blocks are held in reset.

@@ -6,12 +6,14 @@ use {
     super::{Line, Report, bit, hex8},
     ceres_netlist::{
         lcd_control::NetLcdControl,
-        render::{NetRender, NetSpriteStore, RenderInputs},
+        render::{NetRender, NetSpriteStore, RenderInputs, vram_power_on},
     },
 };
 
 /// The fields of a line that has render's.
 pub const RENDER_LINE_FIELDS: usize = 73;
+/// ... and OAM's and VRAM's, after render's.
+pub const OAM_LINE_FIELDS: usize = 79;
 
 /// Render in a line of a trace: its flip-flops and latches, what it takes
 /// in from the other blocks, and what it gives out.
@@ -28,6 +30,45 @@ pub struct RenderLine {
     pub cp: bool,
     pub st: bool,
     pub ld: u8,
+    /// OAM and VRAM (older traces lack them).
+    pub oam_vram: Option<OamVramLine>,
+}
+
+/// OAM and VRAM in a line of a trace, and the data pins and the CPU core's
+/// memory request outside VRAM, which they take in.
+#[expect(clippy::struct_excessive_bools, reason = "the trace's levels")]
+pub struct OamVramLine {
+    pub d: u8,
+    pub non_vram_mreq: bool,
+    pub wuje: bool,
+    pub maka: bool,
+    pub mcs_n: bool,
+    pub mrd_n: bool,
+    pub mwr_n: bool,
+    pub first_odd: u8,
+    pub bus_even: u8,
+    pub bus_odd: u8,
+    pub vram_addr: u16,
+}
+
+/// OAM's and VRAM's fields, after render's.
+fn parse_oam_vram(fields: &[&str]) -> Option<OamVramLine> {
+    let &[d, bits, first_odd, bus_even, bus_odd, vram_addr] = fields else {
+        return None;
+    };
+    Some(OamVramLine {
+        d: hex8(d)?,
+        non_vram_mreq: bit(bits, 0)?,
+        wuje: bit(bits, 3)?,
+        maka: bit(bits, 4)?,
+        mcs_n: bit(bits, 5)?,
+        mrd_n: bit(bits, 6)?,
+        mwr_n: bit(bits, 7)?,
+        first_odd: hex8(first_odd)?,
+        bus_even: hex8(bus_even)?,
+        bus_odd: hex8(bus_odd)?,
+        vram_addr: u16::from_str_radix(vram_addr, 16).ok()?,
+    })
 }
 
 /// Render's fields, after the clocks'.
@@ -71,7 +112,7 @@ pub fn parse(fields: &[&str]) -> Option<RenderLine> {
         xs,
         lines,
         indexes,
-        ..,
+        ref rest @ ..,
     ] = fields
     else {
         return None;
@@ -154,6 +195,10 @@ pub fn parse(fields: &[&str]) -> Option<RenderLine> {
         cp: bit(pins, 0)?,
         st: bit(pins, 1)?,
         ld: hex8(ld)?,
+        oam_vram: match rest {
+            [] => None,
+            rest => Some(parse_oam_vram(rest)?),
+        },
     })
 }
 
@@ -166,11 +211,18 @@ fn slots(field: &str, width: usize) -> Option<[u8; 10]> {
     Some(slots)
 }
 
-/// What render takes in at the end of `line`'s phase, with the clock `clk`
-/// and LCDC `lcdc`.
-pub fn inputs(line: &Line, clk: bool, lcdc: u8) -> Option<RenderInputs> {
+/// What render takes in at the end of `line`'s phase, after the edge that
+/// ends `edge`'s (the clock as it leaves it), with LCDC `lcdc`. The clocks'
+/// outputs are decoded from the phase and the CPU core's strobes: the trace
+/// shows the next phase's for some (see `clocks_shown`).
+pub fn inputs(edge: &Line, line: &Line, lcdc: u8) -> Option<RenderInputs> {
+    let clk = edge.lcd.as_ref()?.clk;
+    let pins = line.clocks.as_ref()?.inputs;
+    let phase = line.phase;
     let (lcd, render) = (line.lcd.as_ref()?, line.render.as_ref()?);
     let scan = lcd.scan.as_ref()?;
+    let oam_vram = render.oam_vram.as_ref()?;
+    let from_vram = line.dma.source >> 5 == 0b100;
     Some(RenderInputs {
         clk,
         ppu_reset: lcd.ppu_reset,
@@ -195,7 +247,15 @@ pub fn inputs(line: &Line, clk: bool, lcdc: u8) -> Option<RenderInputs> {
         scan_index: scan.net.index,
         tile: scan.y,
         attributes: render.attributes,
-        md: render.md,
+        rd: line.rd,
+        non_vram_mreq: oam_vram.non_vram_mreq,
+        write: pins.write,
+        // @hw die: AFAS AREV APOV; AGUT AWOD ABUZ; BAPY BERU BUFA BYLY
+        cpu_wr_sync: pins.write && matches!(phase, 'e' | 'f' | 'g'),
+        cpu_ext_cs_en: (pins.t1 && !pins.t2) || (pins.mreq && !matches!(phase, 'a' | 'b')),
+        clk_t4: pins.clk_ena && matches!(phase, 'g' | 'h'),
+        vram_to_oam: line.dma.run && from_vram,
+        dma_addr: u16::from_be_bytes([line.dma.source, line.dma.count]),
     })
 }
 
@@ -285,17 +345,20 @@ pub fn differences(net: &NetRender, model: &NetRender) -> Vec<&'static str> {
 
 /// Takes the model's flip-flops and latches, keeping the wires and the
 /// inputs.
-pub fn resync(net: &mut NetRender, model: &NetRender) {
+pub fn resync(net: &mut NetRender, model: &NetRender, vram: &[u8; 0x2000]) {
     *net = NetRender {
         wires: net.wires,
         inputs: net.inputs,
+        vram_ma: net.vram_ma,
+        render_settled: net.render_settled,
+        md_kept: net.md_kept,
         store: NetSpriteStore {
             index: net.store.index,
             ..model.store
         },
         ..*model
     };
-    net.settle_wires();
+    net.settle_wires(vram);
 }
 
 /// Replays render, edge by edge: the edge that starts line `n + 1`'s phase
@@ -316,28 +379,32 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
     let Some(start) = lines.iter().position(|l| l.render.is_some()) else {
         return;
     };
-    let (Some(first), Some(lcd)) = (lines[start].render.as_ref(), lines[start].lcd.as_ref()) else {
+    let Some(first) = lines[start].render.as_ref() else {
         return;
     };
-    let mut net = first.net;
+    let mut net = NetRender {
+        md_kept: 0xFF,
+        ..first.net
+    };
+    let mut vram = vram_power_on();
     // The wires settle from the first line's state.
-    let Some(at_start) = inputs(&lines[start], lcd.clk, lcdcs[start]) else {
+    let Some(at_start) = inputs(&lines[start], &lines[start], lcdcs[start]) else {
         return;
     };
     net.inputs = at_start;
-    net.edge(at_start);
-    resync(&mut net, &first.net);
+    // Only the wires: an edge from the default wires (/MCS and /MWR low)
+    // would write VRAM.
+    net.settle_wires(&vram);
     for n in start..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
-        let (Some(clk), Some(model)) = (line.lcd.as_ref().map(|l| l.clk), ends.render.as_ref())
-        else {
+        let Some(model) = ends.render.as_ref() else {
             return;
         };
-        let Some(after) = inputs(ends, clk, lcdcs[n + 1]) else {
+        let Some(after) = inputs(line, ends, lcdcs[n + 1]) else {
             return;
         };
         let before = net;
-        net.edge(after);
+        net.edge(after, &mut vram);
         report.phases += 1;
         let place = format!("{name}:{}", n + 2);
         for (what, happened) in [
@@ -368,8 +435,9 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
                 format!("render, phase {}: {}", ends.phase, differ.join(" ")),
                 place.clone(),
             );
-            resync(&mut net, &model.net);
+            resync(&mut net, &model.net, &vram);
         }
+        compare_vram(&net, model, &place, report);
         let ma = net.ma().unwrap_or(0);
         let (cp, st, ld) = net.pins();
         if net.wires.x_match != model.x_match || net.wires.line != model.sprite_line {
@@ -390,5 +458,49 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
                 ),
             );
         }
+    }
+}
+
+/// The VRAM bus of `net` against the model's: VRAM's data, the address
+/// lines, /MCS, /MRD and /MWR.
+fn compare_vram(net: &NetRender, model: &RenderLine, place: &str, report: &mut Report) {
+    let Some(theirs) = model.oam_vram.as_ref() else {
+        return;
+    };
+    let w = &net.wires;
+    if w.cpu_write && !w.mwr_n {
+        report.saw("render: a CPU write of VRAM");
+    }
+    // While nothing drives the data pins, the board's keeper holds them
+    // against the pads' pull-ups (the bits it holds low resolve to 'W'), and
+    // which value it caught last depends on how many deltas the address and
+    // /MCS take through the chip's ports and the board. Nothing takes VRAM's
+    // data then (the fetches, OAM DMA and the CPU's reads all select VRAM),
+    // so it is compared only while driven.
+    let driven = w.md_driven;
+    if !driven {
+        report.saw("render: VRAM's data pins float (not compared)");
+    }
+    let md = if driven { w.md } else { model.md };
+    let ours = (md, net.vram_ma, w.mcs_n, w.mrd_n, w.mwr_n);
+    let model = (
+        model.md,
+        theirs.vram_addr & 0x1FFF,
+        theirs.mcs_n,
+        theirs.mrd_n,
+        theirs.mwr_n,
+    );
+    if ours != model {
+        let what = if (ours.1, ours.2, ours.3, ours.4) != (model.1, model.2, model.3, model.4) {
+            "render: the VRAM bus's address or controls"
+        } else if driven {
+            "render: VRAM's data, driven"
+        } else {
+            "render: VRAM's data, floating"
+        };
+        report.differ(
+            what.to_owned(),
+            format!("{place} ({ours:02X?}, model {model:02X?})"),
+        );
     }
 }

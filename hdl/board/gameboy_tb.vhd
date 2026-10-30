@@ -70,8 +70,11 @@
 -- takes in (line_start, stop_scan, x_match, sprite_loaded, rendering,
 -- VRAM's data, OAM's odd byte, the sprite's line) and gives out (its VRAM
 -- address, CP, ST, LD); and the sprite store's scanned index, its fetched
--- flags, and its slots' X, lines and indexes. Values in hexadecimal, bits
--- as 0 or 1. With BLOCKS_FROM_POWER_ON, from the power-on.
+-- flags, and its slots' X, lines and indexes; then the data pins, the
+-- CPU core's non_vram_mreq, OAM DMA's dma_addr_ext and vram_to_oam, OAM's
+-- wuje and maka, VRAM's /MCS, /MRD and /MWR, OAM's first odd latches and
+-- its two data buses, and VRAM's address. Values in hexadecimal, bits as 0
+-- or 1. With BLOCKS_FROM_POWER_ON, from the power-on.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -565,6 +568,19 @@ begin
 		alias s_xs          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.xs : x_t >>;
 		alias s_lines       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.lines : line_t >>;
 		alias s_indexes     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_sprite_store.indexes : index_t >>;
+		alias x_d           is << signal .gameboy_tb.u_gameboy.chip.u_chip.d : std_logic_vector(7 downto 0) >>;
+		alias x_non_vram    is << signal .gameboy_tb.u_gameboy.chip.u_chip.non_vram_mreq : std_ulogic >>;
+		alias x_dma_ext     is << signal .gameboy_tb.u_gameboy.chip.u_chip.dma_addr_ext : std_ulogic >>;
+		alias x_vram_oam    is << signal .gameboy_tb.u_gameboy.chip.u_chip.vram_to_oam : std_ulogic >>;
+		alias x_wuje        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.wuje : std_ulogic >>;
+		alias x_maka        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.maka : std_ulogic >>;
+		alias x_first_odd   is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.first_odd : std_ulogic_vector(7 downto 0) >>;
+		alias x_bus_even    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.bus_even : std_ulogic_vector(7 downto 0) >>;
+		alias x_bus_odd     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_oam.bus_odd : std_ulogic_vector(7 downto 0) >>;
+		alias x_vram_addr   is << signal .gameboy_tb.u_gameboy.chip.u_chip.vram_addr : std_logic_vector(13 downto 0) >>;
+		alias x_mcs_n       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mcs_n : std_logic >>;
+		alias x_mrd_n       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mrd_n : std_logic >>;
+		alias x_mwr_n       is << signal .gameboy_tb.u_gameboy.chip.u_chip.mwr_n : std_logic >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := BLOCKS_FROM_POWER_ON;
@@ -651,6 +667,11 @@ begin
 				for i in 0 to 9 loop
 					write(l, hx(s_indexes(i)));
 				end loop;
+				-- OAM and VRAM.
+				write(l, ' ' & hx(x_d) & ' ' & b01(x_non_vram) & b01(x_dma_ext) & b01(x_vram_oam)
+					& b01(x_wuje) & b01(x_maka) & b01(x_mcs_n) & b01(x_mrd_n) & b01(x_mwr_n)
+					& ' ' & hx(x_first_odd) & ' ' & hx(x_bus_even) & ' ' & hx(x_bus_odd)
+					& ' ' & hx(x_vram_addr));
 				writeline(f, l);
 			end if;
 			ended := phase;

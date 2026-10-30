@@ -32,8 +32,9 @@ use {
         interrupts::{NetIf, lowest},
         lcd_control::NetLcdControl,
         lcd_timing::NetLcd,
-        oam::{NetOamLatches, OamInputs},
+        oam::{NetOam, NetOamLatches, OamInputs},
         oam_scan::{Clocks as ScanClocks, NetScan},
+        render::{NetRender, vram_power_on},
         timer::{Access, NetTimer, Reg},
     },
     std::{
@@ -139,7 +140,10 @@ struct OamLine {
 fn parse(text: &str) -> Option<Line> {
     let mut all: Vec<&str> = text.split_whitespace().collect();
     // Render's fields follow the clocks'.
-    let render = if all.len() == render::RENDER_LINE_FIELDS {
+    let render = if matches!(
+        all.len(),
+        render::RENDER_LINE_FIELDS | render::OAM_LINE_FIELDS
+    ) {
         let fields = all.split_off(CLOCK_LINE_FIELDS);
         Some(render::parse(&fields)?)
     } else {
@@ -1116,9 +1120,7 @@ const fn clocks_shown(
 /// interrupt sources' rises, the acknowledges).
 fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
     let pins = edge.clocks.as_ref()?.inputs;
-    let lcd = phase.lcd.as_ref()?;
-    let oam = lcd.scan.as_ref()?.oam.as_ref()?;
-    let render = phase.render.as_ref()?;
+    let oam_vram = phase.render.as_ref()?.oam_vram.as_ref()?;
     Some(ChipInputs {
         ck1: pins.ck1,
         reset_pin_n: pins.reset_pin_n,
@@ -1135,9 +1137,8 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
         data: phase.data,
         rises: phase.rose,
         acks: phase.acks,
-        oam_data: oam.first,
-        oam_odd: render.attributes,
-        md: render.md,
+        d: oam_vram.d,
+        non_vram_mreq: oam_vram.non_vram_mreq,
     })
 }
 
@@ -1176,7 +1177,11 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
     let Some((scan, oam)) = lcd.scan.as_ref().and_then(|s| Some((s, s.oam.as_ref()?))) else {
         return;
     };
-    let Some(model_render) = second.render.as_ref() else {
+    let Some((model_render, oam_vram)) = second
+        .render
+        .as_ref()
+        .and_then(|r| Some((r, r.oam_vram.as_ref()?)))
+    else {
         return;
     };
     let mut chip = NetChip {
@@ -1200,23 +1205,34 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
             ..lcd.net
         },
         scan: scan.net,
-        oam: NetOamLatches {
-            first: oam.first,
-            second: scan.y,
+        oam: NetOam {
+            bus_even: oam_vram.bus_even,
+            bus_odd: oam_vram.bus_odd,
+            first_even: oam.first,
+            first_odd: oam_vram.first_odd,
+            second_even: scan.y,
+            second_odd: model_render.attributes,
+            wuje: oam_vram.wuje,
+            maka: oam_vram.maka,
+            ..NetOam::power_on()
         },
+        clk_t4: next.outputs.clk_t4,
         wr_before: second.wr,
         data_before: second.data,
         read_bus: None,
-        render: model_render.net,
+        render: NetRender {
+            md_kept: 0xFF,
+            ..model_render.net
+        },
     };
     chip.dma_phi = NetChip::dma_phi(chip.clocks.outputs(edge.inputs));
     // Render's wires settle from the model's state.
-    let Some(at_start) = render::inputs(second, lcd_edge.clk, chip.control.lcdc) else {
+    let Some(at_start) = render::inputs(first, second, chip.control.lcdc) else {
         return;
     };
+    let mut vram = vram_power_on();
     chip.render.inputs = at_start;
-    chip.render.edge(at_start);
-    render::resync(&mut chip.render, &model_render.net);
+    chip.render.settle_wires(&vram);
     let mut lcdc_known = false;
     for n in start + 1..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
@@ -1226,7 +1242,7 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         let place = format!("{name}:{}", n + 1);
         let before = chip;
         chip.interrupts.ie = ends.ie;
-        let mut events = chip.edge(inputs);
+        let mut events = chip.edge(inputs, &mut vram);
         report.phases += 1;
         // LCDC's bits the trace lacks are known once the CPU writes it, or
         // reads it.
@@ -1300,7 +1316,7 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
                     format!("chip: render, phase {}: {}", ends.phase, differ.join(" ")),
                     format!("{name}:{}", n + 2),
                 );
-                render::resync(&mut chip.render, &model.net);
+                render::resync(&mut chip.render, &model.net, &vram);
             }
         }
     }
@@ -1361,7 +1377,7 @@ fn compare_chip_ppu(
     let (Some(lcd_edge), Some(lcd)) = (line.lcd.as_ref(), ends.lcd.as_ref()) else {
         return;
     };
-    let Some((scan, oam)) = lcd.scan.as_ref().and_then(|s| Some((s, s.oam.as_ref()?))) else {
+    let Some(scan) = lcd.scan.as_ref() else {
         return;
     };
     let place = format!("{name}:{}", n + 2);
@@ -1399,10 +1415,13 @@ fn compare_chip_ppu(
         }
     }
     if let (Some(value), Some(taken)) = (events.read, lcd.read) {
-        report.saw(if ends.addr == 0xFF40 {
-            "chip: a read of LCDC"
-        } else {
-            "chip: a read of STAT, LY or LYC"
+        report.saw(match ends.addr {
+            0x8000..=0x9FFF => "chip: a read of VRAM",
+            0xFE00..=0xFE9F => "chip: a read of OAM",
+            0xFF40 => "chip: a read of LCDC",
+            0xFF41 | 0xFF44 | 0xFF45 => "chip: a read of STAT, LY or LYC",
+            0xFF46 => "chip: a read of FF46",
+            _ => "chip: a read of SCY, SCX, BGP, OBP0, OBP1, WY or WX",
         });
         if value != taken {
             report.differ(
@@ -1425,19 +1444,59 @@ fn compare_chip_ppu(
         );
         chip.scan = scan.net;
     }
-    // The CPU's read strobe of OAM is not traced: where it addresses OAM,
-    // the latches take the model's.
-    let model_latches = NetOamLatches {
-        first: oam.first,
-        second: scan.y,
+    compare_chip_oam(ends, &place, chip, report);
+}
+
+/// OAM's latches, data lines, WUJE and MAKA of `chip` after a step, against
+/// the model at the end of the phase (`ends`).
+fn compare_chip_oam(ends: &Line, place: &str, chip: &mut NetChip, report: &mut Report) {
+    let Some((lcd, render)) = ends.lcd.as_ref().zip(ends.render.as_ref()) else {
+        return;
     };
-    if line.addr >> 8 != 0xFE && ends.addr >> 8 != 0xFE && chip.oam != model_latches {
+    let (Some(scan), Some(oam_vram)) = (lcd.scan.as_ref(), render.oam_vram.as_ref()) else {
+        return;
+    };
+    let Some(oam) = scan.oam.as_ref() else {
+        return;
+    };
+    let ours = &chip.oam;
+    let ours = (
+        ours.first_even,
+        ours.first_odd,
+        ours.second_even,
+        ours.second_odd,
+        ours.bus_even,
+        ours.bus_odd,
+        ours.wuje,
+        ours.maka,
+    );
+    let theirs = (
+        oam.first,
+        oam_vram.first_odd,
+        scan.y,
+        render.attributes,
+        oam_vram.bus_even,
+        oam_vram.bus_odd,
+        oam_vram.wuje,
+        oam_vram.maka,
+    );
+    if ours != theirs {
         report.differ(
-            format!("chip: OAM latches, phase {}", ends.phase),
-            format!("{place} ({:?}, model {model_latches:?})", chip.oam),
+            format!("chip: OAM, phase {}", ends.phase),
+            format!("{place} (latches and buses {ours:02X?}, model {theirs:02X?})"),
         );
+        let o = &mut chip.oam;
+        (
+            o.first_even,
+            o.first_odd,
+            o.second_even,
+            o.second_odd,
+            o.bus_even,
+            o.bus_odd,
+            o.wuje,
+            o.maka,
+        ) = theirs;
     }
-    chip.oam = model_latches;
 }
 
 #[test]

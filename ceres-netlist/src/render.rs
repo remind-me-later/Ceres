@@ -63,8 +63,18 @@ pub struct RenderInputs {
     /// OAM's even and odd bytes: the sprite's tile and attributes.
     pub tile: u8,
     pub attributes: u8,
-    /// VRAM's data.
-    pub md: u8,
+    /// The CPU's read strobe, its memory request outside VRAM, and the
+    /// clocks' `write`, `cpu_wr_sync`, `cpu_ext_cs_en` and `clk_t4`, for the
+    /// VRAM bus.
+    pub rd: bool,
+    pub non_vram_mreq: bool,
+    pub write: bool,
+    pub cpu_wr_sync: bool,
+    pub cpu_ext_cs_en: bool,
+    pub clk_t4: bool,
+    /// OAM DMA reads VRAM, at its address.
+    pub vram_to_oam: bool,
+    pub dma_addr: u16,
 }
 
 /// The wires: render's concurrent statements, each a delta cycle behind
@@ -108,6 +118,36 @@ pub struct Wires {
     pub line: u8,
     /// OAM's address, bits 7 to 2 (`oam_addr` of `hdl/rtl/oam.vhd`).
     pub oam_index: u8,
+    /// The VRAM bus's (`hdl/rtl/vram_bus.vhd`) and the board's: render's
+    /// address, the CPU addresses VRAM (and writes it), /MCS, /MRD, /MWR, the
+    /// data pins (driven, or as the keeper holds them), and VRAM's data as
+    /// render and OAM see it.
+    pub render_ma: Option<u16>,
+    pub cpu_vram: bool,
+    pub cpu_write: bool,
+    pub mcs_n: bool,
+    pub mrd_n: bool,
+    pub mwr_n: bool,
+    pub md_pins: u8,
+    /// Something drives the data pins (the CPU's write, or VRAM): what the
+    /// keeper takes.
+    pub md_driven: bool,
+    pub md: u8,
+}
+
+/// VRAM at power-on: the board's arbitrary bytes, from its 32-bit xorshift
+/// with seed 2 (`arbitrary` in `hdl/board/gameboy.vhd`).
+#[must_use]
+pub fn vram_power_on() -> Box<[u8; 0x2000]> {
+    let mut x: u32 = 2;
+    let mut vram = Box::new([0; 0x2000]);
+    for byte in &mut *vram {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        *byte = x.to_le_bytes()[0];
+    }
+    vram
 }
 
 /// The sprite store (`hdl/rtl/sprite_store.vhd`): the ten sprites the OAM
@@ -207,6 +247,12 @@ pub struct NetRender {
     pub sp_palette: u8,
     pub sp_priority: u8,
     pub store: NetSpriteStore,
+    /// The VRAM bus's address lines (they keep their value when nothing
+    /// drives them), render's address 2 ns later, and the keeper of the data
+    /// pins (FF until something drives them: the pads' pull-ups).
+    pub vram_ma: u16,
+    pub render_settled: Option<u16>,
+    pub md_kept: u8,
     pub wires: Wires,
     /// The inputs as the last delta cycle had them.
     pub inputs: RenderInputs,
@@ -252,6 +298,7 @@ enum Tx {
     /// load the fetched sprite).
     Scanned(u8),
     Fetched(u16),
+    RenderSettled(Option<u16>),
     SpShift {
         mask: u8,
         a: u8,
@@ -300,6 +347,7 @@ impl Tx {
             Self::SpShift { .. } => 32,
             Self::Scanned(_) => 33,
             Self::Fetched(_) => 34,
+            Self::RenderSettled(_) => 35,
         }
     }
 }
@@ -316,8 +364,13 @@ impl Schedule {
     /// A flip-flop's change, `tco` from now. As VHDL's inertial delay does,
     /// it replaces a change still pending for the same flip-flop.
     fn after_tco(&mut self, tx: Tx) {
+        self.after(1, tx);
+    }
+
+    /// A change `ns` from now, replacing one still pending.
+    fn after(&mut self, ns: u32, tx: Tx) {
         self.pending.retain(|&(_, p)| p.target() != tx.target());
-        self.pending.push((self.now + 1, tx));
+        self.pending.push((self.now + ns, tx));
     }
 
     /// A zero-delay assignment to a flip-flop (its reset) cancels what is
@@ -331,7 +384,6 @@ impl Schedule {
 /// after the edge; VRAM's data 2 ns after the address, which changes with
 /// the flip-flops (`render_settled` in `hdl/rtl/vram_bus.vhd`).
 const INPUTS_AT: u32 = 1;
-const MD_AT: u32 = 3;
 /// The OAM scan's flip-flops clocked by `wuvu` (`start_scan`, `anel`,
 /// `ceno`, the index, `byba`), which changes 1 ns after the edge: what they
 /// make (the line's start, `ceno`, the index, the stop's rise) reaches
@@ -357,7 +409,7 @@ impl NetRender {
     /// # Panics
     ///
     /// If render does not settle (a loop of its wires oscillates).
-    pub fn edge(&mut self, inputs: RenderInputs) {
+    pub fn edge(&mut self, inputs: RenderInputs, vram: &mut [u8; 0x2000]) {
         let mut schedule = Schedule {
             pending: Vec::new(),
             now: 0,
@@ -368,7 +420,7 @@ impl NetRender {
         loop {
             // The deltas of this nanosecond, until nothing changes.
             loop {
-                let next = self.delta(&prev, &mut schedule);
+                let next = self.delta(&prev, &mut schedule, vram);
                 prev = *self;
                 if next == *self {
                     break;
@@ -378,7 +430,7 @@ impl NetRender {
                 assert!(deltas < MAX_DELTAS, "render oscillates");
             }
             // The next nanosecond: the inputs at 1 ns, and the flip-flops.
-            let inputs_due = [INPUTS_AT, SCAN_AT, MD_AT]
+            let inputs_due = [INPUTS_AT, SCAN_AT]
                 .into_iter()
                 .find(|&at| at > schedule.now);
             let Some(at) = schedule
@@ -395,7 +447,6 @@ impl NetRender {
             let was = self.inputs;
             if at == INPUTS_AT {
                 self.inputs = RenderInputs {
-                    md: was.md,
                     line_start: was.line_start,
                     ceno: was.ceno,
                     scan_index: was.scan_index,
@@ -409,9 +460,6 @@ impl NetRender {
                 self.inputs.ceno = inputs.ceno;
                 self.inputs.scan_index = inputs.scan_index;
                 self.inputs.stop_scan = inputs.stop_scan;
-            }
-            if at == MD_AT {
-                self.inputs.md = inputs.md;
             }
             let (due, later): (Vec<_>, Vec<_>) =
                 schedule.pending.iter().partition(|&&(when, _)| when == at);
@@ -462,6 +510,7 @@ impl NetRender {
             Tx::Seba(v) => self.seba = v,
             Tx::Scanned(v) => self.store.scanned = v,
             Tx::Fetched(v) => self.store.fetched = v,
+            Tx::RenderSettled(v) => self.render_settled = v,
             Tx::SpShift {
                 mask,
                 a,
@@ -480,7 +529,7 @@ impl NetRender {
     /// The wires a delta cycle on: each concurrent statement from what it
     /// is made of now.
     #[must_use]
-    pub fn next_wires(&self) -> Wires {
+    pub fn next_wires(&self, vram: &[u8; 0x2000]) -> Wires {
         let cur = self;
         let (i, w, store) = (&cur.inputs, &cur.wires, &cur.store);
         let count0 = cur.fetch_count & 1 != 0;
@@ -520,9 +569,9 @@ impl NetRender {
         n.loaded = cur.tyfo && cur.sprite_step & 1 != 0 && cur.seba && cur.vonu;
         n.sprite_cycles = cur.mode3 && (cur.sprite_step & 2 != 0 || cur.vonu);
         n.sp_data = if i.attributes & 0x20 != 0 && w.sprite_cycles {
-            i.md.reverse_bits()
+            w.md.reverse_bits()
         } else {
-            i.md
+            w.md
         };
         n.sprite_on = if w.loaded { !(cur.sp_a | cur.sp_b) } else { 0 };
 
@@ -549,7 +598,76 @@ impl NetRender {
         } else {
             store.index
         };
+        // The VRAM bus's, and the board's VRAM.
+        // @hw die: TEFA SOSE TUCA TOLE ROPY SERE, TEGU SALE RUVY SAZO; SUTU
+        // TODE SOKY ROSU; RYLU..RONU; TUJA..RAGU
+        n.render_ma = cur.ma();
+        let fexx_ffxx = i.addr >> 9 == 0x7F;
+        let sose = i.addr & 0x8000 != 0 && !fexx_ffxx && !i.non_vram_mreq;
+        n.cpu_vram = sose && i.cpu_ext_cs_en && !cur.mode3;
+        n.cpu_write = w.cpu_vram && sose && i.write;
+        let sprite_mrd = w.sprite_cycles && !(cur.sprite_step & 1 == 0 && cur.tyfo);
+        n.mcs_n = !(cur.fetching || i.vram_to_oam || w.sprite_cycles || w.cpu_vram);
+        // (not (sose and write) nand not mode3) and not sprite_mrd and ...
+        n.mrd_n =
+            ((sose && i.write) || cur.mode3) && !sprite_mrd && !cur.fetching && !i.vram_to_oam;
+        n.mwr_n = !(sose && i.cpu_wr_sync && w.cpu_vram);
+        let vram_drives = !w.mcs_n && !w.mrd_n && w.mwr_n;
+        n.md_driven = w.cpu_write || vram_drives;
+        // md_pins <= to_x01(md) when cpu_write: the bus's own md, a delta
+        // behind the CPU's data bus.
+        n.md_pins = if w.cpu_write {
+            w.md
+        } else if vram_drives {
+            vram[usize::from(cur.vram_ma)]
+        } else {
+            cur.md_kept
+        };
+        n.md = if w.cpu_write { i.data } else { w.md_pins };
         wires
+    }
+
+    /// The VRAM bus's delta cycle (`hdl/rtl/vram_bus.vhd`) and the board's
+    /// VRAM's: the address lines, render's address 2 ns later, the keeper,
+    /// and VRAM written while /MCS and /MWR are low.
+    // @hw die: XANE XEDU, AHOC, and the not_if0 onto ~ma0..~ma12
+    fn vram_delta(
+        &self,
+        prev: &Self,
+        next: &mut Self,
+        schedule: &mut Schedule,
+        vram: &mut [u8; 0x2000],
+    ) {
+        let (cur, i, w) = (self, &self.inputs, &self.wires);
+        if !i.vram_to_oam && !cur.mode3 {
+            next.vram_ma = i.addr & 0x1FFF;
+        } else if i.vram_to_oam {
+            next.vram_ma = i.dma_addr & 0x1FFF;
+        } else if let Some(ma) = cur.render_settled {
+            next.vram_ma = ma;
+        } else {
+            // Nobody drives the lines: they keep their value.
+        }
+        if w.render_ma != prev.wires.render_ma {
+            schedule.after(2, Tx::RenderSettled(w.render_ma));
+        }
+        if w.md_driven {
+            next.md_kept = w.md_pins;
+        }
+        if !w.mcs_n && !w.mwr_n {
+            vram[usize::from(cur.vram_ma)] = w.md_pins;
+        }
+    }
+
+    /// What a CPU read of VRAM takes, in G and H.
+    // @hw die: TYVY SEBY, RUGA..TOKU (not_if1)
+    #[must_use]
+    pub const fn read_vram(&self) -> Option<u8> {
+        if self.wires.cpu_vram && self.inputs.rd && self.inputs.clk_t4 {
+            Some(self.wires.md)
+        } else {
+            None
+        }
     }
 
     /// The wires settled from the flip-flops and latches as they are,
@@ -559,10 +677,10 @@ impl NetRender {
     /// # Panics
     ///
     /// If the wires do not settle.
-    pub fn settle_wires(&mut self) {
+    pub fn settle_wires(&mut self, vram: &[u8; 0x2000]) {
         let mut deltas = 0;
         loop {
-            let wires = self.next_wires();
+            let wires = self.next_wires(vram);
             if wires == self.wires {
                 break;
             }
@@ -584,14 +702,14 @@ impl NetRender {
         clippy::cognitive_complexity,
         reason = "render's processes, in the VHDL's order"
     )]
-    fn delta(&self, prev: &Self, schedule: &mut Schedule) -> Self {
+    fn delta(&self, prev: &Self, schedule: &mut Schedule, vram: &mut [u8; 0x2000]) -> Self {
         let cur = self;
         let (i, w, pw) = (&cur.inputs, &cur.wires, &prev.wires);
         let mut next = *cur;
         let count0 = cur.fetch_count & 1 != 0;
         let (clk_rose, clk_fell) = (rose(prev.inputs.clk, i.clk), fell(prev.inputs.clk, i.clk));
 
-        next.wires = self.next_wires();
+        next.wires = self.next_wires(vram);
 
         // The registers: latches, open while the CPU writes them.
         // @hw die: GAVE..FUNY, DATY..BAKE, NESO..NAFU, MYPA..NUKU, PAVO..MENA,
@@ -735,10 +853,10 @@ impl NetRender {
         // TOMY..SOHU (dffsr)
         // @fact window-start-tile-register-pulse
         if fell(pw.bg_tile_clock, w.bg_tile_clock) {
-            schedule.after_tco(Tx::BgTile(i.md));
+            schedule.after_tco(Tx::BgTile(w.md));
         }
         if w.myso && cur.fetch_count == 3 {
-            next.bg_low = i.md;
+            next.bg_low = w.md;
         }
         if w.fetch_reset {
             next.bg_shift_a = cur.bg_low;
@@ -955,6 +1073,7 @@ impl NetRender {
             });
         }
         self.store_delta(prev, &mut next, schedule);
+        self.vram_delta(prev, &mut next, schedule, vram);
         next
     }
 

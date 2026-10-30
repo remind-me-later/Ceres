@@ -27,7 +27,7 @@ use crate::{
     interrupts::{NetIf, TIMER},
     lcd_control::NetLcdControl,
     lcd_timing::NetLcd,
-    oam::{NetOamLatches, OamInputs},
+    oam::{NetOam, NetOamInputs, OamInputs},
     oam_scan::{Clocks as ScanClocks, NetScan},
     render::{NetRender, RenderInputs},
     timer::{Access, NetTimer, Reg},
@@ -76,16 +76,15 @@ pub struct ChipInputs {
     /// acknowledges in it.
     pub rises: u8,
     pub acks: u8,
-    /// The byte OAM's RAM gives while its first latches are open, and OAM's
-    /// odd byte (X, or the attributes) as its latches give it (OAM's RAM and
-    /// its odd latches are not transcribed).
-    pub oam_data: u8,
-    pub oam_odd: u8,
-    /// VRAM's data (VRAM is not transcribed).
-    pub md: u8,
+    /// The data pins (the cartridge bus, which OAM DMA may read: the work
+    /// RAM and the cartridge are not transcribed), and the CPU core's memory
+    /// request outside VRAM.
+    pub d: u8,
+    pub non_vram_mreq: bool,
 }
 
-/// The chip's transcribed blocks, between edges of the crystal.
+/// The chip's transcribed blocks, between edges of the crystal. VRAM, on
+/// the board, is the edge's to borrow.
 #[derive(Clone, Copy)]
 pub struct NetChip {
     pub clocks: NetClocks,
@@ -97,7 +96,9 @@ pub struct NetChip {
     pub control: NetLcdControl,
     pub lcd: NetLcd,
     pub scan: NetScan,
-    pub oam: NetOamLatches,
+    pub oam: NetOam,
+    /// `clk_t4` in the last phase, which OAM's MAKA takes as the clock falls.
+    pub clk_t4: bool,
     pub render: NetRender,
     /// The CPU's write strobe and the data bus in the last phase: the
     /// latches a write opens take the bus as it was first.
@@ -128,7 +129,7 @@ pub struct ChipEvents {
 
 impl NetChip {
     /// An edge of the crystal and the phase it starts.
-    pub fn edge(&mut self, inputs: ChipInputs) -> ChipEvents {
+    pub fn edge(&mut self, inputs: ChipInputs, vram: &mut [u8; 0x2000]) -> ChipEvents {
         // LCDC as the edge finds it: its latches open after the edge.
         // @fact lcdc-write-latch-delay
         let lcdc_at_edge = Lcdc {
@@ -137,9 +138,20 @@ impl NetChip {
         };
         // The clocks, with the divider's last bit as it was at the edge.
         let clock_inputs = self.clock_inputs(inputs);
+        let clk_before = self.clocks.clk;
         self.clocks.step(clock_inputs);
         let phase = self.clocks.phase();
         let clocks = self.clocks.outputs(clock_inputs);
+        // OAM's MAKA, on the clock's falling edges.
+        // @hw die: MAKA (dffr)
+        if clocks.reset2 {
+            self.oam.reset();
+        } else if clk_before && !self.clocks.clk {
+            self.oam.falling_clk(self.clk_t4, false);
+        } else {
+            // MAKA holds.
+        }
+        self.clk_t4 = clocks.clk_t4;
 
         let timer_rose = self.step_timer(phase, inputs);
         self.step_dma(clocks, inputs);
@@ -155,8 +167,8 @@ impl NetChip {
         let lcd_before = self.lcd;
         let (mut stat_rose, level, vblank_rose) =
             self.step_lcd(lcdc_at_edge, lcdc, mode0_at_edge, inputs);
-        let (mode2, save) = self.step_scan(lcd_before, lcdc_at_edge, lcdc, inputs);
-        self.step_render(clocks, lcdc, mode2, save, inputs);
+        let (mode2, save) = self.step_scan(lcd_before, lcdc_at_edge, lcdc, clocks, inputs);
+        self.step_render(clocks, lcdc, mode2, save, inputs, vram);
         // Then mode 0, which rises after the edge's flip-flops.
         let mut level = level;
         for now in [
@@ -175,7 +187,7 @@ impl NetChip {
         let write_if = (inputs.wr && inputs.addr == 0xFF0F).then_some(inputs.data);
         self.interrupts.phase(rises, write_if, inputs.acks);
 
-        let read = self.step_read(phase, mode2, inputs);
+        let read = self.step_read(phase, mode2, clocks, inputs);
         self.wr_before = inputs.wr;
         self.data_before = inputs.data;
         ChipEvents {
@@ -292,12 +304,13 @@ impl NetChip {
         lcd: NetLcd,
         at_edge: Lcdc,
         lcdc: Lcdc,
+        clocks: ClockOutputs,
         inputs: ChipInputs,
     ) -> (bool, u16) {
         if at_edge.ppu_reset {
             self.scan.reset();
         } else {
-            let clocks = ScanClocks {
+            let scan_clocks = ScanClocks {
                 rising: self.clocks.clk,
                 wuvu_before: lcd.wuvu,
                 wuvu_after: self.lcd.wuvu,
@@ -305,29 +318,65 @@ impl NetChip {
                 vclk: lcd.vclk,
                 ly: lcd.ly,
             };
-            self.scan.edge(clocks, self.oam.second, at_edge.tall);
+            self.scan
+                .edge(scan_clocks, self.oam.second_even, at_edge.tall);
         }
         if lcdc.ppu_reset {
             self.scan.reset();
         }
-        let oam_inputs = self.oam_inputs();
-        self.oam.settle(oam_inputs, inputs.oam_data);
+        let oam_inputs = self.oam_inputs(clocks, inputs);
+        self.oam.settle(&oam_inputs);
         let save = self
             .scan
-            .save(self.lcd.wosu, self.oam.second, self.lcd.ly, lcdc.tall)
+            .save(self.lcd.wosu, self.oam.second_even, self.lcd.ly, lcdc.tall)
             .map_or(0, |slot| 1 << slot);
-        (oam_inputs.mode2(), save)
+        (oam_inputs.mode2, save)
     }
 
-    /// What OAM's latches take in: the scan's, the DMA's, the line timing's
-    /// and the sprite fetch's strobes.
-    const fn oam_inputs(&self) -> OamInputs {
+    /// Mode 2, for OAM and STAT: the scan runs, and OAM DMA does not hide
+    /// OAM from it.
+    // @hw die: ACYL BOGE
+    const fn mode2(&self) -> bool {
         OamInputs {
             scanning: self.scan.scanning,
             run: self.dma.run,
+            dma_phi: false,
+            wuvu: false,
+            wosu: false,
+            fetch_read: false,
+            fetch_hold: false,
+        }
+        .mode2()
+    }
+
+    /// OAM DMA reads VRAM (sources 80 to 9F), else the cartridge bus.
+    // @hw die: MUDA LOGO MORY LUMA, MUHO LUFA
+    const fn dma_from_vram(&self) -> bool {
+        self.dma.source >> 5 == 0b100
+    }
+
+    /// What OAM takes in: the CPU's access, the DMA's, the scan's, the line
+    /// timing's and the sprite fetch's.
+    const fn oam_inputs(&self, clocks: ClockOutputs, inputs: ChipInputs) -> NetOamInputs {
+        NetOamInputs {
+            addr: inputs.addr,
+            rd: inputs.rd,
+            wr: inputs.wr,
+            data: inputs.data,
+            clk_t4: clocks.clk_t4,
+            dma_run: self.dma.run,
             dma_phi: self.dma_phi,
-            wuvu: self.lcd.wuvu,
+            dma_index: self.dma.count,
+            dma_addr_ext: self.dma.run && !self.dma_from_vram(),
+            vram_to_oam: self.dma.run && self.dma_from_vram(),
+            d: inputs.d,
+            md: self.render.wires.md,
+            mode2: self.mode2(),
+            mode3: self.render.mode3,
+            scan_index: self.scan.index,
+            render_index: self.render.store.index,
             wosu: self.lcd.wosu,
+            wuvu: self.lcd.wuvu,
             fetch_read: self.render.fetch_read(),
             fetch_hold: self.render.fetch_hold(),
         }
@@ -343,49 +392,75 @@ impl NetChip {
         mode2: bool,
         save: u16,
         inputs: ChipInputs,
+        vram: &mut [u8; 0x2000],
     ) {
         let line_start = self.scan.line_start() || lcdc.ppu_reset;
-        self.render.edge(RenderInputs {
-            clk: self.clocks.clk,
-            ppu_reset: lcdc.ppu_reset,
-            hard_reset: clocks.reset2,
-            hclk: self.lcd.vena,
-            mode1: self.lcd.mode1,
-            ly: self.lcd.ly,
-            lcdc: self.control.lcdc,
-            addr: inputs.addr,
-            wr: inputs.wr,
-            data: inputs.data,
-            line_start,
-            stop_scan: self.scan.stop_scan() && !line_start,
-            ceno: self.scan.ceno,
-            save,
-            // The Y comparator's difference, Y - LY - 1: its low four bits.
-            scan_line: self.oam.second.wrapping_add(!self.lcd.ly) & 0x0F,
-            wuvu: self.lcd.wuvu,
-            dma_run: self.dma.run,
-            dma_index: self.dma.count,
-            mode2,
-            scan_index: self.scan.index,
-            tile: self.oam.second,
-            attributes: inputs.oam_odd,
-            md: inputs.md,
-        });
-        let oam_inputs = self.oam_inputs();
-        self.oam.settle(oam_inputs, inputs.oam_data);
+        self.render.edge(
+            RenderInputs {
+                clk: self.clocks.clk,
+                ppu_reset: lcdc.ppu_reset,
+                hard_reset: clocks.reset2,
+                hclk: self.lcd.vena,
+                mode1: self.lcd.mode1,
+                ly: self.lcd.ly,
+                lcdc: self.control.lcdc,
+                addr: inputs.addr,
+                wr: inputs.wr,
+                data: inputs.data,
+                rd: inputs.rd,
+                non_vram_mreq: inputs.non_vram_mreq,
+                write: inputs.write,
+                cpu_wr_sync: clocks.cpu_wr_sync,
+                cpu_ext_cs_en: clocks.cpu_ext_cs_en,
+                clk_t4: clocks.clk_t4,
+                vram_to_oam: self.dma.run && self.dma_from_vram(),
+                dma_addr: u16::from_be_bytes([self.dma.source, self.dma.count]),
+                line_start,
+                stop_scan: self.scan.stop_scan() && !line_start,
+                ceno: self.scan.ceno,
+                save,
+                // The Y comparator's difference, Y - LY - 1: its low four bits.
+                scan_line: self.oam.second_even.wrapping_add(!self.lcd.ly) & 0x0F,
+                wuvu: self.lcd.wuvu,
+                dma_run: self.dma.run,
+                dma_index: self.dma.count,
+                mode2,
+                scan_index: self.scan.index,
+                tile: self.oam.second_even,
+                attributes: self.oam.second_odd,
+            },
+            vram,
+        );
+        let oam_inputs = self.oam_inputs(clocks, inputs);
+        self.oam.settle(&oam_inputs);
     }
 
-    /// A read of LCDC, STAT, LY or LYC: the AND of what the register shows
-    /// from E to H, which the core takes in H.
-    fn step_read(&mut self, phase: Phase, mode2: bool, inputs: ChipInputs) -> Option<u8> {
+    /// A read of the PPU's registers, OAM, VRAM or FF46: the AND of what
+    /// drives the bus from E to H, which the core takes in H.
+    fn step_read(
+        &mut self,
+        phase: Phase,
+        mode2: bool,
+        clocks: ClockOutputs,
+        inputs: ChipInputs,
+    ) -> Option<u8> {
         let shown = self
             .control
             .read(inputs.addr)
             .or_else(|| self.lcd.read(inputs.addr, mode2, self.render.mode3))
-            .or_else(|| self.render.read(inputs.addr));
+            .or_else(|| self.render.read(inputs.addr))
+            .or_else(|| self.render.read_vram())
+            .or_else(|| self.oam.read(&self.oam_inputs(clocks, inputs)))
+            .or_else(|| (inputs.addr == 0xFF46).then_some(self.dma.source));
+        // The bus is precharged high; what drives it pulls bits low.
+        let driven = |bus: Option<u8>| match (bus, shown) {
+            (Some(bus), Some(byte)) => Some(bus & byte),
+            (bus, None) => bus,
+            (None, byte) => byte,
+        };
         self.read_bus = match (inputs.rd, phase) {
             (true, Phase::E) => shown,
-            (true, Phase::F | Phase::G | Phase::H) => self.read_bus.zip(shown).map(|(a, b)| a & b),
+            (true, Phase::F | Phase::G | Phase::H) => driven(self.read_bus),
             _ => None,
         };
         (inputs.rd && matches!(phase, Phase::H))
