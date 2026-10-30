@@ -415,23 +415,25 @@ The blocks also replay wired together, as `dmg_cpu_b.vhd` wires them
 IF, OAM DMA and the line timing step on, the divider's last bit ends the
 clocks' power-on wait, the timer's interrupt, the STAT line and VBlank
 rise into IF, the DMA runs on the clocks' `dma_phi`, LCDC
-(`NetLcdControl`, of `lcd_control.vhd`) holds the line timing and the
-scan in reset and gives the scan the sprites' height, the OAM scan runs on
-the line timing's clocks and compares what OAM's latches hold, and the
-latches follow the scan and the DMA. Only the CPU's access, the other
-interrupt sources, the acknowledges and what the blocks not transcribed
-yet give (render's modes, the sprite fetch's strobes, OAM's RAM) come
-from the trace. Over the 198 traces with the clocks (gbmicrotest's DMA,
-timer, halt, OAM and sprite ROMs, Gambatte's `sprites` and `oamdma` ROMs,
-and `check/lcdc.asm`, which writes every value to LCDC and reads it back)
-it finds no difference in 1.25 billion phases: 258 timer interrupts,
-11494 rises of the STAT line and 1001 of VBlank reach IF, 363 transfers
-start on the clocks' `dma_phi`, LCDC turns the LCD on 890 times and off
-692 times, 816 reads of LCDC and 390623 of STAT, LY and LYC take what
-the registers show, and the scan saves 81604 sprites from what the
-latches hold. LCDC's latches open after the edge that starts the write's
-first phase (`lcdc-write-latch-delay`): taken at the edge, every LCD
-turned on starts its clocks an edge early.
+(`NetLcdControl`, of `lcd_control.vhd`) holds the PPU in reset and gives
+the scan the sprites' height, the OAM scan runs on the line timing's
+clocks and compares what OAM's latches hold, the latches follow the scan,
+the DMA and render's sprite fetch, and render and the sprite store (below)
+run on what the others give them and give the STAT line and STAT their
+modes 0 and 3. Only the CPU's access, the other interrupt sources, the
+acknowledges, OAM's RAM and odd byte and VRAM's data come from the trace,
+which must have render's fields. Over those 267 traces (gbmicrotest's DMA,
+timer, halt, OAM, sprite, SCX and window ROMs, Gambatte's `sprites` and
+`oamdma` ROMs, 12 of Mealybug's `m3_` ROMs, and `check/lcdc.asm`, which
+writes every value to LCDC and reads it back) it finds no difference in
+1.72 billion phases: 360 timer interrupts, 42473 rises of the STAT line
+and 1229 of VBlank reach IF, 363 transfers start on the clocks'
+`dma_phi`, LCDC turns the LCD on 1023 times and off 757 times, 816 reads
+of LCDC and 452908 of STAT, LY and LYC take what the registers show, and
+the scan saves 122070 sprites from what the latches hold. LCDC's latches
+open after the edge that starts the write's first phase
+(`lcdc-write-latch-delay`): taken at the edge, every LCD turned on starts
+its clocks an edge early.
 
 Render (`render.vhd`, the DMG's part) replays as `NetRender`
 (ceres-netlist's `render`), from the traces that have its fields (the
@@ -447,18 +449,15 @@ OAM scan's flip-flops clocked by `wuvu` at 2 ns, and VRAM's data at 3 ns
 (the address reaches VRAM 2 ns after it changes). The sprite store
 (`sprite_store.vhd`) settles with render, as its X matchers and render's
 pixel counter feed each other within an edge. Over
-the 133 traces with render's fields (gbmicrotest's PPU, sprite, OAM, SCX and
-window ROMs, Gambatte's `oamdma` ROMs, 12 of Mealybug's `m3_` ROMs, and
-`check/lcdc.asm` and `check/dma_fetch.asm`) it matches the model in every
+the 267 traces with render's fields it matches the model in every
 flip-flop and latch, in the sprite store's slots, fetched flags and scanned
 index, and in its VRAM address, its CP, ST and LD pins and the store's
 match and line:
-mode 3 ends 39028 times, the window starts 10962 times, 23424 sprite
+mode 3 ends 187198 times, the window starts 10962 times, 25474 sprite
 fetches start. Without the delta cycle between `myso` and the tile
 register's clock, the pulse that clocks the tile register as the window
 starts (`window-start-tile-register-pulse`) is lost, and
-`m3_lcdc_win_en_change_multiple_wx` differs. Next, render and the store
-join `NetChip`.
+`m3_lcdc_win_en_change_multiple_wx` differs.
 
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay

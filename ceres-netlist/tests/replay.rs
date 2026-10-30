@@ -1116,8 +1116,9 @@ const fn clocks_shown(
 /// interrupt sources' rises, the acknowledges).
 fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
     let pins = edge.clocks.as_ref()?.inputs;
-    let (lcd_edge, lcd) = (edge.lcd.as_ref()?, phase.lcd.as_ref()?);
+    let lcd = phase.lcd.as_ref()?;
     let oam = lcd.scan.as_ref()?.oam.as_ref()?;
+    let render = phase.render.as_ref()?;
     Some(ChipInputs {
         ck1: pins.ck1,
         reset_pin_n: pins.reset_pin_n,
@@ -1134,12 +1135,9 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
         data: phase.data,
         rises: phase.rose,
         acks: phase.acks,
-        mode0_at_edge: lcd_edge.mode0,
-        mode0: lcd.mode0,
-        mode3: lcd.mode3,
-        fetch_read: oam.fetch_read,
-        fetch_hold: oam.fetch_hold,
         oam_data: oam.first,
+        oam_odd: render.attributes,
+        md: render.md,
     })
 }
 
@@ -1149,9 +1147,11 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
 /// VBlank rise into IF, the DMA runs on the clocks' `dma_phi`, LCDC holds
 /// the line timing and the scan in reset and gives the scan the sprites'
 /// height, the OAM scan runs on the line timing's clocks with what OAM's
-/// latches hold, and the latches follow the scan and the DMA; only the
-/// CPU's access, the other sources, the acknowledges and what render, the
-/// sprite fetch and OAM's RAM give come from the trace. LCDC's bits that
+/// latches hold, the latches follow the scan, the DMA and render's sprite
+/// fetch, and render and the sprite store run on what the others give
+/// them, and give the STAT line mode 0; only the CPU's access, the other
+/// sources, the acknowledges, OAM's RAM and odd byte and VRAM's data come
+/// from the trace, which must have render's fields. LCDC's bits that
 /// the trace lacks (all but 7 and 2) are taken from the first read of it,
 /// if it comes before a write. A step is an edge and the phase it
 /// starts: the clocks are compared with the edge's line, the others with
@@ -1174,6 +1174,9 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         return;
     };
     let Some((scan, oam)) = lcd.scan.as_ref().and_then(|s| Some((s, s.oam.as_ref()?))) else {
+        return;
+    };
+    let Some(model_render) = second.render.as_ref() else {
         return;
     };
     let mut chip = NetChip {
@@ -1204,8 +1207,16 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
         wr_before: second.wr,
         data_before: second.data,
         read_bus: None,
+        render: model_render.net,
     };
     chip.dma_phi = NetChip::dma_phi(chip.clocks.outputs(edge.inputs));
+    // Render's wires settle from the model's state.
+    let Some(at_start) = render::inputs(second, lcd_edge.clk, chip.control.lcdc) else {
+        return;
+    };
+    chip.render.inputs = at_start;
+    chip.render.edge(at_start);
+    render::resync(&mut chip.render, &model_render.net);
     let mut lcdc_known = false;
     for n in start + 1..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
@@ -1282,6 +1293,16 @@ fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
             chip.dma = ends.dma;
         }
         compare_chip_ppu(name, n, line, ends, &mut chip, events, report);
+        if let Some(model) = ends.render.as_ref() {
+            let differ = render::differences(&chip.render, &model.net);
+            if !differ.is_empty() {
+                report.differ(
+                    format!("chip: render, phase {}: {}", ends.phase, differ.join(" ")),
+                    format!("{name}:{}", n + 2),
+                );
+                render::resync(&mut chip.render, &model.net);
+            }
+        }
     }
 }
 

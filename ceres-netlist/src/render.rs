@@ -477,30 +477,19 @@ impl NetRender {
         }
     }
 
-    /// One delta cycle: the wires follow what they are made of as it was,
-    /// the latches and the asynchronous resets act at once, and the
-    /// flip-flops whose clock had an edge take what they see, for `tco`
-    /// later. `prev` is the delta cycle before, for the edges.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "render's processes, in the VHDL's order"
-    )]
-    #[expect(
-        clippy::cognitive_complexity,
-        reason = "render's processes, in the VHDL's order"
-    )]
-    fn delta(&self, prev: &Self, schedule: &mut Schedule) -> Self {
+    /// The wires a delta cycle on: each concurrent statement from what it
+    /// is made of now.
+    #[must_use]
+    pub fn next_wires(&self) -> Wires {
         let cur = self;
-        let (i, w, pw) = (&cur.inputs, &cur.wires, &prev.wires);
-        let mut next = *cur;
+        let (i, w, store) = (&cur.inputs, &cur.wires, &cur.store);
         let count0 = cur.fetch_count & 1 != 0;
         let count1 = cur.fetch_count & 2 != 0;
         let count2 = cur.fetch_count & 4 != 0;
-        let (clk_rose, clk_fell) = (rose(prev.inputs.clk, i.clk), fell(prev.inputs.clk, i.clk));
-
+        let mut wires = *w;
+        let n = &mut wires;
         // The wires.
         // @hw die: WODU XUGU XENA, TYFA SOCY VYBO SEGU, SACU
-        let n = &mut next.wires;
         n.stop_mode3 = cur.px == 167 && !w.x_match;
         n.dot = !cur.rydy && cur.started && !w.x_match && !w.stop_mode3 && i.clk;
         n.segu = !w.dot;
@@ -536,6 +525,73 @@ impl NetRender {
             i.md
         };
         n.sprite_on = if w.loaded { !(cur.sp_a | cur.sp_b) } else { 0 };
+
+        // The sprite store's.
+        n.rendering = cur.mode3 && !i.ceno;
+        n.enabled = w.rendering && i.lcdc & 2 != 0;
+        n.matches = (0..10)
+            .filter(|&slot| w.enabled && store.xs[slot] == cur.px)
+            .fold(0, |m, slot| m | 1 << slot);
+        n.selected = w.matches & w.matches.wrapping_neg();
+        n.x_match = w.matches != 0;
+        n.line = (0..10)
+            .find(|&slot| w.selected & 1 << slot != 0)
+            .map_or(i.scan_line, |slot| store.lines[slot]);
+
+        // OAM's address, bits 7 to 2: the CPU's, the DMA's, the scan's, or
+        // the store's index lines in mode 3.
+        n.oam_index = if !i.mode2 && !cur.mode3 && !i.dma_run {
+            (i.addr >> 2 & 0x3F) as u8
+        } else if i.dma_run {
+            i.dma_index >> 2
+        } else if i.mode2 {
+            i.scan_index
+        } else {
+            store.index
+        };
+        wires
+    }
+
+    /// The wires settled from the flip-flops and latches as they are,
+    /// without an edge: after the state was set from outside (a replay's
+    /// resynchronisation).
+    ///
+    /// # Panics
+    ///
+    /// If the wires do not settle.
+    pub fn settle_wires(&mut self) {
+        let mut deltas = 0;
+        loop {
+            let wires = self.next_wires();
+            if wires == self.wires {
+                break;
+            }
+            self.wires = wires;
+            deltas += 1;
+            assert!(deltas < MAX_DELTAS, "render's wires oscillate");
+        }
+    }
+
+    /// One delta cycle: the wires follow what they are made of as it was,
+    /// the latches and the asynchronous resets act at once, and the
+    /// flip-flops whose clock had an edge take what they see, for `tco`
+    /// later. `prev` is the delta cycle before, for the edges.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "render's processes, in the VHDL's order"
+    )]
+    #[expect(
+        clippy::cognitive_complexity,
+        reason = "render's processes, in the VHDL's order"
+    )]
+    fn delta(&self, prev: &Self, schedule: &mut Schedule) -> Self {
+        let cur = self;
+        let (i, w, pw) = (&cur.inputs, &cur.wires, &prev.wires);
+        let mut next = *cur;
+        let count0 = cur.fetch_count & 1 != 0;
+        let (clk_rose, clk_fell) = (rose(prev.inputs.clk, i.clk), fell(prev.inputs.clk, i.clk));
+
+        next.wires = self.next_wires();
 
         // The registers: latches, open while the CPU writes them.
         // @hw die: GAVE..FUNY, DATY..BAKE, NESO..NAFU, MYPA..NUKU, PAVO..MENA,
@@ -909,29 +965,6 @@ impl NetRender {
     fn store_delta(&self, prev: &Self, next: &mut Self, schedule: &mut Schedule) {
         let cur = self;
         let (i, w, store) = (&cur.inputs, &cur.wires, &cur.store);
-        let n = &mut next.wires;
-        n.rendering = cur.mode3 && !i.ceno;
-        n.enabled = w.rendering && i.lcdc & 2 != 0;
-        n.matches = (0..10)
-            .filter(|&slot| w.enabled && store.xs[slot] == cur.px)
-            .fold(0, |m, slot| m | 1 << slot);
-        n.selected = w.matches & w.matches.wrapping_neg();
-        n.x_match = w.matches != 0;
-        n.line = (0..10)
-            .find(|&slot| w.selected & 1 << slot != 0)
-            .map_or(i.scan_line, |slot| store.lines[slot]);
-
-        // OAM's address, bits 7 to 2: the CPU's, the DMA's, the scan's, or
-        // the store's index lines in mode 3.
-        n.oam_index = if !i.mode2 && !cur.mode3 && !i.dma_run {
-            (i.addr >> 2 & 0x3F) as u8
-        } else if i.dma_run {
-            i.dma_index >> 2
-        } else if i.mode2 {
-            i.scan_index
-        } else {
-            store.index
-        };
         if rose(prev.inputs.wuvu, i.wuvu) {
             schedule.after_tco(Tx::Scanned(w.oam_index));
         }
@@ -964,6 +997,22 @@ impl NetRender {
             next.store.index = store.indexes[slot];
         } else {
             // The lines keep their value.
+        }
+    }
+
+    /// What a read of `addr` drives: SCY, SCX, BGP, OBP0, OBP1, WY, WX.
+    // @hw die: the not_if0 of the registers onto the data bus
+    #[must_use]
+    pub const fn read(&self, addr: u16) -> Option<u8> {
+        match addr {
+            0xFF42 => Some(self.scy),
+            0xFF43 => Some(self.scx),
+            0xFF47 => Some(self.bgp),
+            0xFF48 => Some(self.obp0),
+            0xFF49 => Some(self.obp1),
+            0xFF4A => Some(self.wy),
+            0xFF4B => Some(self.wx),
+            _ => None,
         }
     }
 

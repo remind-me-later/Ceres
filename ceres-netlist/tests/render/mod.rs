@@ -168,7 +168,7 @@ fn slots(field: &str, width: usize) -> Option<[u8; 10]> {
 
 /// What render takes in at the end of `line`'s phase, with the clock `clk`
 /// and LCDC `lcdc`.
-fn inputs(line: &Line, clk: bool, lcdc: u8) -> Option<RenderInputs> {
+pub fn inputs(line: &Line, clk: bool, lcdc: u8) -> Option<RenderInputs> {
     let (lcd, render) = (line.lcd.as_ref()?, line.render.as_ref()?);
     let scan = lcd.scan.as_ref()?;
     Some(RenderInputs {
@@ -201,7 +201,7 @@ fn inputs(line: &Line, clk: bool, lcdc: u8) -> Option<RenderInputs> {
 
 /// The flip-flops and latches of `net` that differ from `model`'s.
 #[expect(clippy::cognitive_complexity, reason = "a field at a time")]
-fn differences(net: &NetRender, model: &NetRender) -> Vec<&'static str> {
+pub fn differences(net: &NetRender, model: &NetRender) -> Vec<&'static str> {
     let mut differ = Vec::new();
     macro_rules! check {
         ($($field:ident),*) => {
@@ -285,7 +285,7 @@ fn differences(net: &NetRender, model: &NetRender) -> Vec<&'static str> {
 
 /// Takes the model's flip-flops and latches, keeping the wires and the
 /// inputs.
-const fn resync(net: &mut NetRender, model: &NetRender) {
+pub fn resync(net: &mut NetRender, model: &NetRender) {
     *net = NetRender {
         wires: net.wires,
         inputs: net.inputs,
@@ -295,6 +295,7 @@ const fn resync(net: &mut NetRender, model: &NetRender) {
         },
         ..*model
     };
+    net.settle_wires();
 }
 
 /// Replays render, edge by edge: the edge that starts line `n + 1`'s phase
