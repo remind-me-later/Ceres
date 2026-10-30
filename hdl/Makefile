@@ -55,7 +55,7 @@ LCD_OFF_ROM := $(BUILD)/lcd_off_line_start.gb
 WINDOW_ROM := $(BUILD)/window_line0_sprite.gb
 DMA_FETCH_ROM := $(BUILD)/dma_fetch.gb
 LCDC_ROM := $(BUILD)/lcdc.gb
-READBACK_ROMS := $(BUILD)/ppu_regs.gb $(BUILD)/vram_oam.gb
+READBACK_ROMS := $(BUILD)/ppu_regs.gb $(BUILD)/vram_oam.gb $(BUILD)/bus.gb
 
 abs = $(abspath $(1))
 
@@ -99,8 +99,9 @@ $(TINYBOOT_CGB): boot/tinyboot_cgb.asm
 # (check/lcd_on_lyc0.asm), and of the sprite fetch during OAM DMA and of
 # LCDC's writes and reads, for trace-blocks.sh (check/dma_fetch.asm,
 # check/lcdc.asm), and of the PPU's registers', VRAM's and OAM's reads,
-# which check themselves and report as check/report.inc says, on the model
-# and on a Game Boy (check/ppu_regs.asm, check/vram_oam.asm).
+# and of the bus side's, which check themselves and report as
+# check/report.inc says, on the model and on a Game Boy (check/ppu_regs.asm,
+# check/vram_oam.asm, check/bus.asm).
 $(BUILD)/%.gb: check/%.asm check/report.inc
 	mkdir -p $(BUILD)
 	rgbasm -I check/ -o $(BUILD)/$*.o $<

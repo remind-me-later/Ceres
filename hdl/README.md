@@ -511,10 +511,13 @@ data bus, acknowledges, and its request's pulses), the clock pins and the
 world outside (the joypad's lines, SIN, SCK): over the 269 traces the
 closed loop finds no difference either.
 
-`check/ppu_regs.asm` and `check/vram_oam.asm` read back the PPU's
-registers, VRAM and OAM, and check what they read: every register's bits
-with the LCD on and off, FF46 during and after OAM DMA, every byte of VRAM
-and OAM, and VRAM and OAM locked out in modes 2 and 3. They report as
+`check/ppu_regs.asm`, `check/vram_oam.asm` and `check/bus.asm` read
+back the PPU's registers, VRAM, OAM and the bus side, and check what they
+read: every register's bits with the LCD on and off, FF46 during and after
+OAM DMA, every byte of VRAM and OAM, VRAM and OAM locked out in modes 2 and
+3; serial bytes sent with the internal clock (SB, SC and IF after), P1's
+select bits, FF50, the cartridge's header, every byte of HRAM and work
+RAM, and the echo of work RAM. They report as
 `check/report.inc` says (Mooneye's registers and `LD B,B`, "Passed" or
 "Failed" on the serial port, a white or black screen), so they run on a
 Game Boy as well; they pass on dmg-sim, the model and ceres
