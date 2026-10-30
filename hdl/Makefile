@@ -55,12 +55,13 @@ LCD_OFF_ROM := $(BUILD)/lcd_off_line_start.gb
 WINDOW_ROM := $(BUILD)/window_line0_sprite.gb
 DMA_FETCH_ROM := $(BUILD)/dma_fetch.gb
 LCDC_ROM := $(BUILD)/lcdc.gb
+READBACK_ROMS := $(BUILD)/ppu_regs.gb $(BUILD)/vram_oam.gb
 
 abs = $(abspath $(1))
 
 .PHONY: all run phases smoke model run-model check clean
 
-all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(TINYBOOT_CGB) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(STAT_DIPS_ROM) $(LCD_ON_LYC0_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM) $(DMA_FETCH_ROM) $(LCDC_ROM)
+all: $(VVP) $(FASTBOOT) $(TINYBOOT) $(TINYBOOT_CGB) $(APU_ROM) $(CPU_ROM) $(SPRITES_ROM) $(STAT_ROM) $(STAT_DIPS_ROM) $(LCD_ON_LYC0_ROM) $(LCD_OFF_ROM) $(WINDOW_ROM) $(DMA_FETCH_ROM) $(LCDC_ROM) $(READBACK_ROMS)
 
 # A boot ROM that only turns the LCD on and goes to 0100, for the checks
 # of the readable model, which do not need the boot ROM's timing:
@@ -97,10 +98,12 @@ $(TINYBOOT_CGB): boot/tinyboot_cgb.asm
 # of the LCD turned on with LYC 0, for compare-ceres.sh
 # (check/lcd_on_lyc0.asm), and of the sprite fetch during OAM DMA and of
 # LCDC's writes and reads, for trace-blocks.sh (check/dma_fetch.asm,
-# check/lcdc.asm).
-$(BUILD)/%.gb: check/%.asm
+# check/lcdc.asm), and of the PPU's registers', VRAM's and OAM's reads,
+# which check themselves and report as check/report.inc says, on the model
+# and on a Game Boy (check/ppu_regs.asm, check/vram_oam.asm).
+$(BUILD)/%.gb: check/%.asm check/report.inc
 	mkdir -p $(BUILD)
-	rgbasm -o $(BUILD)/$*.o $<
+	rgbasm -I check/ -o $(BUILD)/$*.o $<
 	rgblink -o $@ $(BUILD)/$*.o
 	rgbfix -v -p 0 $@
 

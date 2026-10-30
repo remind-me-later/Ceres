@@ -399,7 +399,10 @@ impl NetChip {
             .or_else(|| self.render.read(inputs.addr))
             .or_else(|| self.render.read_vram())
             .or_else(|| self.render.oam.read(&self.render.oam_inputs()))
-            .or_else(|| (inputs.addr == 0xFF46).then_some(self.dma.source));
+            .or_else(|| (inputs.addr == 0xFF46).then_some(self.dma.source))
+            // VRAM and OAM while the PPU or OAM DMA holds them: nothing
+            // drives the precharged bus.
+            .or_else(|| matches!(inputs.addr, 0x8000..=0x9FFF | 0xFE00..=0xFE9F).then_some(0xFF));
         // The bus is precharged high; what drives it pulls bits low.
         let driven = |bus: Option<u8>| match (bus, shown) {
             (Some(bus), Some(byte)) => Some(bus & byte),

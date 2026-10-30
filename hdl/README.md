@@ -481,9 +481,20 @@ byte while a CPU read of OAM ends (`dma_timing_a`). While nothing drives
 VRAM's data pins, the board's keeper holds them against the pads' pull-ups
 (the bits it holds low resolve to `W`, printed as 00), and which byte it
 caught depends on the deltas through the ports; nothing reads them then,
-so the replay compares VRAM's data only while driven. Over the 267 traces
-the replay finds no difference in 1.72 billion phases: 335745 CPU writes
-of VRAM, 363 OAM DMA transfers, 27 CPU reads of OAM.
+so the replay compares VRAM's data only while driven. Over the 269 traces
+the replay finds no difference in 1.73 billion phases: 335745 CPU writes
+of VRAM, 363 OAM DMA transfers, 38 CPU reads of OAM and 4 of VRAM (FF
+where the PPU holds them: nothing drives the precharged bus), 168 reads of
+SCY, SCX, BGP, OBP0, OBP1, WY and WX, 25 of FF46.
+
+`check/ppu_regs.asm` and `check/vram_oam.asm` read back the PPU's
+registers, VRAM and OAM, and check what they read: every register's bits
+with the LCD on and off, FF46 during and after OAM DMA, every byte of VRAM
+and OAM, and VRAM and OAM locked out in modes 2 and 3. They report as
+`check/report.inc` says (Mooneye's registers and `LD B,B`, "Passed" or
+"Failed" on the serial port, a white or black screen), so they run on a
+Game Boy as well; they pass on dmg-sim, the model and ceres
+(`ceres-test-runner/tests/hdl_checks.rs`), and are in `tests.txt`.
 
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay
