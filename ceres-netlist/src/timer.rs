@@ -22,6 +22,20 @@ pub enum Reg {
     Tac,
 }
 
+impl Reg {
+    /// The register at `addr`, if the timer has one there.
+    #[must_use]
+    pub const fn at(addr: u16) -> Option<Self> {
+        match addr {
+            0xFF04 => Some(Self::Div),
+            0xFF05 => Some(Self::Tima),
+            0xFF06 => Some(Self::Tma),
+            0xFF07 => Some(Self::Tac),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub enum Access {
     None,

@@ -410,6 +410,17 @@ ls ../external/test-roms/gbmicrotest/timer_*.gb | sed 's|^\.\./||' |
 cargo test -p ceres-netlist --release --test replay -- --ignored --nocapture
 ```
 
+The blocks also replay wired together, as `dmg_cpu_b.vhd` wires them
+(`NetChip`, ceres-netlist's `chip`): the clocks run the phases the timer,
+IF and OAM DMA step on, the divider's last bit ends the clocks' power-on
+wait, the timer's interrupt rises into IF, and the DMA runs on the clocks'
+`dma_phi`; only the CPU's access, the other interrupt sources and the
+acknowledges come from the trace. Over the 75 traces with the clocks
+(gbmicrotest's DMA, timer and halt ROMs among them) it finds no
+difference: 258 timer interrupts reach IF, 7 transfers start on the
+clocks' `dma_phi`. The line timing, the OAM scan and OAM's latches are to
+join it.
+
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay
 takes only the clocks there, as the other blocks are held in reset.

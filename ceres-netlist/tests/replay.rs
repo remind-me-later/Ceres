@@ -3,7 +3,9 @@
 //! in `hdl/build/blocks`, and from the power-on in its `power-on/`) through
 //! their transcriptions, `NetTimer`, `NetIf`, `NetDma`, `NetLcd`,
 //! `NetScan`, `NetOamLatches` and `NetClocks`, phase by phase, and reports
-//! where a transcription parts from the model. ceres-core's proofs against ceres
+//! where a transcription parts from the model; and the blocks wired
+//! together (`NetChip`), each taking from the others what the model wires
+//! in, where the trace has the clocks. ceres-core's proofs against ceres
 //! (its `timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
 //! `memory/dma/netlist_proofs.rs`, `ppu/display/timing/netlist_proofs.rs`,
 //! `ppu/display/objects/netlist_proofs.rs`, `netlist_proofs.rs`) rest on
@@ -19,6 +21,7 @@
 
 use {
     ceres_netlist::{
+        chip::{ChipInputs, NetChip},
         clocks::{ClockInputs, ClockOutputs, NetClocks},
         dma::{NetDma, Phase as DmaPhase},
         interrupts::{NetIf, lowest},
@@ -1050,20 +1053,7 @@ fn replay_clocks(name: &str, lines: &[Line], report: &mut Report, from_power_on:
         // `phase_i` have changed by then, those decoded through another
         // signal (`clk_1mhz_i`, `data_phase_i`) not yet: they still show
         // the phase before the edge.
-        let now = net.outputs(clocks.inputs);
-        let then = before.outputs(clocks.inputs);
-        let outputs = ClockOutputs {
-            clk_1mhz: then.clk_1mhz,
-            data_phase: then.data_phase,
-            exec_phase: then.exec_phase,
-            phi: then.phi,
-            reset2: before.cpu_sys_reset || net.sys_reset,
-            ..now
-        };
-        let shown = NetClocks {
-            cpu_sys_reset: before.cpu_sys_reset,
-            ..net
-        };
+        let (shown, outputs) = clocks_shown(before, net, clocks.inputs);
         if shown != clocks.net || outputs != clocks.outputs {
             report.differ(
                 format!("clocks, phase {}", line.phase),
@@ -1079,6 +1069,151 @@ fn replay_clocks(name: &str, lines: &[Line], report: &mut Report, from_power_on:
                 .get(n + 1)
                 .and_then(|l| l.clocks.as_ref())
                 .map_or(clocks.net.cpu_sys_reset, |c| c.net.cpu_sys_reset);
+        }
+    }
+}
+
+/// The clocks' state and outputs as a line of the trace shows them, after
+/// the step `after` from `before` with `inputs` (see `replay_clocks`).
+const fn clocks_shown(
+    before: NetClocks,
+    after: NetClocks,
+    inputs: ClockInputs,
+) -> (NetClocks, ClockOutputs) {
+    let now = after.outputs(inputs);
+    let then = before.outputs(inputs);
+    (
+        NetClocks {
+            cpu_sys_reset: before.cpu_sys_reset,
+            ..after
+        },
+        ClockOutputs {
+            clk_1mhz: then.clk_1mhz,
+            data_phase: then.data_phase,
+            exec_phase: then.exec_phase,
+            phi: then.phi,
+            reset2: before.cpu_sys_reset || after.sys_reset,
+            ..now
+        },
+    )
+}
+
+/// What the chip takes in at the edge of line `edge` (the pins), and in the
+/// phase it starts, which the next line ends (the CPU's access, the other
+/// interrupt sources' rises, the acknowledges).
+fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
+    let pins = edge.clocks.as_ref()?.inputs;
+    Some(ChipInputs {
+        ck1: pins.ck1,
+        reset_pin_n: pins.reset_pin_n,
+        t1: pins.t1,
+        t2: pins.t2,
+        osc_ena: pins.osc_ena,
+        clk_ena: pins.clk_ena,
+        mreq: pins.mreq,
+        write: pins.write,
+        test_reset: pins.test_reset,
+        addr: phase.addr,
+        rd: phase.rd,
+        wr: phase.wr,
+        data: phase.data,
+        rises: phase.rose,
+        acks: phase.acks,
+    })
+}
+
+/// The chip's blocks wired together (`NetChip`): the clocks run the phases
+/// the timer, IF and the DMA step on, the divider's last bit ends the
+/// power-on wait, the timer's interrupt rises into IF, and the DMA runs on
+/// the clocks' `dma_phi`; only the CPU's access, the other sources and the
+/// acknowledges come from the trace. A step is an edge and the phase it
+/// starts: the clocks are compared with the edge's line, the others with
+/// the next, which ends the phase.
+fn replay_chip(name: &str, lines: &[Line], report: &mut Report) {
+    let Some(start) = lines.iter().position(|l| l.clocks.is_some()) else {
+        return;
+    };
+    let (Some(first), Some(second)) = (lines.get(start), lines.get(start + 1)) else {
+        return;
+    };
+    let (Some(edge), Some(next)) = (first.clocks.as_ref(), second.clocks.as_ref()) else {
+        return;
+    };
+    let mut chip = NetChip {
+        clocks: NetClocks {
+            cpu_sys_reset: next.net.cpu_sys_reset,
+            ..edge.net
+        },
+        timer: net_timer(second),
+        interrupts: NetIf {
+            flags: second.flags,
+            ie: second.ie,
+        },
+        dma: second.dma,
+        dma_phi: false,
+    };
+    chip.dma_phi = NetChip::dma_phi(chip.clocks.outputs(edge.inputs));
+    for n in start + 1..lines.len() - 1 {
+        let (line, ends) = (&lines[n], &lines[n + 1]);
+        let (Some(inputs), Some(clocks)) = (chip_inputs(line, ends), line.clocks.as_ref()) else {
+            return;
+        };
+        let place = format!("{name}:{}", n + 1);
+        let before = chip;
+        chip.interrupts.ie = ends.ie;
+        chip.edge(inputs);
+        report.phases += 1;
+        if chip.timer.int_timer && !before.timer.int_timer {
+            report.saw("chip: the timer's interrupt rises into IF");
+        }
+        if chip.dma.enabled && !before.dma.enabled {
+            report.saw("chip: a transfer starts on the clocks' dma_phi");
+        }
+
+        let (shown, outputs) =
+            clocks_shown(before.clocks, chip.clocks, before.clock_inputs(inputs));
+        if shown != clocks.net || outputs != clocks.outputs {
+            report.differ(
+                format!("chip: clocks, phase {}", line.phase),
+                format!(
+                    "{place} ({shown:?} {outputs:?}, model {:?} {:?})",
+                    clocks.net, clocks.outputs
+                ),
+            );
+            chip.clocks = NetClocks {
+                cpu_sys_reset: ends
+                    .clocks
+                    .as_ref()
+                    .map_or(clocks.net.cpu_sys_reset, |c| c.net.cpu_sys_reset),
+                ..clocks.net
+            };
+        }
+        let fields = compare_timer(&chip.timer, ends);
+        if !fields.is_empty() {
+            report.differ(
+                format!("chip: timer, phase {}: {}", ends.phase, kind_of(&fields)),
+                format!("{name}:{} ({})", n + 2, fields.join(", ")),
+            );
+            chip.timer = net_timer(ends);
+        }
+        if chip.interrupts.flags != ends.flags {
+            report.differ(
+                format!("chip: IF, phase {}", ends.phase),
+                format!(
+                    "{name}:{} ({:02X}, model {:02X})",
+                    n + 2,
+                    chip.interrupts.flags,
+                    ends.flags
+                ),
+            );
+            chip.interrupts.flags = ends.flags;
+        }
+        if chip.dma != ends.dma {
+            report.differ(
+                format!("chip: DMA, phase {}", ends.phase),
+                format!("{name}:{} ({:?}, model {:?})", n + 2, chip.dma, ends.dma),
+            );
+            chip.dma = ends.dma;
         }
     }
 }
@@ -1117,6 +1252,7 @@ fn netlist_replay() {
         replay_lcd(name, &lines, &mut report);
         replay_scan(name, &lines, &mut report);
         replay_clocks(name, &lines, &mut report, false);
+        replay_chip(name, &lines, &mut report);
     }
     // The traces from the power-on (`FROM=power-on`): the clocks only, as
     // the other blocks are held in their resets.

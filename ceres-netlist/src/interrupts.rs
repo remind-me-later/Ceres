@@ -72,6 +72,7 @@ pub const fn lowest(requested: u8) -> u8 {
 }
 
 /// The netlist's IF, and IE.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NetIf {
     pub flags: u8,
     pub ie: u8,
