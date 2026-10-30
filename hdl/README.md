@@ -442,18 +442,23 @@ which of them ticks at an edge depends on the order in which the simulator
 settles them, so `NetRender` settles render as the simulator does: each
 concurrent statement is a wire a delta cycle behind its inputs, each
 process reads the current delta cycle, the flip-flops change 1 ns after
-their clock's edge, the other blocks' outputs reach render at 1 ns and
-VRAM's data at 3 ns (the address reaches VRAM 2 ns after it changes). Over
+their clock's edge, the other blocks' outputs reach render at 1 ns, the
+OAM scan's flip-flops clocked by `wuvu` at 2 ns, and VRAM's data at 3 ns
+(the address reaches VRAM 2 ns after it changes). The sprite store
+(`sprite_store.vhd`) settles with render, as its X matchers and render's
+pixel counter feed each other within an edge. Over
 the 133 traces with render's fields (gbmicrotest's PPU, sprite, OAM, SCX and
 window ROMs, Gambatte's `oamdma` ROMs, 12 of Mealybug's `m3_` ROMs, and
 `check/lcdc.asm` and `check/dma_fetch.asm`) it matches the model in every
-flip-flop and latch, and in its VRAM address and its CP, ST and LD pins:
+flip-flop and latch, in the sprite store's slots, fetched flags and scanned
+index, and in its VRAM address, its CP, ST and LD pins and the store's
+match and line:
 mode 3 ends 39028 times, the window starts 10962 times, 23424 sprite
 fetches start. Without the delta cycle between `myso` and the tile
 register's clock, the pulse that clocks the tile register as the window
 starts (`window-start-tile-register-pulse`) is lost, and
-`m3_lcdc_win_en_change_multiple_wx` differs. The sprite store's fields are
-traced but not replayed yet; then render and the store join `NetChip`.
+`m3_lcdc_win_en_change_multiple_wx` differs. Next, render and the store
+join `NetChip`.
 
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay

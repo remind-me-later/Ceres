@@ -6,7 +6,7 @@ use {
     super::{Line, Report, bit, hex8},
     ceres_netlist::{
         lcd_control::NetLcdControl,
-        render::{NetRender, RenderInputs},
+        render::{NetRender, NetSpriteStore, RenderInputs},
     },
 };
 
@@ -66,6 +66,11 @@ pub fn parse(fields: &[&str]) -> Option<RenderLine> {
         ma,
         pins,
         ld,
+        scanned,
+        fetched,
+        xs,
+        lines,
+        indexes,
         ..,
     ] = fields
     else {
@@ -129,6 +134,14 @@ pub fn parse(fields: &[&str]) -> Option<RenderLine> {
             sp_b: hex8(sp_b)?,
             sp_palette: hex8(sp_palette)?,
             sp_priority: hex8(sp_priority)?,
+            store: NetSpriteStore {
+                scanned: hex8(scanned)?,
+                fetched: u16::from_str_radix(fetched, 16).ok()?,
+                xs: slots(xs, 2)?,
+                lines: slots(lines, 1)?,
+                indexes: slots(indexes, 2)?,
+                index: 0,
+            },
             ..NetRender::default()
         },
         line_start: bit(ins, 0)?,
@@ -142,6 +155,15 @@ pub fn parse(fields: &[&str]) -> Option<RenderLine> {
         st: bit(pins, 1)?,
         ld: hex8(ld)?,
     })
+}
+
+/// The ten slots of a field, `width` hexadecimal digits each.
+fn slots(field: &str, width: usize) -> Option<[u8; 10]> {
+    let mut slots = [0; 10];
+    for (slot, value) in slots.iter_mut().enumerate() {
+        *value = u8::from_str_radix(field.get(slot * width..(slot + 1) * width)?, 16).ok()?;
+    }
+    Some(slots)
 }
 
 /// What render takes in at the end of `line`'s phase, with the clock `clk`
@@ -162,8 +184,15 @@ fn inputs(line: &Line, clk: bool, lcdc: u8) -> Option<RenderInputs> {
         data: line.data,
         line_start: render.line_start,
         stop_scan: render.stop_scan,
-        x_match: render.x_match,
-        sprite_line: render.sprite_line,
+        ceno: scan.net.ceno,
+        save: scan.save,
+        // The Y comparator's difference, Y - LY - 1: its low four bits.
+        scan_line: scan.y.wrapping_add(!lcd.net.ly) & 0x0F,
+        wuvu: lcd.net.wuvu,
+        dma_run: line.dma.run,
+        dma_index: line.dma.count,
+        mode2: lcd.mode2,
+        scan_index: scan.net.index,
         tile: scan.y,
         attributes: render.attributes,
         md: render.md,
@@ -238,6 +267,19 @@ fn differences(net: &NetRender, model: &NetRender) -> Vec<&'static str> {
         sp_palette,
         sp_priority
     );
+    // The store, but its index lines, which the trace lacks.
+    let (ours, theirs) = (&net.store, &model.store);
+    for (name, differs) in [
+        ("scanned", ours.scanned != theirs.scanned),
+        ("fetched", ours.fetched != theirs.fetched),
+        ("xs", ours.xs != theirs.xs),
+        ("lines", ours.lines != theirs.lines),
+        ("indexes", ours.indexes != theirs.indexes),
+    ] {
+        if differs {
+            differ.push(name);
+        }
+    }
     differ
 }
 
@@ -247,6 +289,10 @@ const fn resync(net: &mut NetRender, model: &NetRender) {
     *net = NetRender {
         wires: net.wires,
         inputs: net.inputs,
+        store: NetSpriteStore {
+            index: net.store.index,
+            ..model.store
+        },
         ..*model
     };
 }
@@ -325,6 +371,15 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
         }
         let ma = net.ma().unwrap_or(0);
         let (cp, st, ld) = net.pins();
+        if net.wires.x_match != model.x_match || net.wires.line != model.sprite_line {
+            report.differ(
+                format!("render: the store's match, phase {}", ends.phase),
+                format!(
+                    "{place} (x_match {} line {:X}, model {} {:X})",
+                    net.wires.x_match, net.wires.line, model.x_match, model.sprite_line
+                ),
+            );
+        }
         if ma != model.ma || cp != model.cp || st != model.st || ld != model.ld {
             report.differ(
                 format!("render: pins, phase {}", ends.phase),

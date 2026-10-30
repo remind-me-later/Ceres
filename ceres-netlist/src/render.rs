@@ -1,8 +1,9 @@
 //! The netlist's rendering of a line (mode 3), delta cycle by delta cycle.
 //!
-//! Transcribed from the DMG's part of `hdl/rtl/render.vhd`, for the replay
-//! of the model's traces (`tests/replay.rs`), which checks the
-//! transcription, and for `NetChip`.
+//! Transcribed from the DMG's part of `hdl/rtl/render.vhd`, and
+//! `hdl/rtl/sprite_store.vhd`, whose X matchers and render's pixel counter
+//! feed each other within an edge, for the replay of the model's traces
+//! (`tests/replay.rs`), which checks the transcription, and for `NetChip`.
 //!
 //! Render runs on clocks it makes from the PPU's: the dots (`dot`), the
 //! pixels' clock (`clkpipe`), the fetcher's (`fetch_clock`), the tile
@@ -21,8 +22,9 @@
 //! What render takes from the other blocks (the OAM scan's line start and
 //! stop, the sprite store's match and line, OAM's bytes, the line timing's
 //! hclk, LY and VBlank, LCDC, the CPU's writes) changes with the
-//! flip-flops, 1 ns after the edge; VRAM's data 2 ns later, as the address
-//! reaches VRAM 2 ns after it changes.
+//! flip-flops, 1 ns after the edge; what the scan's flip-flops clocked by
+//! `wuvu` make, a nanosecond later; VRAM's data 2 ns after the flip-flops,
+//! as the address reaches VRAM 2 ns after it changes.
 
 /// What render takes in.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
@@ -44,9 +46,20 @@ pub struct RenderInputs {
     /// From the OAM scan: the line starts, the scan stops.
     pub line_start: bool,
     pub stop_scan: bool,
-    /// From the sprite store: a sprite starts at this pixel, and its line.
-    pub x_match: bool,
-    pub sprite_line: u8,
+    /// The OAM scan's `ceno` (the scan's last read is under way) and save
+    /// strobes (bit `i` for slot `i`), and the Y comparator's line.
+    pub ceno: bool,
+    pub save: u16,
+    pub scan_line: u8,
+    /// The line timing's `wuvu`, which clocks the sprite store's index.
+    pub wuvu: bool,
+    /// What addresses OAM, besides the store: the DMA's index while it
+    /// runs, the scan's in mode 2, the CPU's (its address's bits 7 to 2)
+    /// otherwise.
+    pub dma_run: bool,
+    pub dma_index: u8,
+    pub mode2: bool,
+    pub scan_index: u8,
     /// OAM's even and odd bytes: the sprite's tile and attributes.
     pub tile: u8,
     pub attributes: u8,
@@ -84,6 +97,36 @@ pub struct Wires {
     pub sp_data: u8,
     /// The sprite shifter's free pixels: bit `i` for pixel `i`.
     pub sprite_on: u8,
+    /// The sprite store's: rendering (mode 3 after the scan), its matchers'
+    /// enable, the slots whose X matches the pixel counter, the first of
+    /// them, a match, and the line lines.
+    pub rendering: bool,
+    pub enabled: bool,
+    pub matches: u16,
+    pub selected: u16,
+    pub x_match: bool,
+    pub line: u8,
+    /// OAM's address, bits 7 to 2 (`oam_addr` of `hdl/rtl/oam.vhd`).
+    pub oam_index: u8,
+}
+
+/// The sprite store (`hdl/rtl/sprite_store.vhd`): the ten sprites the OAM
+/// scan found on the line, each with its X, its line and its index in OAM.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub struct NetSpriteStore {
+    /// The index OAM's address had at the last rise of `wuvu`.
+    pub scanned: u8,
+    /// The slots' X (FF matches no pixel), lines and indexes: latches, open
+    /// while the scan saves to them.
+    pub xs: [u8; 10],
+    pub lines: [u8; 10],
+    pub indexes: [u8; 10],
+    /// The slots fetched on this line, bit `i` for slot `i`.
+    pub fetched: u16,
+    /// The index lines: the scanned index outside rendering, the selected
+    /// slot's while rendering; they keep their value when nothing drives
+    /// them.
+    pub index: u8,
 }
 
 /// The netlist's render: its registers, flip-flops and latches, and its
@@ -163,6 +206,7 @@ pub struct NetRender {
     pub sp_b: u8,
     pub sp_palette: u8,
     pub sp_priority: u8,
+    pub store: NetSpriteStore,
     pub wires: Wires,
     /// The inputs as the last delta cycle had them.
     pub inputs: RenderInputs,
@@ -206,6 +250,8 @@ enum Tx {
     Seba(bool),
     /// The sprite shifter's shift, of the pixels in the mask (the others
     /// load the fetched sprite).
+    Scanned(u8),
+    Fetched(u16),
     SpShift {
         mask: u8,
         a: u8,
@@ -252,6 +298,8 @@ impl Tx {
             Self::Tyfo(_) => 30,
             Self::Seba(_) => 31,
             Self::SpShift { .. } => 32,
+            Self::Scanned(_) => 33,
+            Self::Fetched(_) => 34,
         }
     }
 }
@@ -284,6 +332,11 @@ impl Schedule {
 /// the flip-flops (`render_settled` in `hdl/rtl/vram_bus.vhd`).
 const INPUTS_AT: u32 = 1;
 const MD_AT: u32 = 3;
+/// The OAM scan's flip-flops clocked by `wuvu` (`start_scan`, `anel`,
+/// `ceno`, the index, `byba`), which changes 1 ns after the edge: what they
+/// make (the line's start, `ceno`, the index, the stop's rise) reaches
+/// render 2 ns after the edge.
+const SCAN_AT: u32 = 2;
 
 /// The deltas an edge may take before it is taken to oscillate.
 const MAX_DELTAS: usize = 1000;
@@ -325,7 +378,9 @@ impl NetRender {
                 assert!(deltas < MAX_DELTAS, "render oscillates");
             }
             // The next nanosecond: the inputs at 1 ns, and the flip-flops.
-            let inputs_due = [INPUTS_AT, MD_AT].into_iter().find(|&at| at > schedule.now);
+            let inputs_due = [INPUTS_AT, SCAN_AT, MD_AT]
+                .into_iter()
+                .find(|&at| at > schedule.now);
             let Some(at) = schedule
                 .pending
                 .iter()
@@ -337,11 +392,23 @@ impl NetRender {
             };
             schedule.now = at;
             prev = *self;
+            let was = self.inputs;
             if at == INPUTS_AT {
                 self.inputs = RenderInputs {
-                    md: self.inputs.md,
+                    md: was.md,
+                    line_start: was.line_start,
+                    ceno: was.ceno,
+                    scan_index: was.scan_index,
+                    // stop_scan falls with doba, rises with byba.
+                    stop_scan: was.stop_scan && inputs.stop_scan,
                     ..inputs
                 };
+            }
+            if at == SCAN_AT {
+                self.inputs.line_start = inputs.line_start;
+                self.inputs.ceno = inputs.ceno;
+                self.inputs.scan_index = inputs.scan_index;
+                self.inputs.stop_scan = inputs.stop_scan;
             }
             if at == MD_AT {
                 self.inputs.md = inputs.md;
@@ -393,6 +460,8 @@ impl NetRender {
             Tx::Vonu(v) => self.vonu = v,
             Tx::Tyfo(v) => self.tyfo = v,
             Tx::Seba(v) => self.seba = v,
+            Tx::Scanned(v) => self.store.scanned = v,
+            Tx::Fetched(v) => self.store.fetched = v,
             Tx::SpShift {
                 mask,
                 a,
@@ -432,8 +501,8 @@ impl NetRender {
         // The wires.
         // @hw die: WODU XUGU XENA, TYFA SOCY VYBO SEGU, SACU
         let n = &mut next.wires;
-        n.stop_mode3 = cur.px == 167 && !i.x_match;
-        n.dot = !cur.rydy && cur.started && !i.x_match && !w.stop_mode3 && i.clk;
+        n.stop_mode3 = cur.px == 167 && !w.x_match;
+        n.dot = !cur.rydy && cur.started && !w.x_match && !w.stop_mode3 && i.clk;
         n.segu = !w.dot;
         n.clkpipe = w.segu || cur.discard;
         // @hw die: LEBO MOCE, NYXU; MYSO, XUHA; MOFU
@@ -763,7 +832,7 @@ impl NetRender {
         // TOBU VONU SEBA TYFO (dffr)
         if clk_rose {
             schedule.after_tco(Tx::Sobu(
-                i.x_match && !cur.rydy && w.fetch_done && !cur.busy,
+                w.x_match && !cur.rydy && w.fetch_done && !cur.busy,
             ));
         }
         if clk_fell {
@@ -829,7 +898,73 @@ impl NetRender {
                 priority: cur.sp_priority << 1 | 1,
             });
         }
+        self.store_delta(prev, &mut next, schedule);
         next
+    }
+
+    /// The sprite store's delta cycle (`hdl/rtl/sprite_store.vhd`).
+    // @hw die: XADU..XECU (dffr_cc); the drlatch_ee of the X, the dlatch_ee
+    // of the line and the index; EBOJ..FONO (dffr); the X matchers, GUVA..
+    // GUZE and GEZE..GYGA; FEFY FOVE FEPO; WUZY..WEZA
+    fn store_delta(&self, prev: &Self, next: &mut Self, schedule: &mut Schedule) {
+        let cur = self;
+        let (i, w, store) = (&cur.inputs, &cur.wires, &cur.store);
+        let n = &mut next.wires;
+        n.rendering = cur.mode3 && !i.ceno;
+        n.enabled = w.rendering && i.lcdc & 2 != 0;
+        n.matches = (0..10)
+            .filter(|&slot| w.enabled && store.xs[slot] == cur.px)
+            .fold(0, |m, slot| m | 1 << slot);
+        n.selected = w.matches & w.matches.wrapping_neg();
+        n.x_match = w.matches != 0;
+        n.line = (0..10)
+            .find(|&slot| w.selected & 1 << slot != 0)
+            .map_or(i.scan_line, |slot| store.lines[slot]);
+
+        // OAM's address, bits 7 to 2: the CPU's, the DMA's, the scan's, or
+        // the store's index lines in mode 3.
+        n.oam_index = if !i.mode2 && !cur.mode3 && !i.dma_run {
+            (i.addr >> 2 & 0x3F) as u8
+        } else if i.dma_run {
+            i.dma_index >> 2
+        } else if i.mode2 {
+            i.scan_index
+        } else {
+            store.index
+        };
+        if rose(prev.inputs.wuvu, i.wuvu) {
+            schedule.after_tco(Tx::Scanned(w.oam_index));
+        }
+        for slot in 0..10 {
+            if i.line_start || store.fetched & 1 << slot != 0 {
+                next.store.xs[slot] = 0xFF;
+            } else if i.save & 1 << slot != 0 {
+                next.store.xs[slot] = i.attributes;
+            } else {
+                // The latches hold.
+            }
+            if i.save & 1 << slot != 0 {
+                next.store.lines[slot] = i.scan_line;
+                next.store.indexes[slot] = store.scanned;
+            }
+        }
+        if i.line_start {
+            next.store.fetched = 0;
+            schedule.cancel(Tx::Fetched(0));
+        } else if rose(prev.wires.loaded, w.loaded) {
+            // Each slot takes whether it is the one selected: a slot fetched
+            // before keeps its X at FF, as its latch holds.
+            schedule.after_tco(Tx::Fetched(w.selected));
+        } else {
+            // The flip-flops hold.
+        }
+        if !w.rendering {
+            next.store.index = store.scanned;
+        } else if let Some(slot) = (0..10).find(|&slot| w.selected & 1 << slot != 0) {
+            next.store.index = store.indexes[slot];
+        } else {
+            // The lines keep their value.
+        }
     }
 
     /// Mode 0 as it is once the edge settles (render.vhd raises it 14 ns
@@ -883,7 +1018,7 @@ impl NetRender {
         } else if self.wires.sprite_cycles {
             // The stored line counts from the bottom: flipped in Y, it is
             // the row; otherwise its inverse is.
-            let row = i.sprite_line ^ if i.attributes & 0x40 != 0 { 0 } else { 0x0F };
+            let row = self.wires.line ^ if i.attributes & 0x40 != 0 { 0 } else { 0x0F };
             let tile = if i.lcdc & 4 != 0 {
                 i.tile & 0xFE | row >> 3 & 1
             } else {
