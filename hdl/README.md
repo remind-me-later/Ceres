@@ -412,14 +412,20 @@ cargo test -p ceres-netlist --release --test replay -- --ignored --nocapture
 
 The blocks also replay wired together, as `dmg_cpu_b.vhd` wires them
 (`NetChip`, ceres-netlist's `chip`): the clocks run the phases the timer,
-IF and OAM DMA step on, the divider's last bit ends the clocks' power-on
-wait, the timer's interrupt rises into IF, and the DMA runs on the clocks'
-`dma_phi`; only the CPU's access, the other interrupt sources and the
-acknowledges come from the trace. Over the 75 traces with the clocks
-(gbmicrotest's DMA, timer and halt ROMs among them) it finds no
-difference: 258 timer interrupts reach IF, 7 transfers start on the
-clocks' `dma_phi`. The line timing, the OAM scan and OAM's latches are to
-join it.
+IF, OAM DMA and the line timing step on, the divider's last bit ends the
+clocks' power-on wait, the timer's interrupt, the STAT line and VBlank
+rise into IF, the DMA runs on the clocks' `dma_phi`, the OAM scan runs on
+the line timing's clocks and compares what OAM's latches hold, and the
+latches follow the scan and the DMA. Only the CPU's access, the other
+interrupt sources, the acknowledges and what the blocks not transcribed
+yet give (render's modes, LCDC's reset and bit 2, the sprite fetch's
+strobes, OAM's RAM) come from the trace. Over the 197 traces with the
+clocks (gbmicrotest's DMA, timer, halt, OAM and sprite ROMs, Gambatte's
+`sprites` and `oamdma` ROMs) it finds no difference in 1.24 billion
+phases: 258 timer interrupts, 11494 rises of the STAT line and 1001 of
+VBlank reach IF, 363 transfers start on the clocks' `dma_phi`, 390623
+reads of STAT, LY and LYC take what the line timing shows, and the scan
+saves 81604 sprites from what the latches hold.
 
 `FROM=power-on ./trace-blocks.sh ROM` traces from the power-on instead,
 into `build/blocks/power-on/`, for the clocks' reset and wait; the replay

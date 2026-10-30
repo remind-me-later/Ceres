@@ -149,6 +149,19 @@ impl NetLcd {
         rose
     }
 
+    /// What the CPU's write puts on the data bus reaches LYC's latch
+    /// (FF45) or the enables' (FF41), which follow it while the strobe is
+    /// up: as it opens they take the bus as it was (precharged, FF), then
+    /// the byte written (STAT's write glitch), so a write is two of these.
+    // @hw die: LYC's and the enables' latches (drlatch)
+    pub const fn write(&mut self, addr: u16, data: u8) {
+        match addr {
+            0xFF45 => self.lyc = data,
+            0xFF41 => self.stat_enable = data & 0x78,
+            _ => {}
+        }
+    }
+
     /// The LCD's reset (`ppu_reset`, LCDC bit 7 clear) holds the clock's
     /// flip-flops at 0; LYC, the enables and LY = LYC's flag keep their
     /// values (only the chip's reset clears those).
