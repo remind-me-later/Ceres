@@ -3,13 +3,12 @@
 //!
 //! The clock_out and resets, the divider and the timer, IF, OAM DMA, LCDC,
 //! the line timing, the OAM scan, OAM, render, the sprite store, VRAM's
-//! bus, and the bus side (the external bus, HRAM, the boot ROM's mapping,
-//! the joypad, the serial port): everything but the CPU core and the APU.
-//! What comes in with each edge (`ChipInputs`) is the core's (its address,
+//! bus, the bus side (the external bus, HRAM, the boot ROM's mapping, the
+//! joypad, the serial port) and the APU: everything but the CPU core. What
+//! comes in with each edge (`ChipInputs`) is the core's (its address,
 //! read, write, request, the data bus, its acknowledges, and its request's
-//! pulses, which the external bus's latches can catch), the APU's byte in
-//! a read of its registers, the clock pins and the world outside (the
-//! joypad's lines, SIN, SCK); the memories (VRAM, the board's work RAM and
+//! pulses, which the external bus's latches can catch), the clock pins and
+//! the world outside (the joypad's lines, SIN, SCK); the memories (VRAM, the board's work RAM and
 //! cartridge, the boot ROM) are the edge's to borrow. Every read gets its
 //! byte from the blocks that drive the data bus, IE's (the core's) among
 //! them, or the precharged FF where nothing does.
@@ -20,6 +19,7 @@
 
 use crate::{
     Phase,
+    apu::{ApuInputs, NetApu},
     bus::{BusInputs, BusOutputs, NetBoard, NetBus},
     clocks::{ClockInputs, ClockOutputs, NetClocks},
     dma::NetDma,
@@ -85,9 +85,6 @@ pub struct ChipInputs {
     pub p10_13: u8,
     pub sin: bool,
     pub sck: bool,
-    /// What the APU, which is not transcribed, drives on the data bus in a
-    /// read of its registers or wave RAM (FF10 to FF3F).
-    pub apu: Option<u8>,
 }
 
 /// The memories the chip's edge borrows: VRAM, the board (its work RAM and
@@ -116,6 +113,7 @@ pub struct NetChip {
     /// The bus side: the external bus, HRAM, the boot ROM's mapping, the
     /// joypad, the serial port.
     pub bus: NetBus,
+    pub apu: NetApu,
     /// The chip's write strobe in the phase (`cpu_wr_sync`).
     pub cpu_wr: bool,
     /// The serial port's and the joypad's interrupt lines in the last phase.
@@ -175,6 +173,7 @@ impl NetChip {
 
         self.cpu_wr = clock_out.cpu_wr_sync;
         let timer_rose = self.step_timer(phase, inputs);
+        self.step_apu(clock_out, inputs);
         self.step_dma(clock_out, inputs);
         let bus = self.step_bus(phase, clock_out, inputs, memories);
         let write_lcdc = if self.cpu_wr & (inputs.addr == 0xFF40) {
@@ -269,6 +268,25 @@ impl NetChip {
         };
         self.timer.phase(phase, access);
         self.timer.int_timer & !int_timer
+    }
+
+    /// The APU, on the clocks decoded from the phase, the resets, the
+    /// divider's bit 10 as the timer leaves it, and the CPU's access.
+    // @hw die: the chip's apu_control and channels' ports
+    fn step_apu(&mut self, clock_out: ClockOutputs, inputs: ChipInputs) {
+        self.apu.edge(ApuInputs {
+            clk: self.clocks.clk,
+            data_phase: clock_out.data_phase,
+            clk_t4: clock_out.clk_t4,
+            pch_phase: clock_out.pch_phase,
+            reset2: clock_out.reset2,
+            div10: self.timer.count & 0x400 != 0,
+            t1_only: inputs.t1 & !inputs.t2,
+            addr: inputs.addr,
+            data: inputs.data,
+            cpu_rd: inputs.read,
+            cpu_wr: self.cpu_wr,
+        });
     }
 
     /// OAM DMA, on `dma_phi`.
@@ -527,7 +545,7 @@ impl NetChip {
         }
         shown = first_of(shown, bus.data_out);
         shown = first_of(shown, self.read_timer_if(phase, flags_before, addr));
-        shown = first_of(shown, inputs.apu);
+        shown = first_of(shown, self.apu.read());
         // Nothing else drives the precharged bus: VRAM and OAM while the
         // PPU or OAM DMA holds them, the addresses nothing decodes.
         if (addr >= 0xFE00) | ((addr >= 0x8000) & (addr <= 0x9FFF)) {

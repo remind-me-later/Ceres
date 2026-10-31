@@ -128,6 +128,29 @@ impl NetWave {
         self.azet.advance();
     }
 
+    /// What a read of NR30, NR32, NR34 or wave RAM drives on the data bus:
+    /// the DAC, the level, the length's enable, and wave RAM's bit lines,
+    /// which while the channel plays hold the byte it reads, and are
+    /// precharged (FF) otherwise. The bits nothing drives stay precharged,
+    /// 1.
+    // @hw die: FASY GEKO, HENU HAMU HUCO, GAWA HACA; DUGU..BEZU (not_if1)
+    #[must_use]
+    pub const fn read(&self, i: &ApuInputs) -> Option<u8> {
+        if !i.cpu_rd {
+            None
+        } else if i.addr == 0xFF1A {
+            Some((self.dac_on as u8) << 7 | 0x7F)
+        } else if i.addr == 0xFF1C {
+            Some(0x80 | self.level << 5 | 0x1F)
+        } else if i.addr == 0xFF1E {
+            Some(0x80 | (self.length_on as u8) << 6 | 0x3F)
+        } else if self.wires.wave_area {
+            Some(self.bit_lines)
+        } else {
+            None
+        }
+    }
+
     /// The wires, from the signals as they are.
     #[must_use]
     pub const fn next_wires(&self, i: &ApuInputs, cw: &ControlWires) -> WaveWires {

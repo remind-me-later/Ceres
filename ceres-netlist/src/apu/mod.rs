@@ -129,6 +129,16 @@ const fn fell(before: bool, now: bool) -> bool {
     before & !now
 }
 
+/// What two drivers of the precharged data bus give it: each pulls low
+/// the bits it drives as 0.
+const fn both(first: Option<u8>, second: Option<u8>) -> Option<u8> {
+    match (first, second) {
+        (Some(a), Some(b)) => Some(a & b),
+        (Some(_), None) => first,
+        (None, _) => second,
+    }
+}
+
 /// The netlist's APU between edges of the chip's clock.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NetApu {
@@ -285,6 +295,26 @@ impl NetApu {
             acc: 0,
             overflow: false,
         }
+    }
+
+    /// What a read drives on the data bus after the edge, if the address is
+    /// the APU's: what its blocks drive (each pulls the precharged bus low
+    /// where it drives a 0).
+    #[must_use]
+    pub const fn read(&self) -> Option<u8> {
+        let i = &self.inputs;
+        let test = self.control.wires.test;
+        // @hw die: the chip's apu_active, the channels' active ports
+        let active = (self.ch1.wires.active as u8)
+            | (self.ch2.wires.active as u8) << 1
+            | (self.ch3.wires.active as u8) << 2
+            | (self.ch4.wires.active as u8) << 3;
+        let mut shown = self.control.read(i, active);
+        shown = both(shown, self.sweep.read(i));
+        shown = both(shown, self.ch1.read(i, test, 0xFF11));
+        shown = both(shown, self.ch2.read(i, test, 0xFF16));
+        shown = both(shown, self.ch3.read(i));
+        both(shown, self.ch4.read(i, test))
     }
 
     /// The wires as the state gives them, until they settle (no process

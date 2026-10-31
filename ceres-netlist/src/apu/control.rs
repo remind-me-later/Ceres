@@ -105,6 +105,25 @@ impl NetApuControl {
         self.bylu.advance();
     }
 
+    /// What a read of NR50, NR51 or NR52 drives on the data bus, with the
+    /// channels' `active` ports (bit `n - 1` for channel `n`); the bits
+    /// nothing drives stay precharged, 1.
+    // @hw die: JURE HOPE, DOLE COTO DURU EFUS FEWA FATE KAMU KOGE; ADAK, GUMU
+    #[must_use]
+    pub const fn read(&self, i: &ApuInputs, active: u8) -> Option<u8> {
+        if !i.cpu_rd {
+            None
+        } else if i.addr == 0xFF24 {
+            Some(self.nr50)
+        } else if i.addr == 0xFF25 {
+            Some(self.nr51)
+        } else if i.addr == 0xFF26 {
+            Some((self.power.q as u8) << 7 | 0x70 | active)
+        } else {
+            None
+        }
+    }
+
     /// The wires, from the signals as they are.
     // @hw die: BOSU BOWE, BUPO BONO, ETUC HAWU BOPY; APUV BATA DYFA AZEG BUFO
     // CYBO ARYF BAVU AMUK; BEZE BULE GALE CELY (mux)

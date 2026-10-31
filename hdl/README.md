@@ -512,13 +512,13 @@ world outside (the joypad's lines, SIN, SCK): over the 269 traces the
 closed loop finds no difference either. Every read the core makes gets its
 byte from `NetChip`, as the AND of what drives the bus from E to H: the
 PPU, OAM DMA, the bus side, the divider and the timer (TAC's unused bits
-high), IF through its read latch, IE (the core's own), the precharged FF
-where nothing drives, and, until the APU is transcribed, the APU's byte
-from the trace. Each matches the byte the core takes: 16 million reads on
-the cartridge bus, 465 thousand of STAT, LY or LYC, 230 thousand of HRAM,
-142 of the divider and the timer, 17 of IF, 8 of IE, 117 of the I/O
-addresses nothing decodes (most of these from `check/io_regs.asm`), 1 of
-the APU.
+high), IF through its read latch, IE (the core's own), the APU (below),
+and the precharged FF where nothing drives. Each matches the byte the core
+takes: 16 million reads on the cartridge bus, 465 thousand of STAT, LY or
+LYC, 230 thousand of HRAM, 142 of the divider and the timer, 17 of IF, 8
+of IE, 117 of the I/O addresses nothing decodes (most of these from
+`check/io_regs.asm`), 362 of the APU's registers, 117 of its unused
+addresses and 208 of wave RAM.
 
 The CPU core (`sm83.vhd` and its parts: the decoders, the sequencer, the
 registers, the ALU, the IDU, the interrupt logic) replays as `NetCore`
@@ -561,7 +561,12 @@ lets every channel's length run out, overflows channel 1's sweep and
 updates it, takes envelopes to 15 and 0, plays every duty and wave level,
 shifts channel 4's short LFSR and powers the APU off and on (and on its
 own, 23.7 million phases, it finds a duty of channel 1 changed in the
-transcription).
+transcription). In `NetChip` the APU runs on the clocks, the resets and
+the divider's bit 10 the chip gives it, and answers the reads of FF10 to
+FF3F: each register drives its bits (the unused and write-only ones stay
+precharged, 1), NR52 the power and the channels' `active` ports, wave RAM
+its bit lines. The closed loop matches the model there as well, in every
+flip-flop and in every read.
 
 `check/ppu_regs.asm`, `check/vram_oam.asm`, `check/bus.asm`,
 `check/io_regs.asm` and `check/sound.asm` read back the PPU's registers,

@@ -462,6 +462,22 @@ fn noise_differences(net: &NetNoise, model: &NetNoise) -> Vec<&'static str> {
     differ
 }
 
+/// The APU in the model's state (`model`), its wires settled with
+/// `inputs`.
+pub fn start_from(model: &ApuLine, inputs: ApuInputs) -> NetApu {
+    let mut net = NetApu {
+        inputs,
+        control: model.control,
+        ch1: model.ch1,
+        sweep: model.sweep,
+        ch2: model.ch2,
+        ch3: model.ch3,
+        ch4: model.ch4,
+    };
+    net.settle_wires();
+    net
+}
+
 /// Replays the APU, edge by edge, from the trace's first line.
 #[expect(clippy::too_many_lines, reason = "a block at a time")]
 pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
@@ -471,16 +487,7 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
     let (Some(start), Some(at_start)) = (first.apu.as_ref(), inputs(first, first)) else {
         return;
     };
-    let mut net = NetApu {
-        inputs: at_start,
-        control: start.control,
-        ch1: start.ch1,
-        sweep: start.sweep,
-        ch2: start.ch2,
-        ch3: start.ch3,
-        ch4: start.ch4,
-    };
-    net.settle_wires();
+    let mut net = start_from(start, at_start);
     for n in 0..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
         let (Some(model), Some(after)) = (ends.apu.as_ref(), inputs(line, ends)) else {
@@ -575,53 +582,74 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
                 report.saw(what);
             }
         }
-        let differ = [
-            ("control", control_differences(&net.control, &model.control)),
-            ("channel 1", square_differences(&net.ch1, &model.ch1)),
-            (
-                "channel 1's sweep",
-                sweep_differences(&net.sweep, &model.sweep),
-            ),
-            ("channel 2", square_differences(&net.ch2, &model.ch2)),
-            ("channel 3", wave_differences(&net.ch3, &model.ch3)),
-            ("channel 4", noise_differences(&net.ch4, &model.ch4)),
-        ];
-        let mut any = false;
-        for (who, fields) in &differ {
-            if !fields.is_empty() {
-                any = true;
-                report.differ(
-                    format!("apu: {who}, phase {}: {}", ends.phase, fields.join(" ")),
-                    format!("{name}:{}", n + 2),
-                );
-            }
+        compare(
+            &mut net,
+            model,
+            "apu",
+            ends.phase,
+            &format!("{name}:{}", n + 2),
+            report,
+        );
+    }
+}
+
+/// `net` against the model's APU (`model`) at the end of a phase: reports
+/// the blocks that differ, as `who` at `place`, and then takes the model's
+/// state.
+pub fn compare(
+    net: &mut NetApu,
+    model: &ApuLine,
+    who: &str,
+    phase: char,
+    place: &str,
+    report: &mut Report,
+) {
+    let differ = [
+        ("control", control_differences(&net.control, &model.control)),
+        ("channel 1", square_differences(&net.ch1, &model.ch1)),
+        (
+            "channel 1's sweep",
+            sweep_differences(&net.sweep, &model.sweep),
+        ),
+        ("channel 2", square_differences(&net.ch2, &model.ch2)),
+        ("channel 3", wave_differences(&net.ch3, &model.ch3)),
+        ("channel 4", noise_differences(&net.ch4, &model.ch4)),
+    ];
+    let mut any = false;
+    for (block, fields) in &differ {
+        if !fields.is_empty() {
+            any = true;
+            report.differ(
+                format!("{who}: {block}, phase {phase}: {}", fields.join(" ")),
+                place.to_owned(),
+            );
         }
-        if any {
-            net.control = NetApuControl {
-                wires: net.control.wires,
-                ..model.control
-            };
-            net.ch1 = NetSquare {
-                wires: net.ch1.wires,
-                ..model.ch1
-            };
-            net.sweep = NetSweep {
-                wires: net.sweep.wires,
-                ..model.sweep
-            };
-            net.ch2 = NetSquare {
-                wires: net.ch2.wires,
-                ..model.ch2
-            };
-            net.ch3 = NetWave {
-                wires: net.ch3.wires,
-                ..model.ch3
-            };
-            net.ch4 = NetNoise {
-                wires: net.ch4.wires,
-                ..model.ch4
-            };
-            net.settle_wires();
-        }
+    }
+    if any {
+        net.control = NetApuControl {
+            wires: net.control.wires,
+            ..model.control
+        };
+        net.ch1 = NetSquare {
+            wires: net.ch1.wires,
+            ..model.ch1
+        };
+        net.sweep = NetSweep {
+            wires: net.sweep.wires,
+            ..model.sweep
+        };
+        net.ch2 = NetSquare {
+            wires: net.ch2.wires,
+            ..model.ch2
+        };
+        net.ch3 = NetWave {
+            wires: net.ch3.wires,
+            ..model.ch3
+        };
+        net.ch4 = NetNoise {
+            wires: net.ch4.wires,
+            ..model.ch4
+        };
+        net.settle_wires();
     }
 }

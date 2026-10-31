@@ -85,6 +85,18 @@ impl NetSweep {
         self.addend.advance();
     }
 
+    /// What a read of NR10 drives on the data bus; its bit 7 stays
+    /// precharged, 1.
+    // @hw die: ATYN ASOP
+    #[must_use]
+    pub const fn read(&self, i: &ApuInputs) -> Option<u8> {
+        if i.cpu_rd & (i.addr == 0xFF10) {
+            Some(0x80 | self.sweep)
+        } else {
+            None
+        }
+    }
+
     /// The wires, from the signals as they are, with channel 1's square
     /// part (`square`) and its clock.
     // @hw die: KALA (ld_shift); EGYP DODY EGOR (shift_clk); ARYL; GUXA..CORU

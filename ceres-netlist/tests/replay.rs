@@ -1179,11 +1179,6 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
         p10_13: bus.p10_13,
         sin: bus.sin,
         sck: bus.sck,
-        // The APU is not transcribed: its byte is the one the read takes,
-        // in H (the trace has it from the middle of H).
-        apu: (bus.read && phase.phase == 'h' && (0xFF10..=0xFF3F).contains(&phase.addr))
-            .then(|| phase.lcd.as_ref().and_then(|l| l.read))
-            .flatten(),
     })
 }
 
@@ -1194,15 +1189,15 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
 /// the line timing and the scan in reset and gives the scan the sprites'
 /// height, the OAM scan runs on the line timing's clocks with what OAM's
 /// latches hold, the latches follow the scan, the DMA and render's sprite
-/// fetch, and render and the sprite store run on what the others give
-/// them, and give the STAT line mode 0; only the CPU's access, the other
-/// sources, the acknowledges, OAM's RAM and odd byte, VRAM's data and the
-/// APU's byte in a read come from the trace, which must have render's
-/// fields. Every read is compared with the byte the core takes. LCDC's bits that
-/// the trace lacks (all but 7 and 2) are taken from the first read of it,
-/// if it comes before a write. A step is an edge and the phase it
-/// starts: the clocks are compared with the edge's line, the others with
-/// the next, which ends the phase.
+/// fetch, render and the sprite store run on what the others give them,
+/// and give the STAT line mode 0, and the APU runs on the clocks and the
+/// divider; only the CPU's access, the other sources, the acknowledges,
+/// OAM's RAM and odd byte and VRAM's data come from the trace, which must
+/// have render's and the APU's fields. Every read is compared with the
+/// byte the core takes. LCDC's bits that the trace lacks (all but 7 and 2)
+/// are taken from the first read of it, if it comes before a write. A step
+/// is an edge and the phase it starts: the clocks are compared with the
+/// edge's line, the others with the next, which ends the phase.
 #[expect(
     clippy::too_many_lines,
     reason = "the start, then the comparison of each block"
@@ -1227,6 +1222,10 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
         return;
     };
     let Some(model_bus) = second.bus.as_ref() else {
+        return;
+    };
+    let (Some(model_apu), Some(apu_inputs)) = (second.apu.as_ref(), apu::inputs(first, second))
+    else {
         return;
     };
     let Some((board, boot_rom)) = bus::board(trace, report) else {
@@ -1267,6 +1266,7 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
             ..model_render.net
         },
         bus: bus::start(model_bus, second),
+        apu: apu::start_from(model_apu, apu_inputs),
         cpu_wr: false,
         int_serial: model_bus.net.count & 8 != 0,
         int_jp: model_bus.net.jp_history & 9 == 9,
@@ -1368,6 +1368,16 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
             &format!("{name}:{}", n + 2),
             report,
         );
+        if let Some(model) = ends.apu.as_ref() {
+            apu::compare(
+                &mut chip.apu,
+                model,
+                "chip: apu",
+                ends.phase,
+                &format!("{name}:{}", n + 2),
+                report,
+            );
+        }
         if let Some(model) = ends.render.as_ref() {
             let differ = render::differences(&chip.render, &model.net);
             if !differ.is_empty() {
@@ -1488,7 +1498,9 @@ fn compare_chip_ppu(
             0xFF04..=0xFF07 => "chip: a read of the divider or the timer",
             0xFF0F => "chip: a read of IF",
             0xFFFF => "chip: a read of IE",
-            0xFF10..=0xFF3F => "chip: a read of the APU (from the trace)",
+            0xFF10..=0xFF26 => "chip: a read of the APU's registers",
+            0xFF27..=0xFF2F => "chip: a read of the APU's unused addresses",
+            0xFF30..=0xFF3F => "chip: a read of wave RAM",
             0xFF03 | 0xFF08..=0xFF0E | 0xFF4C..=0xFF4F | 0xFF51..=0xFF7F | 0xFEA0..=0xFEFF => {
                 "chip: a read nothing drives"
             }

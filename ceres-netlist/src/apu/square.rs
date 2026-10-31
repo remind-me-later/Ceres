@@ -150,6 +150,34 @@ impl NetSquare {
         self.at_limit.advance();
     }
 
+    /// What a read of the channel's registers from NRx1 (`nrx1`) on drives
+    /// on the data bus: the duty, NRx2, NRx4's length enable; in test mode
+    /// (`test`), NRx3 and NRx4 read the frequency counter. The bits nothing
+    /// drives stay precharged, 1.
+    // @hw die: BEXU, HAMY HOCU, BALE BYTU; DAXA DYPU EVAJ DUPY (channel 1);
+    // CORO CECY CEKA, GURU GEXA HUVU..HYRY, HUMA GOJY; FAPE GUZA FUTY HYPO,
+    // FAVA..GAZO HUNA JARO JEKE (channel 2)
+    #[must_use]
+    pub const fn read(&self, i: &ApuInputs, test: bool, nrx1: u16) -> Option<u8> {
+        let counter = self.counter.q.to_le_bytes();
+        let length_on = (self.length_on as u8) << 6;
+        if !i.cpu_rd {
+            None
+        } else if i.addr == nrx1 {
+            Some(self.duty << 6 | 0x3F)
+        } else if i.addr == nrx1 + 1 {
+            Some(self.envelope)
+        } else if (i.addr == nrx1 + 2) & test {
+            Some(counter[0])
+        } else if (i.addr == nrx1 + 3) & test {
+            Some(0x80 | length_on | 0x38 | counter[1] & 7)
+        } else if i.addr == nrx1 + 3 {
+            Some(0x80 | length_on | 0x3F)
+        } else {
+            None
+        }
+    }
+
     /// The wires, from the signals as they are.
     // @hw die: the registers' write strobes; HOCA; COWE BOTO, ACEG AGOF ASON
     // AMOP (the output)

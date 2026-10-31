@@ -136,6 +136,28 @@ impl NetNoise {
         self.at_limit.advance();
     }
 
+    /// What a read of NR42, NR43 or NR44 drives on the data bus: NR44's
+    /// length enable, and in test mode (`test`) the counter's clock where
+    /// the length bypasses it. The bits nothing drives stay precharged, 1.
+    // @hw die: HASU, HEZE KEKA JORA, BARE CURY; BAGU ATEL (test)
+    #[must_use]
+    pub const fn read(&self, i: &ApuInputs, test: bool) -> Option<u8> {
+        let length_on = (self.length_on as u8) << 6;
+        if !i.cpu_rd {
+            None
+        } else if i.addr == 0xFF21 {
+            Some(self.envelope)
+        } else if i.addr == 0xFF22 {
+            Some(self.noise)
+        } else if (i.addr == 0xFF23) & test {
+            Some(0x80 | length_on | 0x3E | (self.wires.counter_clock & self.wires.bypass) as u8)
+        } else if i.addr == 0xFF23 {
+            Some(0x80 | length_on | 0x3F)
+        } else {
+            None
+        }
+    }
+
     /// The wires, from the signals as they are.
     #[must_use]
     pub const fn next_wires(&self, i: &ApuInputs, cw: &ControlWires) -> NoiseWires {
