@@ -40,13 +40,21 @@
 /// equalities. The derived ones chain `&&`, a branch a field, which nests
 /// too deeply for Aeneas's Lean output on the largest structs. The pattern
 /// names every field, so a field added to the struct and not here fails to
-/// compile.
+/// compile. A field written `field => same` compares with the function
+/// `same` instead of `==` (an `Option`'s, whose equality Aeneas does not
+/// model).
 macro_rules! flat_eq {
-    ($name:ident { $($field:ident),+ $(,)? }) => {
+    (@field $mine:expr, $theirs:expr) => {
+        ($mine == $theirs)
+    };
+    (@field $mine:expr, $theirs:expr, $same:path) => {
+        $same($mine, $theirs)
+    };
+    ($name:ident { $($field:ident $(=> $same:path)?),+ $(,)? }) => {
         impl PartialEq for $name {
             fn eq(&self, other: &Self) -> bool {
                 let Self { $($field),+ } = self;
-                true $(& (*$field == other.$field))+
+                true $(& flat_eq!(@field *$field, other.$field $(, $same)?))+
             }
         }
 

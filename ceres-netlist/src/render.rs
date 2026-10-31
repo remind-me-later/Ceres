@@ -217,7 +217,7 @@ flat_eq!(Wires {
     line,
     oam_index,
     mode2,
-    render_ma,
+    render_ma => same_address,
     cpu_vram,
     cpu_write,
     mcs_n,
@@ -226,7 +226,7 @@ flat_eq!(Wires {
     md_pins,
     md_driven,
     md,
-    oam_driver,
+    oam_driver => same_drivers,
 });
 
 /// VRAM at power-on: the board's arbitrary bytes, from its 32-bit xorshift
@@ -414,7 +414,7 @@ flat_eq!(NetRender {
     sp_priority,
     store,
     vram_ma,
-    render_settled,
+    render_settled => same_address,
     md_kept,
     oam,
     wires,
@@ -592,6 +592,25 @@ const fn flipped(byte: u8) -> u8 {
         bit += 1;
     }
     out
+}
+
+/// The same VRAM address, or both undriven (`Option`'s equality, which
+/// Aeneas does not model).
+const fn same_address(a: Option<u16>, b: Option<u16>) -> bool {
+    match (a, b) {
+        (Some(x), Some(y)) => x == y,
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+/// The same bytes on OAM's two data buses, or both undriven.
+const fn same_drivers(a: Option<(u8, u8)>, b: Option<(u8, u8)>) -> bool {
+    match (a, b) {
+        (Some((a_even, a_odd)), Some((b_even, b_odd))) => (a_even == b_even) & (a_odd == b_odd),
+        (None, None) => true,
+        _ => false,
+    }
 }
 
 /// The lowest of the sprite store's slots whose bit is set in `bits`.
@@ -918,7 +937,7 @@ impl NetRender {
         } else {
             // Nobody drives the lines: they keep their value.
         }
-        if w.render_ma != prev.wires.render_ma {
+        if !same_address(w.render_ma, prev.wires.render_ma) {
             schedule.after(2, Tx::RenderSettled(w.render_ma));
         }
         if w.md_driven {
@@ -1010,7 +1029,7 @@ impl NetRender {
             // MAKA holds.
         }
         let driver = cur.oam.bus_drivers(&oam_inputs);
-        if driver != cur.wires.oam_driver {
+        if !same_drivers(driver, cur.wires.oam_driver) {
             next.wires.oam_driver = driver;
             let (even, odd) = driver.unwrap_or((cur.oam.bus_even, cur.oam.bus_odd));
             schedule.after(1, Tx::OamBus(even, odd));
