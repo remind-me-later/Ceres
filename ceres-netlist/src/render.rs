@@ -44,10 +44,13 @@ pub struct RenderInputs {
     pub mode1: bool,
     pub ly: u8,
     pub lcdc: u8,
-    /// The CPU's write: the address and the data bus.
+    /// The CPU's write: the address and the data bus; and the data bus
+    /// while render's own mode 3 is high (STAT's mode bits, in a read of
+    /// it), which OAM's data lines follow.
     pub addr: u16,
     pub wr: bool,
     pub data: u8,
+    pub data_mode3: u8,
     /// From the OAM scan: the line starts, the scan stops.
     pub line_start: bool,
     pub stop_scan: bool,
@@ -98,6 +101,7 @@ flat_eq!(RenderInputs {
     addr,
     wr,
     data,
+    data_mode3,
     line_start,
     stop_scan,
     ceno,
@@ -711,6 +715,7 @@ impl NetRender {
                     scan_index: was.scan_index,
                     scanning: was.scanning,
                     data: was.data,
+                    data_mode3: was.data_mode3,
                     addr: was.addr,
                     rd: was.rd,
                     wr: was.wr,
@@ -725,6 +730,7 @@ impl NetRender {
             }
             if at == DATA_AT {
                 self.inputs.data = inputs.data;
+                self.inputs.data_mode3 = inputs.data_mode3;
                 self.inputs.addr = inputs.addr;
                 self.inputs.rd = inputs.rd;
                 self.inputs.wr = inputs.wr;
@@ -982,6 +988,21 @@ impl NetRender {
         self.wires.oam_driver = self.oam.bus_drivers(&oam_inputs);
     }
 
+    /// The chip's data bus as OAM's data lines see it: what the other
+    /// blocks drive (with STAT's mode bits as render's mode 3 has them),
+    /// and VRAM's data in a CPU read of it.
+    const fn data_bus(&self) -> u8 {
+        let others = if self.mode3 {
+            self.inputs.data_mode3
+        } else {
+            self.inputs.data
+        };
+        match self.read_vram() {
+            Some(byte) => others & byte,
+            None => others,
+        }
+    }
+
     /// What OAM takes in: the CPU's access, the DMA's, the scan's, and
     /// render's mode 3, sprite fetch, index lines and VRAM's data.
     #[must_use]
@@ -991,7 +1012,7 @@ impl NetRender {
             addr: i.addr,
             rd: i.rd,
             wr: i.wr,
-            data: i.data,
+            data: self.data_bus(),
             clk_t4: i.clk_t4,
             dma_run: i.dma_run,
             dma_phi: i.dma_phi,

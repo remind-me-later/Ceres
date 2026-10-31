@@ -4,18 +4,21 @@
 //! The clock_out and resets, the divider and the timer, IF, OAM DMA, LCDC,
 //! the line timing, the OAM scan, OAM, render, the sprite store, VRAM's
 //! bus, the bus side (the external bus, HRAM, the boot ROM's mapping, the
-//! joypad, the serial port) and the APU: everything but the CPU core. What
-//! comes in with each edge (`ChipInputs`) is the core's (its address and
-//! what drives its high byte, read, write, request, the data bus, its
-//! acknowledges), the clock pins and the world outside (the joypad's
-//! lines, SIN, SCK); the memories (VRAM, the board's work RAM and
-//! cartridge, the boot ROM) are the edge's to borrow. Every read gets its
-//! byte from the blocks that drive the data bus, IE's (the core's) among
-//! them, or the precharged FF where nothing does.
+//! joypad, the serial port), the APU and the CPU core. What comes in with
+//! each edge (`ChipInputs`) is the pins' (the clock, the reset, the test
+//! modes) and the world outside's (the joypad's lines, SIN, SCK); the
+//! memories (VRAM, the board's work RAM and cartridge, the boot ROM) are
+//! the edge's to borrow. Every read gets its byte from the blocks that
+//! drive the data bus, IE's (the core's) among them, or the precharged FF
+//! where nothing does.
 //!
 //! A step is the edge that starts a phase, and what happens in that phase:
 //! the flip-flops clocked by the edge take what was before it, the latches
-//! follow, and the CPU's access in the phase reaches the registers.
+//! follow, and the CPU's access in the phase reaches the registers. The
+//! core settles twice: first with the data bus and IF as the phase finds
+//! them, which gives the blocks its address, its strobes and what it
+//! writes; then with what the blocks drive on the data bus and IF as they
+//! leave it.
 
 use crate::{
     Phase,
@@ -30,7 +33,7 @@ use crate::{
     oam::OamInputs,
     oam_scan::{Clocks as ScanClocks, NetScan},
     render::{NetRender, RenderInputs},
-    sm83::HighByte,
+    sm83::{CoreInputs, CoreOutputs, HighByte, NetCore},
     timer::{Access, NetTimer, Reg},
 };
 
@@ -49,47 +52,58 @@ struct Lcdc {
     tall: bool,
 }
 
-/// What the chip's untranscribed blocks and pins give it at an edge, and in
-/// the phase the edge starts.
+/// The chip's pins at an edge, and the world outside in the phase it
+/// starts.
 #[derive(Clone, Copy)]
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "the pins' and strobes' levels"
-)]
+#[expect(clippy::struct_excessive_bools, reason = "the pins' levels")]
 pub struct ChipInputs {
-    /// The pins and the CPU core's enables as they are after the edge (the
-    /// divider's bit, which the clock_out also take, comes from the chip).
+    /// The clock, the reset and the test pins as they are after the edge.
     pub ck1: bool,
     pub reset_pin_n: bool,
     pub t1: bool,
     pub t2: bool,
-    pub osc_ena: bool,
-    pub clk_ena: bool,
-    pub mreq: bool,
-    pub write: bool,
     pub test_reset: bool,
-    /// The CPU core's access in the phase: its address, its read, and the
-    /// chip's data bus (the core's write strobe and request are `write` and
-    /// `mreq`, above); its acknowledges.
-    pub addr: u16,
-    pub read: bool,
-    pub data: u8,
-    pub acks: u8,
-    /// The core's request and write strobe as they are in the phase (the
-    /// clock_out take them as they are at the edge, `mreq` and `write`).
-    pub mreq_in_phase: bool,
-    pub write_in_phase: bool,
-    /// What drives the address's high byte, and the core's decoder's
-    /// request (`ctl_mreq`, which the chip's decodings gate into `mreq`), in
-    /// the phase: they decide whether the request pulses for a moment as an
-    /// access starts.
-    pub high_byte: HighByte,
-    pub ctl_mreq: bool,
     /// The world outside: the joypad's lines, SIN, and SCK as the other end
     /// of the link drives it.
     pub p10_13: u8,
     pub sin: bool,
     pub sck: bool,
+}
+
+/// What the blocks take in a phase: the pins, and the core's outputs.
+#[derive(Clone, Copy)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "the pins' and strobes' levels"
+)]
+struct PhaseInputs {
+    /// The test pins, and the core's write strobe as it was at the edge.
+    t1: bool,
+    t2: bool,
+    write: bool,
+    /// The CPU core's access in the phase: its address, its read, the
+    /// chip's data bus (and the bus while render's mode 3 is high: STAT's
+    /// mode bits, in a read of it), its acknowledges.
+    addr: u16,
+    read: bool,
+    data: u8,
+    data_mode3: u8,
+    acks: u8,
+    /// The core's request (gated by the chip's decoding of the address)
+    /// and write strobe as they are in the phase.
+    mreq_in_phase: bool,
+    write_in_phase: bool,
+    /// What drives the address's high byte, and the core's decoder's
+    /// request (`ctl_mreq`, which the chip's decodings gate into `mreq`), in
+    /// the phase: they decide whether the request pulses for a moment as an
+    /// access starts.
+    high_byte: HighByte,
+    ctl_mreq: bool,
+    /// The world outside: the joypad's lines, SIN, and SCK as the other end
+    /// of the link drives it.
+    p10_13: u8,
+    sin: bool,
+    sck: bool,
 }
 
 /// The memories the chip's edge borrows: VRAM, the board (its work RAM and
@@ -128,10 +142,17 @@ pub struct NetChip {
     /// latches a write opens take the bus as it was first.
     pub wr_before: bool,
     pub data_before: u8,
-    /// The core's address and decoder's request in the last phase: what
-    /// the chip decodes until the new ones reach it.
-    pub addr_before: u16,
-    pub ctl_mreq_before: bool,
+    /// The CPU core, and its outputs as the last phase ended: what the
+    /// clocks take at the edge, and what the chip decodes until the new
+    /// ones reach it.
+    pub core: NetCore,
+    pub core_out: CoreOutputs,
+    /// The bits of the data bus the core pulled low in the last phase, and
+    /// those the blocks drove low and high: each drives them for a while
+    /// after the edge.
+    pub core_low_before: u8,
+    pub blocks_low_before: u8,
+    pub blocks_high_before: u8,
     /// What a read of LCDC, STAT, LY or LYC has taken so far: the core's data bus
     /// is precharged high and only pulled low while the read drives it,
     /// from E until it takes it in H.
@@ -163,26 +184,43 @@ pub struct ChipEvents {
     pub read: Option<u8>,
     /// What the blocks drive on the data bus in the phase, for a read.
     pub driven: Option<u8>,
+    /// The bits of the data bus pulled strongly low in the phase, which the
+    /// core's bridge passes.
+    pub data_low: u8,
+    /// The core's outputs as the phase ends.
+    pub core: CoreOutputs,
     /// What the bus side gave in the phase: the pins, its interrupts.
     pub bus: BusOutputs,
 }
 
 impl NetChip {
     /// An edge of the crystal and the phase it starts.
-    pub fn edge(&mut self, inputs: ChipInputs, memories: &mut ChipMemories) -> ChipEvents {
+    pub fn edge(&mut self, pins: ChipInputs, memories: &mut ChipMemories) -> ChipEvents {
         // LCDC as the edge finds it: its latches open after the edge.
         // @fact lcdc-write-latch-delay
         let lcdc_at_edge = Lcdc {
             ppu_reset: self.control.ppu_reset(self.clocks.reset2()),
             tall: self.control.tall(),
         };
-        // The clock_out, with the divider's last bit as it was at the edge.
-        let clock_inputs = self.clock_inputs(inputs);
+        // The clock_out, with the divider's last bit and the core's outputs
+        // as they were at the edge.
+        let clock_inputs = self.clock_inputs(pins);
         self.clocks.step(clock_inputs);
         let phase = self.clocks.phase();
         let clock_out = self.clocks.outputs(clock_inputs);
-
         self.cpu_wr = clock_out.cpu_wr_sync;
+
+        // The core, with the data bus and IF as the phase finds them.
+        let kept = self.core.db;
+        let first = self.core.phase(&self.core_inputs(
+            clock_out,
+            pins,
+            self.core_out.addr,
+            self.blocks_low_before,
+        ));
+        self.interrupts.ie = self.core.ints.ie;
+        let mut inputs = self.phase_inputs(clock_out, pins, first);
+
         let timer_rose = self.step_timer(phase, inputs);
         self.step_apu(clock_out, inputs);
         self.step_dma(clock_out, inputs);
@@ -204,6 +242,16 @@ impl NetChip {
         let (mut stat_rose, level, vblank_rose) =
             self.step_lcd(lcdc_at_edge, lcdc, mode0_at_edge, inputs);
         let (mode2, save) = self.step_scan(lcd_before, lcdc_at_edge, lcdc);
+        // OAM's data lines follow the data bus while the PPU leaves them: it
+        // has a read's byte by now, but VRAM's and OAM's own, and STAT's
+        // mode bits follow render's mode 3 as it steps.
+        if inputs.read {
+            let flags = self.interrupts.flags;
+            let not_mode3 = self.drivers(phase, mode2, false, flags, inputs.addr, bus);
+            let mode3 = self.drivers(phase, mode2, true, flags, inputs.addr, bus);
+            inputs.data = Self::data(clock_out, pins, first, not_mode3);
+            inputs.data_mode3 = Self::data(clock_out, pins, first, mode3);
+        }
         self.step_render(clock_out, lcdc, save, inputs, bus, &mut memories.vram);
         // Then mode 0, which rises after the edge's flip-flops.
         let at_edge = self.lcd.int_stat(mode0_at_edge);
@@ -231,10 +279,18 @@ impl NetChip {
         self.int_jp = bus.int_jp;
 
         let (read, driven) = self.step_read(phase, mode2, flags_before, inputs, bus);
+
+        // The core again, with what the blocks drive on the data bus and IF
+        // as they leave it.
+        let data_low = self.data_low(clock_out, pins, first, driven);
+        let core = self.core.settle_from(
+            &self.core_inputs(clock_out, pins, first.addr, data_low),
+            kept,
+        );
+        self.interrupts.ie = self.core.ints.ie;
         self.wr_before = self.cpu_wr;
-        self.data_before = inputs.data;
-        self.addr_before = inputs.addr;
-        self.ctl_mreq_before = inputs.ctl_mreq;
+        self.data_before = Self::data(clock_out, pins, core, driven);
+        self.core_out = core;
         ChipEvents {
             timer_rose,
             stat_rose,
@@ -243,24 +299,150 @@ impl NetChip {
             save,
             read,
             driven,
+            data_low,
+            core,
             bus,
+        }
+    }
+
+    /// The core drives the data bus: it is not precharging it (phase A),
+    /// and the test mode T1 alone does not release it.
+    // @hw die: the core's data bus drivers (sm83.vhd: d)
+    const fn core_drives(clock_out: ClockOutputs, pins: ChipInputs) -> bool {
+        clock_out.exec_phase & !(pins.t1 & !pins.t2)
+    }
+
+    /// The bits of the data bus pulled strongly low in the phase: by a
+    /// block, or by the core where no block drives a 1 against it (the two
+    /// fight to an X, which the core's bridge does not pass). Each also
+    /// drives what it did in the phase before for a while after the edge:
+    /// the core's outputs reach the bus 39 ns after it.
+    // @hw die: DBUS_BRIDGE (b2b_wand_inj_a)
+    const fn data_low(
+        &mut self,
+        clock_out: ClockOutputs,
+        pins: ChipInputs,
+        core: CoreOutputs,
+        driven: Option<u8>,
+    ) -> u8 {
+        let (now_low, now_high) = match driven {
+            Some(byte) => (!byte, byte),
+            None => (0, 0),
+        };
+        let core_low = if Self::core_drives(clock_out, pins) {
+            !core.db
+        } else {
+            0
+        };
+        let blocks_low = now_low | self.blocks_low_before;
+        let blocks_high = now_high | self.blocks_high_before;
+        let low = blocks_low | ((core_low | self.core_low_before) & !blocks_high);
+        self.core_low_before = core_low;
+        self.blocks_low_before = now_low;
+        self.blocks_high_before = now_high;
+        low
+    }
+
+    /// The data bus as the phase ends: what the core and the blocks drive
+    /// (where they fight, an X, taken as 0), else the precharge.
+    const fn data(
+        clock_out: ClockOutputs,
+        pins: ChipInputs,
+        core: CoreOutputs,
+        driven: Option<u8>,
+    ) -> u8 {
+        let blocks = match driven {
+            Some(byte) => byte,
+            None => 0xFF,
+        };
+        if Self::core_drives(clock_out, pins) {
+            core.db & blocks
+        } else {
+            0xFF
+        }
+    }
+
+    /// The chip decodes FE00 to FFFF and the boot ROM's addresses: the
+    /// core's request does not leave it then (unless in the test mode T2
+    /// alone, for the boot ROM).
+    // @hw die: TUNA SYRO, TULO TUTU; ZLYZ (oa211)
+    const fn internal_access(&self, addr: u16) -> (bool, bool) {
+        (addr >> 9 == 0x7F, !self.bus.unmapped & (addr >> 8 == 0))
+    }
+
+    /// What the core takes in the phase: the clocks, the resets, the
+    /// joypad's wake-up, the test modes, the chip's decoding of its address
+    /// (`addr`), IF, and the data bus's bits pulled low (`data_low`).
+    const fn core_inputs(
+        &self,
+        clock_out: ClockOutputs,
+        pins: ChipInputs,
+        addr: u16,
+        data_low: u8,
+    ) -> CoreInputs {
+        let (internal_access, shadow_access) = self.internal_access(addr);
+        CoreInputs {
+            clk: clock_out.clk_1mhz,
+            exec_phase: clock_out.exec_phase,
+            data_phase: clock_out.data_phase,
+            write_phase: clock_out.clk_t4,
+            pch_phase: clock_out.pch_phase,
+            sys_reset: self.clocks.cpu_sys_reset,
+            pwron_reset: !pins.reset_pin_n,
+            clk_ready: clock_out.osc_stable,
+            wake: self.bus.jp_wakeup,
+            oe_n: pins.t1 & !pins.t2,
+            internal_access,
+            shadow_access,
+            shadow_override: pins.t2 & !pins.t1,
+            int: self.interrupts.flags,
+            d: !data_low,
+        }
+    }
+
+    /// What the blocks take in the phase: the pins, and the core's outputs
+    /// (`core`; its request gated by the chip's decoding of its address).
+    const fn phase_inputs(
+        &self,
+        clock_out: ClockOutputs,
+        pins: ChipInputs,
+        core: CoreOutputs,
+    ) -> PhaseInputs {
+        let (internal, boot) = self.internal_access(core.addr);
+        let override_boot = pins.t2 & !pins.t1;
+        PhaseInputs {
+            t1: pins.t1,
+            t2: pins.t2,
+            write: self.core_out.wr,
+            addr: core.addr,
+            read: core.rd,
+            data: Self::data(clock_out, pins, core, None),
+            data_mode3: Self::data(clock_out, pins, core, None),
+            acks: core.inta & 0x1F,
+            mreq_in_phase: core.ctl_mreq & !internal & (!boot | override_boot),
+            write_in_phase: core.wr,
+            high_byte: core.high_byte,
+            ctl_mreq: core.ctl_mreq,
+            p10_13: pins.p10_13,
+            sin: pins.sin,
+            sck: pins.sck,
         }
     }
 
     /// The clock_out' inputs at an edge: the pins and the CPU core's, and the
     /// divider's last bit.
     #[must_use]
-    pub const fn clock_inputs(&self, inputs: ChipInputs) -> ClockInputs {
+    pub const fn clock_inputs(&self, pins: ChipInputs) -> ClockInputs {
         ClockInputs {
-            ck1: inputs.ck1,
-            reset_pin_n: inputs.reset_pin_n,
-            t1: inputs.t1,
-            t2: inputs.t2,
-            osc_ena: inputs.osc_ena,
-            clk_ena: inputs.clk_ena,
-            mreq: inputs.mreq,
-            write: inputs.write,
-            test_reset: inputs.test_reset,
+            ck1: pins.ck1,
+            reset_pin_n: pins.reset_pin_n,
+            t1: pins.t1,
+            t2: pins.t2,
+            osc_ena: self.core_out.stop_n,
+            clk_ena: self.core_out.halt_n,
+            mreq: self.core_out.mreq,
+            write: self.core_out.wr,
+            test_reset: pins.test_reset,
             div_16hz: self.timer.count & 0x8000 != 0,
         }
     }
@@ -274,7 +456,7 @@ impl NetChip {
 
     /// The divider and the timer: the A edge, then the access in E to G.
     /// Whether the interrupt rose.
-    fn step_timer(&mut self, phase: Phase, inputs: ChipInputs) -> bool {
+    fn step_timer(&mut self, phase: Phase, inputs: PhaseInputs) -> bool {
         let int_timer = self.timer.int_timer;
         let access = match Reg::at(inputs.addr) {
             Some(reg) if self.cpu_wr => Access::Write(reg, inputs.data),
@@ -287,7 +469,7 @@ impl NetChip {
     /// The APU, on the clocks decoded from the phase, the resets, the
     /// divider's bit 10 as the timer leaves it, and the CPU's access.
     // @hw die: the chip's apu_control and channels' ports
-    fn step_apu(&mut self, clock_out: ClockOutputs, inputs: ChipInputs) {
+    fn step_apu(&mut self, clock_out: ClockOutputs, inputs: PhaseInputs) {
         self.apu.edge(ApuInputs {
             clk: self.clocks.clk,
             data_phase: clock_out.data_phase,
@@ -304,7 +486,7 @@ impl NetChip {
     }
 
     /// OAM DMA, on `dma_phi`.
-    const fn step_dma(&mut self, clock_out: ClockOutputs, inputs: ChipInputs) {
+    const fn step_dma(&mut self, clock_out: ClockOutputs, inputs: PhaseInputs) {
         let dma_phi = Self::dma_phi(clock_out);
         let write = if self.cpu_wr & (inputs.addr == 0xFF46) {
             Some(inputs.data)
@@ -331,7 +513,7 @@ impl NetChip {
         at_edge: Lcdc,
         lcdc: Lcdc,
         mode0_at_edge: bool,
-        inputs: ChipInputs,
+        inputs: PhaseInputs,
     ) -> (bool, bool, bool) {
         let mode1 = self.lcd.mode1;
         let mut rose = false;
@@ -425,7 +607,7 @@ impl NetChip {
         &mut self,
         phase: Phase,
         clock_out: ClockOutputs,
-        inputs: ChipInputs,
+        inputs: PhaseInputs,
         memories: &mut ChipMemories,
     ) -> BusOutputs {
         let bus_inputs = BusInputs {
@@ -449,10 +631,10 @@ impl NetChip {
             sin: inputs.sin,
             sck: inputs.sck,
             latch_glitch: LatchRace {
-                addr_before: self.addr_before,
+                addr_before: self.core_out.addr,
                 addr: inputs.addr,
                 high_byte: inputs.high_byte,
-                ctl_mreq_before: self.ctl_mreq_before,
+                ctl_mreq_before: self.core_out.ctl_mreq,
                 ctl_mreq: inputs.ctl_mreq,
                 boot_mapped: !self.bus.unmapped,
                 t2_only: inputs.t2 & !inputs.t1,
@@ -503,7 +685,7 @@ impl NetChip {
         clock_out: ClockOutputs,
         lcdc: Lcdc,
         save: u16,
-        inputs: ChipInputs,
+        inputs: PhaseInputs,
         bus: BusOutputs,
         vram: &mut [u8; 0x2000],
     ) {
@@ -520,6 +702,7 @@ impl NetChip {
                 addr: inputs.addr,
                 wr: self.cpu_wr,
                 data: inputs.data,
+                data_mode3: inputs.data_mode3,
                 rd: inputs.read,
                 non_vram_mreq: bus.non_vram_mreq,
                 write: inputs.write,
@@ -548,6 +731,30 @@ impl NetChip {
         );
     }
 
+    /// What drives the data bus in a read of `addr`, but VRAM and OAM: the
+    /// block that decodes the address, with render's mode 3 (`mode3`) for
+    /// STAT. Render's registers do not change in a read, so this holds
+    /// before render steps.
+    const fn drivers(
+        &self,
+        phase: Phase,
+        mode2: bool,
+        mode3: bool,
+        flags_before: u8,
+        addr: u16,
+        bus: BusOutputs,
+    ) -> Option<u8> {
+        let mut shown = self.control.read(addr);
+        shown = first_of(shown, self.lcd.read(addr, mode2, mode3));
+        shown = first_of(shown, self.render.read(addr));
+        if addr == 0xFF46 {
+            shown = first_of(shown, Some(self.dma.source));
+        }
+        shown = first_of(shown, bus.data_out);
+        shown = first_of(shown, self.read_timer_if(phase, flags_before, addr));
+        first_of(shown, self.apu.read())
+    }
+
     /// A read: the AND of what drives the bus from E to H, which the core
     /// takes in H, and what the blocks drive in the phase.
     /// `flags_before` is IF as the phase found it.
@@ -556,22 +763,13 @@ impl NetChip {
         phase: Phase,
         mode2: bool,
         flags_before: u8,
-        inputs: ChipInputs,
+        inputs: PhaseInputs,
         bus: BusOutputs,
     ) -> (Option<u8>, Option<u8>) {
-        // The block that decodes the address drives the bus.
         let addr = inputs.addr;
-        let mut shown = self.control.read(addr);
-        shown = first_of(shown, self.lcd.read(addr, mode2, self.render.mode3));
-        shown = first_of(shown, self.render.read(addr));
+        let mut shown = self.drivers(phase, mode2, self.render.mode3, flags_before, addr, bus);
         shown = first_of(shown, self.render.read_vram());
         shown = first_of(shown, self.render.oam.read(&self.render.oam_inputs()));
-        if addr == 0xFF46 {
-            shown = first_of(shown, Some(self.dma.source));
-        }
-        shown = first_of(shown, bus.data_out);
-        shown = first_of(shown, self.read_timer_if(phase, flags_before, addr));
-        shown = first_of(shown, self.apu.read());
         // Nothing else drives the precharged bus: VRAM and OAM while the
         // PPU or OAM DMA holds them, the addresses nothing decodes.
         if (addr >= 0xFE00) | ((addr >= 0x8000) & (addr <= 0x9FFF)) {

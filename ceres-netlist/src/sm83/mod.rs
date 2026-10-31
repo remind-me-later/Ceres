@@ -200,10 +200,17 @@ impl NetCore {
 
     /// The latches and wires with `i`, until nothing changes.
     pub fn settle(&mut self, i: &CoreInputs) -> CoreOutputs {
-        self.clk = i.clk;
-        self.exec_phase = i.exec_phase;
         // The keeper holds what the phase before left.
         let kept = self.db;
+        self.settle_from(i, kept)
+    }
+
+    /// The latches and wires with `i`, until nothing changes, the keeper
+    /// holding `kept`: to settle a phase again, with the chip's data bus
+    /// and IF as its other blocks leave them.
+    pub fn settle_from(&mut self, i: &CoreInputs, kept: u8) -> CoreOutputs {
+        self.clk = i.clk;
+        self.exec_phase = i.exec_phase;
         loop {
             let was = *self;
             let out = self.evaluate(i, kept);

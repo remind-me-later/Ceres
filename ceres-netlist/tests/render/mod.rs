@@ -235,6 +235,7 @@ pub fn inputs(edge: &Line, line: &Line, lcdc: u8) -> Option<RenderInputs> {
         addr: line.addr,
         wr: line.wr,
         data: line.data,
+        data_mode3: line.data,
         line_start: render.line_start,
         stop_scan: render.stop_scan,
         ceno: scan.net.ceno,

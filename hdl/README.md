@@ -508,9 +508,10 @@ them, and the data latches, only while driven. Over the 269 traces it
 finds no difference: 16 million reads on the cartridge bus, 400 thousand
 writes of HRAM, 189 serial transfers. Wired into `NetChip` with the rest, they
 leave the chip's inputs the CPU core's (its address and what drives its
-high byte, read, write, request, data bus, acknowledges), the clock pins
-and the world outside (the joypad's lines, SIN, SCK): over the 269 traces
-the closed loop finds no difference either. The request's pulses come from
+high byte, read, write, request, data bus, acknowledges; the core is in
+`NetChip` too now, below), the clock pins and the world outside (the
+joypad's lines, SIN, SCK): over the 269 traces the closed loop finds no
+difference either. The request's pulses come from
 `latch_race`, which follows the few signals of the race through the phase
 in picoseconds, with the VHDL's delays: the core's request reaches the
 chip 22 ns after the edge, the address's high byte at 21 ns (precharged),
@@ -554,6 +555,22 @@ address, request, read, write, acknowledges and HALT's and STOP's
 enables: 2.11 billion phases, 10 million opcodes fetched, 31 thousand
 after the CB prefix, 30355 interrupt entries (182 of them choosing
 between requests), 2913 HALTs, 6194 failed conditions.
+
+In `NetChip` the core runs with the rest, which leaves the chip's inputs
+the clock, reset and test pins and the world outside (the joypad's lines,
+SIN, SCK). Each phase the core settles twice: first with the data bus and
+IF as the phase finds them, which gives the blocks its address, strobes
+and what it writes, then with what they drive on the data bus and IF as
+they leave it. Its bridge passes the bits pulled strongly low in the
+phase: a block's 0, or the core's own 0 where no block drives a 1 against
+it (where STAT's mode bits rise during a read, the two fight to an X);
+each drives what it did in the phase before for a while after the edge,
+as the core's outputs reach the bus 39 ns after it. Those bits match the
+trace's in all 2.33 billion phases, and the closed loop matches the model
+in every block, the core's latches and registers and its outputs among
+them. OAM's data lines follow the data bus while the PPU leaves them, so
+render takes it with a read's byte on it, and with STAT's mode bits for
+either level of its own mode 3, and ANDs in its own VRAM data.
 
 The APU (`apu_control.vhd` and the four channels) replays as `NetApu`
 (ceres-netlist's `apu`), delta cycle by delta cycle as render does: its

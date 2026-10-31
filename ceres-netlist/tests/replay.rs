@@ -39,7 +39,6 @@ use {
         oam::{NetOamLatches, OamInputs},
         oam_scan::{Clocks as ScanClocks, NetScan},
         render::{NetRender, vram_power_on},
-        sm83::CoreOutputs,
         timer::{Access, NetTimer, Reg},
     },
     std::{
@@ -1155,9 +1154,9 @@ const fn clocks_shown(
 }
 
 /// What the chip takes in at the edge of line `edge` (the pins), and in the
-/// phase it starts, which the next line ends (the CPU's access, the other
-/// interrupt sources' rises, the acknowledges).
-fn chip_inputs(edge: &Line, phase: &Line, core: &CoreOutputs) -> Option<ChipInputs> {
+/// phase it starts, which the next line ends (the joypad's lines, SIN,
+/// SCK).
+fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
     let pins = edge.clocks.as_ref()?.inputs;
     let bus = phase.bus.as_ref()?;
     Some(ChipInputs {
@@ -1165,19 +1164,7 @@ fn chip_inputs(edge: &Line, phase: &Line, core: &CoreOutputs) -> Option<ChipInpu
         reset_pin_n: pins.reset_pin_n,
         t1: pins.t1,
         t2: pins.t2,
-        osc_ena: pins.osc_ena,
-        clk_ena: pins.clk_ena,
-        mreq: pins.mreq,
-        write: pins.write,
         test_reset: pins.test_reset,
-        addr: phase.addr,
-        read: bus.read,
-        mreq_in_phase: bus.mreq,
-        write_in_phase: bus.write,
-        data: phase.data,
-        acks: phase.acks,
-        high_byte: core.high_byte,
-        ctl_mreq: core.ctl_mreq,
         p10_13: bus.p10_13,
         sin: bus.sin,
         sck: bus.sck,
@@ -1212,13 +1199,7 @@ fn bus_read(line: &Line) -> bool {
     clippy::too_many_lines,
     reason = "the start, then the comparison of each block"
 )]
-fn replay_chip(
-    name: &str,
-    trace: &Path,
-    lines: &[Line],
-    core: &[Option<CoreOutputs>],
-    report: &mut Report,
-) {
+fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
     let Some(start) = lines.iter().position(|l| l.clocks.is_some()) else {
         return;
     };
@@ -1244,6 +1225,11 @@ fn replay_chip(
     else {
         return;
     };
+    let (Some(model_core), Some(core_inputs)) = (second.core.as_ref(), core::inputs(second)) else {
+        return;
+    };
+    let mut net_core = model_core.net;
+    let core_out = net_core.settle(&core_inputs);
     let Some((board, boot_rom)) = bus::board(trace, report) else {
         return;
     };
@@ -1275,12 +1261,11 @@ fn replay_chip(
         scan: scan.net,
         wr_before: second.wr,
         data_before: second.data,
-        addr_before: second.addr,
-        ctl_mreq_before: core
-            .get(start + 1)
-            .copied()
-            .flatten()
-            .is_some_and(|c| c.ctl_mreq),
+        core: net_core,
+        core_out,
+        core_low_before: 0,
+        blocks_low_before: 0,
+        blocks_high_before: 0,
         read_bus: None,
         render: NetRender {
             md_kept: 0xFF,
@@ -1301,59 +1286,28 @@ fn replay_chip(
     chip.render.inputs = at_start;
     chip.render.settle_wires(&memories.vram);
     let mut lcdc_known = false;
-    let mut core_low_before = 0;
-    let mut blocks_before = (0, 0);
     for n in start + 1..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
-        let Some(core_out) = core.get(n + 1).copied().flatten() else {
-            return;
-        };
-        let (Some(inputs), Some(clocks)) =
-            (chip_inputs(line, ends, &core_out), line.clocks.as_ref())
-        else {
+        let (Some(inputs), Some(clocks)) = (chip_inputs(line, ends), line.clocks.as_ref()) else {
             return;
         };
         let place = format!("{name}:{}", n + 1);
         let before = chip;
-        chip.interrupts.ie = ends.ie;
         let mut events = chip.edge(inputs, &mut memories);
         report.phases += 1;
-        // The chip's data bus as the core's bridge sees it: the bits pulled
-        // strongly low in the phase, by the blocks, or by the core where no
-        // block drives a 1 against it. Both drive what they did in the
-        // phase before for a while after the edge: the core's outputs reach
-        // the bus 39 ns after it (in A, the precharge: all 1).
-        if let (Some(model_core), Some(end_clocks)) = (ends.core.as_ref(), ends.clocks.as_ref()) {
-            let pins = end_clocks.inputs;
-            let clk = ends.phase == 'a' || !pins.osc_ena;
-            let released = pins.t1 && !pins.t2;
-            let exec = pins.clk_ena && !clk && !released;
-            let by_core = if exec { !core_out.db } else { 0 };
-            let (now_low, now_high) = events.driven.map_or((0, 0), |b| (!b, b));
-            let (blocks_low, blocks_high) = (now_low | blocks_before.0, now_high | blocks_before.1);
-            let ours = blocks_low | ((by_core | core_low_before) & !blocks_high);
-            blocks_before = (now_low, now_high);
-            if ours != model_core.data_low {
-                report.differ(
-                    format!(
-                        "chip: the data bus's low bits, phase {}, {}",
-                        ends.phase,
-                        if bus_read(ends) { "a read" } else { "no read" }
-                    ),
-                    format!(
-                        "{place} ({:04X}: {ours:02X} = {blocks_low:02X} | {by_core:02X} | {core_low_before:02X}, model {:02X}, data {:02X})",
-                        ends.addr, model_core.data_low, ends.data
-                    ),
-                );
-            }
-            core_low_before = by_core;
-        }
+        compare_chip_core(
+            &mut chip,
+            &events,
+            ends,
+            &format!("{name}:{}", n + 2),
+            report,
+        );
         // LCDC's bits the trace lacks are known once the CPU writes it, or
         // reads it.
-        lcdc_known |= chip.cpu_wr && inputs.addr == 0xFF40;
+        lcdc_known |= chip.cpu_wr && events.core.addr == 0xFF40;
         if let (false, true, Some(taken)) = (
             lcdc_known,
-            events.read.is_some() && inputs.addr == 0xFF40,
+            events.read.is_some() && events.core.addr == 0xFF40,
             ends.lcd.as_ref().and_then(|l| l.read),
         ) {
             events.read = Some(taken);
@@ -1447,6 +1401,59 @@ fn replay_chip(
                 render::resync(&mut chip.render, &model.net, &memories.vram);
             }
         }
+    }
+}
+
+/// The core of `chip` after a step against the model at the end of the
+/// phase (`ends`): its state, its outputs, and the data bus's bits pulled
+/// strongly low that the chip gave it.
+fn compare_chip_core(
+    chip: &mut NetChip,
+    events: &ChipEvents,
+    ends: &Line,
+    place: &str,
+    report: &mut Report,
+) {
+    let Some(model) = ends.core.as_ref() else {
+        return;
+    };
+    if events.data_low != model.data_low {
+        report.differ(
+            format!(
+                "chip: the data bus's low bits, phase {}, {}",
+                ends.phase,
+                if bus_read(ends) { "a read" } else { "no read" }
+            ),
+            format!(
+                "{place} ({:04X}: {:02X}, model {:02X}, data {:02X})",
+                ends.addr, events.data_low, model.data_low, ends.data
+            ),
+        );
+    }
+    let outputs = core::output_differences(&events.core, ends);
+    if !outputs.is_empty() {
+        report.differ(
+            format!(
+                "chip: core outputs, phase {}: {}",
+                ends.phase,
+                outputs.join(" ")
+            ),
+            format!(
+                "{place} (opcode {:02X} m{}: {:04X?}, model addr {:04X})",
+                model.net.seq.opcode, model.net.seq.mcyc, events.core, ends.addr
+            ),
+        );
+    }
+    let state = core::differences(&chip.core, &model.net);
+    if !state.is_empty() {
+        report.differ(
+            format!("chip: core, phase {}: {}", ends.phase, state.join(" ")),
+            format!(
+                "{place} (opcode {:02X} m{})",
+                model.net.seq.opcode, model.net.seq.mcyc
+            ),
+        );
+        core::resync(&mut chip.core, &model.net, ends.phase);
     }
 }
 
@@ -1643,8 +1650,8 @@ fn netlist_replay() {
         replay_lcd(name, &lines, &mut report);
         replay_scan(name, &lines, &mut report);
         replay_clocks(name, &lines, &mut report, false);
-        let core_outputs = core::replay(name, &lines, &mut report);
-        replay_chip(name, path, &lines, &core_outputs, &mut report);
+        replay_chip(name, path, &lines, &mut report);
+        core::replay(name, &lines, &mut report);
         render::replay(name, &lines, &mut report);
         bus::replay(name, path, &lines, &mut report);
         apu::replay(name, &lines, &mut report);

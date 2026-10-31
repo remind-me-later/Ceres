@@ -125,7 +125,7 @@ pub fn parse(fields: &[&str], ie: u8) -> Option<CoreLine> {
 /// and the core's own enables (as the clocks take them), the resets, IF,
 /// the chip's data bus where it was a strong 0, the chip's decoding of the
 /// address.
-fn inputs(line: &Line) -> Option<CoreInputs> {
+pub fn inputs(line: &Line) -> Option<CoreInputs> {
     let (clocks, bus) = (line.clocks.as_ref()?, line.bus.as_ref()?);
     let pins = clocks.inputs;
     let phase = line.phase;
@@ -159,7 +159,7 @@ fn inputs(line: &Line) -> Option<CoreInputs> {
 
 /// The flip-flops, latches and registers of `net` that differ from
 /// `model`'s.
-fn differences(net: &NetCore, model: &NetCore) -> Vec<&'static str> {
+pub fn differences(net: &NetCore, model: &NetCore) -> Vec<&'static str> {
     let (s, m) = (&net.seq, &model.seq);
     let (r, q) = (&net.regs, &model.regs);
     let mut differ = Vec::new();
@@ -212,7 +212,7 @@ fn differences(net: &NetCore, model: &NetCore) -> Vec<&'static str> {
 /// Takes the model's state: the registers' and the flags' masters too,
 /// but in G and H, where they may hold a new value the trace does not
 /// show, ours are kept.
-fn resync(net: &mut NetCore, model: &NetCore, phase: char) {
+pub fn resync(net: &mut NetCore, model: &NetCore, phase: char) {
     let mut taken = NetCore {
         clk: net.clk,
         exec_phase: net.exec_phase,
@@ -248,7 +248,7 @@ fn resync(net: &mut NetCore, model: &NetCore, phase: char) {
 /// The core's outputs that differ from the model's, as `line` shows the
 /// chip's address, request, read, write and acknowledges, and the clocks'
 /// enables.
-fn output_differences(out: &CoreOutputs, line: &Line) -> Vec<&'static str> {
+pub fn output_differences(out: &CoreOutputs, line: &Line) -> Vec<&'static str> {
     let (Some(bus), Some(clocks)) = (line.bus.as_ref(), line.clocks.as_ref()) else {
         return Vec::new();
     };
@@ -334,22 +334,19 @@ fn check_race(
 
 /// Replays the core, phase by phase, from the trace's first line, and
 /// checks the race of its request against the chip's decodings
-/// (`LatchRace`) with the latches' openings the trace shows. Its outputs as
-/// each line ends its phase, for the chip's replay.
-pub fn replay(name: &str, lines: &[Line], report: &mut Report) -> Vec<Option<CoreOutputs>> {
-    let mut given = vec![None; lines.len()];
+/// (`LatchRace`) with the latches' openings the trace shows.
+pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
     let Some(first) = lines.first() else {
-        return given;
+        return;
     };
     let (Some(start), Some(first_inputs)) = (first.core.as_ref(), inputs(first)) else {
-        return given;
+        return;
     };
     let mut net = start.net;
     let mut out_before = net.settle(&first_inputs);
-    given[0] = Some(out_before);
     for (n, line) in lines.iter().enumerate().skip(1) {
         let (Some(model), Some(i)) = (line.core.as_ref(), inputs(line)) else {
-            return given;
+            return;
         };
         let before = net;
         let out = net.phase(&i);
@@ -364,7 +361,6 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) -> Vec<Option<Cor
             report,
         );
         out_before = out;
-        given[n] = Some(out);
         for (what, happened) in [
             (
                 "core: an interrupt's entry",
@@ -418,5 +414,4 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) -> Vec<Option<Cor
             );
         }
     }
-    given
 }
