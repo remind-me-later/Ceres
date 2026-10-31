@@ -159,8 +159,10 @@ pub struct ChipEvents {
     pub mode2: bool,
     /// The OAM scan's save strobes, bit `i` for slot `i`.
     pub save: u16,
-    /// The byte a read of LCDC, STAT, LY or LYC takes, in H.
+    /// The byte a read takes, in H.
     pub read: Option<u8>,
+    /// What the blocks drive on the data bus in the phase, for a read.
+    pub driven: Option<u8>,
     /// What the bus side gave in the phase: the pins, its interrupts.
     pub bus: BusOutputs,
 }
@@ -228,7 +230,7 @@ impl NetChip {
         self.int_serial = bus.int_serial;
         self.int_jp = bus.int_jp;
 
-        let read = self.step_read(phase, mode2, flags_before, inputs, bus);
+        let (read, driven) = self.step_read(phase, mode2, flags_before, inputs, bus);
         self.wr_before = self.cpu_wr;
         self.data_before = inputs.data;
         self.addr_before = inputs.addr;
@@ -240,6 +242,7 @@ impl NetChip {
             mode2,
             save,
             read,
+            driven,
             bus,
         }
     }
@@ -546,7 +549,8 @@ impl NetChip {
     }
 
     /// A read: the AND of what drives the bus from E to H, which the core
-    /// takes in H. `flags_before` is IF as the phase found it.
+    /// takes in H, and what the blocks drive in the phase.
+    /// `flags_before` is IF as the phase found it.
     const fn step_read(
         &mut self,
         phase: Phase,
@@ -554,7 +558,7 @@ impl NetChip {
         flags_before: u8,
         inputs: ChipInputs,
         bus: BusOutputs,
-    ) -> Option<u8> {
+    ) -> (Option<u8>, Option<u8>) {
         // The block that decodes the address drives the bus.
         let addr = inputs.addr;
         let mut shown = self.control.read(addr);
@@ -587,10 +591,11 @@ impl NetChip {
         } else {
             None
         };
+        let driven = if inputs.read { shown } else { None };
         if inputs.read & matches!(phase, Phase::H) {
-            self.read_bus
+            (self.read_bus, driven)
         } else {
-            None
+            (None, driven)
         }
     }
 }

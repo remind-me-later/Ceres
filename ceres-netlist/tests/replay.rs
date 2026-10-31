@@ -1184,6 +1184,11 @@ fn chip_inputs(edge: &Line, phase: &Line, core: &CoreOutputs) -> Option<ChipInpu
     })
 }
 
+/// The CPU reads in the phase `line` ends.
+fn bus_read(line: &Line) -> bool {
+    line.bus.as_ref().is_some_and(|b| b.read)
+}
+
 /// The chip's blocks wired together (`NetChip`): the clocks run the phases
 /// the timer, IF, the DMA and the line timing step on, the divider's last
 /// bit ends the power-on wait, the timer's interrupt, the STAT line and
@@ -1296,6 +1301,8 @@ fn replay_chip(
     chip.render.inputs = at_start;
     chip.render.settle_wires(&memories.vram);
     let mut lcdc_known = false;
+    let mut core_low_before = 0;
+    let mut blocks_before = (0, 0);
     for n in start + 1..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
         let Some(core_out) = core.get(n + 1).copied().flatten() else {
@@ -1311,6 +1318,36 @@ fn replay_chip(
         chip.interrupts.ie = ends.ie;
         let mut events = chip.edge(inputs, &mut memories);
         report.phases += 1;
+        // The chip's data bus as the core's bridge sees it: the bits pulled
+        // strongly low in the phase, by the blocks, or by the core where no
+        // block drives a 1 against it. Both drive what they did in the
+        // phase before for a while after the edge: the core's outputs reach
+        // the bus 39 ns after it (in A, the precharge: all 1).
+        if let (Some(model_core), Some(end_clocks)) = (ends.core.as_ref(), ends.clocks.as_ref()) {
+            let pins = end_clocks.inputs;
+            let clk = ends.phase == 'a' || !pins.osc_ena;
+            let released = pins.t1 && !pins.t2;
+            let exec = pins.clk_ena && !clk && !released;
+            let by_core = if exec { !core_out.db } else { 0 };
+            let (now_low, now_high) = events.driven.map_or((0, 0), |b| (!b, b));
+            let (blocks_low, blocks_high) = (now_low | blocks_before.0, now_high | blocks_before.1);
+            let ours = blocks_low | ((by_core | core_low_before) & !blocks_high);
+            blocks_before = (now_low, now_high);
+            if ours != model_core.data_low {
+                report.differ(
+                    format!(
+                        "chip: the data bus's low bits, phase {}, {}",
+                        ends.phase,
+                        if bus_read(ends) { "a read" } else { "no read" }
+                    ),
+                    format!(
+                        "{place} ({:04X}: {ours:02X} = {blocks_low:02X} | {by_core:02X} | {core_low_before:02X}, model {:02X}, data {:02X})",
+                        ends.addr, model_core.data_low, ends.data
+                    ),
+                );
+            }
+            core_low_before = by_core;
+        }
         // LCDC's bits the trace lacks are known once the CPU writes it, or
         // reads it.
         lcdc_known |= chip.cpu_wr && inputs.addr == 0xFF40;
