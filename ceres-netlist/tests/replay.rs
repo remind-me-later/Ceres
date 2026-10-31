@@ -1167,6 +1167,11 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
         p10_13: bus.p10_13,
         sin: bus.sin,
         sck: bus.sck,
+        // The APU is not transcribed: its byte is the one the read takes,
+        // in H (the trace has it from the middle of H).
+        apu: (bus.read && phase.phase == 'h' && (0xFF10..=0xFF3F).contains(&phase.addr))
+            .then(|| phase.lcd.as_ref().and_then(|l| l.read))
+            .flatten(),
     })
 }
 
@@ -1179,8 +1184,9 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
 /// latches hold, the latches follow the scan, the DMA and render's sprite
 /// fetch, and render and the sprite store run on what the others give
 /// them, and give the STAT line mode 0; only the CPU's access, the other
-/// sources, the acknowledges, OAM's RAM and odd byte and VRAM's data come
-/// from the trace, which must have render's fields. LCDC's bits that
+/// sources, the acknowledges, OAM's RAM and odd byte, VRAM's data and the
+/// APU's byte in a read come from the trace, which must have render's
+/// fields. Every read is compared with the byte the core takes. LCDC's bits that
 /// the trace lacks (all but 7 and 2) are taken from the first read of it,
 /// if it comes before a write. A step is an edge and the phase it
 /// starts: the clocks are compared with the edge's line, the others with
@@ -1455,8 +1461,25 @@ fn compare_chip_ppu(
             );
         }
     }
+    let read_in_h = ends.bus.as_ref().is_some_and(|b| b.read) && ends.phase == 'h';
+    if events.read.is_none() && read_in_h {
+        report.differ(
+            format!(
+                "chip: a read nothing answers, of {:04X}",
+                ends.addr & 0xFFF0
+            ),
+            place.clone(),
+        );
+    }
     if let (Some(value), Some(taken)) = (events.read, lcd.read) {
         report.saw(match ends.addr {
+            0xFF04..=0xFF07 => "chip: a read of the divider or the timer",
+            0xFF0F => "chip: a read of IF",
+            0xFFFF => "chip: a read of IE",
+            0xFF10..=0xFF3F => "chip: a read of the APU (from the trace)",
+            0xFF03 | 0xFF08..=0xFF0E | 0xFF4C..=0xFF4F | 0xFF51..=0xFF7F | 0xFEA0..=0xFEFF => {
+                "chip: a read nothing drives"
+            }
             0x8000..=0x9FFF => "chip: a read of VRAM",
             0xFE00..=0xFE9F => "chip: a read of OAM",
             0xFF40 => "chip: a read of LCDC",

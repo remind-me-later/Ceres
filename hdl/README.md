@@ -509,7 +509,16 @@ writes of HRAM, 189 serial transfers. Wired into `NetChip` with the rest, they
 leave the chip's inputs the CPU core's (its address, read, write, request,
 data bus, acknowledges, and its request's pulses), the clock pins and the
 world outside (the joypad's lines, SIN, SCK): over the 269 traces the
-closed loop finds no difference either.
+closed loop finds no difference either. Every read the core makes gets its
+byte from `NetChip`, as the AND of what drives the bus from E to H: the
+PPU, OAM DMA, the bus side, the divider and the timer (TAC's unused bits
+high), IF through its read latch, IE (the core's own), the precharged FF
+where nothing drives, and, until the APU is transcribed, the APU's byte
+from the trace. Each matches the byte the core takes: 16 million reads on
+the cartridge bus, 465 thousand of STAT, LY or LYC, 230 thousand of HRAM,
+142 of the divider and the timer, 17 of IF, 8 of IE, 117 of the I/O
+addresses nothing decodes (most of these from `check/io_regs.asm`), 1 of
+the APU.
 
 The CPU core (`sm83.vhd` and its parts: the decoders, the sequencer, the
 registers, the ALU, the IDU, the interrupt logic) replays as `NetCore`
@@ -531,13 +540,16 @@ enables: 2.11 billion phases, 10 million opcodes fetched, 31 thousand
 after the CB prefix, 30355 interrupt entries (182 of them choosing
 between requests), 2913 HALTs, 6194 failed conditions.
 
-`check/ppu_regs.asm`, `check/vram_oam.asm` and `check/bus.asm` read
-back the PPU's registers, VRAM, OAM and the bus side, and check what they
-read: every register's bits with the LCD on and off, FF46 during and after
-OAM DMA, every byte of VRAM and OAM, VRAM and OAM locked out in modes 2 and
-3; serial bytes sent with the internal clock (SB, SC and IF after), P1's
-select bits, FF50, the cartridge's header, every byte of HRAM and work
-RAM, and the echo of work RAM. They report as
+`check/ppu_regs.asm`, `check/vram_oam.asm`, `check/bus.asm` and
+`check/io_regs.asm` read back the PPU's registers, VRAM, OAM, the bus side
+and the rest of the I/O, and check what they read: every register's bits
+with the LCD on and off, FF46 during and after OAM DMA, every byte of VRAM
+and OAM, VRAM and OAM locked out in modes 2 and 3; serial bytes sent with
+the internal clock (SB, SC and IF after), P1's select bits, FF50, the
+cartridge's header, every byte of HRAM and work RAM, and the echo of work
+RAM; IE, IF, TMA, TIMA and TAC with their unused bits, TIMA counting, DIV
+after a write, and the I/O addresses nothing decodes (FF in all bits, as
+Mooneye's `unused_hwio-GS` has them). They report as
 `check/report.inc` says (Mooneye's registers and `LD B,B`, "Passed" or
 "Failed" on the serial port, a white or black screen), so they run on a
 Game Boy as well; they pass on dmg-sim, the model and ceres

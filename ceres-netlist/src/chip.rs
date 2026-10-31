@@ -7,10 +7,12 @@
 //! the joypad, the serial port): everything but the CPU core and the APU.
 //! What comes in with each edge (`ChipInputs`) is the core's (its address,
 //! read, write, request, the data bus, its acknowledges, and its request's
-//! pulses, which the external bus's latches can catch), the clock pins and
-//! the world outside (the joypad's lines, SIN, SCK); the memories (VRAM,
-//! the board's work RAM and cartridge, the boot ROM) are the edge's to
-//! borrow.
+//! pulses, which the external bus's latches can catch), the APU's byte in
+//! a read of its registers, the clock pins and the world outside (the
+//! joypad's lines, SIN, SCK); the memories (VRAM, the board's work RAM and
+//! cartridge, the boot ROM) are the edge's to borrow. Every read gets its
+//! byte from the blocks that drive the data bus, IE's (the core's) among
+//! them, or the precharged FF where nothing does.
 //!
 //! A step is the edge that starts a phase, and what happens in that phase:
 //! the flip-flops clocked by the edge take what was before it, the latches
@@ -83,6 +85,9 @@ pub struct ChipInputs {
     pub p10_13: u8,
     pub sin: bool,
     pub sck: bool,
+    /// What the APU, which is not transcribed, drives on the data bus in a
+    /// read of its registers or wave RAM (FF10 to FF3F).
+    pub apu: Option<u8>,
 }
 
 /// The memories the chip's edge borrows: VRAM, the board (its work RAM and
@@ -201,11 +206,13 @@ impl NetChip {
             | if stat_rose { STAT } else { 0 }
             | if vblank_rose { VBLANK } else { 0 };
         let write_if = (self.cpu_wr && inputs.addr == 0xFF0F).then_some(inputs.data);
+        // A read of IF takes the flags as they were when it started.
+        let flags_before = self.interrupts.flags;
         self.interrupts.phase(rises, write_if, inputs.acks);
         self.int_serial = bus.int_serial;
         self.int_jp = bus.int_jp;
 
-        let read = self.step_read(phase, mode2, inputs, bus);
+        let read = self.step_read(phase, mode2, flags_before, inputs, bus);
         self.wr_before = self.cpu_wr;
         self.data_before = inputs.data;
         ChipEvents {
@@ -399,6 +406,32 @@ impl NetChip {
             .phase(&bus_inputs, &mut memories.board, &memories.boot_rom)
     }
 
+    /// What a read of the divider, the timer, IF or IE drives on the bus
+    /// (their bits that no flip-flop drives stay precharged, 1). IF's read
+    /// latch holds the flags as the read found them in E; they only rise
+    /// during a read, so later phases' flags AND to the same byte. IE is the
+    /// core's, which pulls its own data bus down where IE is 0.
+    // @hw die: TAWU TAKU TEMU TUSE UPUG SEPU SAWA TATU (FF04); TEDA TUBY
+    // SORA, SOKU..PUSO SETE..SAPU RYLA ROTE SUPE (FF05 to FF07); MATY MOPO
+    // PAVY NEJY NUTY, POLA, NELA..PEGY (FF0F); IRQ_NAND2_NAND3 (FFFF)
+    const fn read_timer_if(&self, phase: Phase, flags_before: u8, addr: u16) -> Option<u8> {
+        match addr {
+            0xFF04 => Some(self.timer.read(Reg::Div)),
+            0xFF05 => Some(self.timer.read(Reg::Tima)),
+            0xFF06 => Some(self.timer.read(Reg::Tma)),
+            0xFF07 => Some(self.timer.read(Reg::Tac) | 0xF8),
+            0xFF0F => Some(
+                if matches!(phase, Phase::E) {
+                    flags_before
+                } else {
+                    self.interrupts.flags
+                } | 0xE0,
+            ),
+            0xFFFF => Some(self.interrupts.ie),
+            _ => None,
+        }
+    }
+
     /// OAM DMA reads VRAM (sources 80 to 9F), else the cartridge bus.
     // @hw die: MUDA LOGO MORY LUMA, MUHO LUFA
     const fn dma_from_vram(&self) -> bool {
@@ -458,12 +491,13 @@ impl NetChip {
         );
     }
 
-    /// A read of the PPU's registers, OAM, VRAM or FF46: the AND of what
-    /// drives the bus from E to H, which the core takes in H.
+    /// A read: the AND of what drives the bus from E to H, which the core
+    /// takes in H. `flags_before` is IF as the phase found it.
     fn step_read(
         &mut self,
         phase: Phase,
         mode2: bool,
+        flags_before: u8,
         inputs: ChipInputs,
         bus: BusOutputs,
     ) -> Option<u8> {
@@ -476,9 +510,13 @@ impl NetChip {
             .or_else(|| self.render.oam.read(&self.render.oam_inputs()))
             .or_else(|| (inputs.addr == 0xFF46).then_some(self.dma.source))
             .or(bus.data_out)
-            // VRAM and OAM while the PPU or OAM DMA holds them: nothing
-            // drives the precharged bus.
-            .or_else(|| matches!(inputs.addr, 0x8000..=0x9FFF | 0xFE00..=0xFE9F).then_some(0xFF));
+            .or_else(|| self.read_timer_if(phase, flags_before, inputs.addr))
+            .or(inputs.apu)
+            // Nothing else drives the precharged bus: VRAM and OAM while the
+            // PPU or OAM DMA holds them, the addresses nothing decodes.
+            .or_else(|| {
+                (inputs.addr >= 0xFE00 || (0x8000..=0x9FFF).contains(&inputs.addr)).then_some(0xFF)
+            });
         // The bus is precharged high; what drives it pulls bits low.
         let driven = |held: Option<u8>| match (held, shown) {
             (Some(held), Some(byte)) => Some(held & byte),
