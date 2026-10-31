@@ -44,7 +44,7 @@ pub const fn ffff(addr: u16) -> bool {
 impl NetCoreInterrupts {
     /// IE's output follows its master while the core does not write it.
     pub const fn show(&mut self, c: &Controls, addr: u16) {
-        if !(ffff(addr) && c.mwrite) {
+        if !(ffff(addr) & c.mwrite) {
             self.ie = self.ie_next;
         }
     }
@@ -53,7 +53,7 @@ impl NetCoreInterrupts {
     // @hw die: IRQ_NAND2_NAND3
     #[must_use]
     pub const fn db_pull(&self, rd: bool, addr: u16) -> u8 {
-        if rd && ffff(addr) { !self.ie } else { 0 }
+        if rd & ffff(addr) { !self.ie } else { 0 }
     }
 
     /// IE takes the data bus; the requests are latched; the lowest is
@@ -74,7 +74,7 @@ impl NetCoreInterrupts {
         let (data_phase, write_phase) = phases;
         if sys_reset {
             self.ie_next = 0;
-        } else if ffff(addr) && c.mwrite && write_phase {
+        } else if ffff(addr) & c.mwrite & write_phase {
             self.ie_next = db;
         } else {
             // The master holds.
@@ -83,9 +83,8 @@ impl NetCoreInterrupts {
         if !data_phase {
             self.pending = requested;
         }
-        let selected = if write_phase && !nmi_entry {
-            // The lowest that is requested.
-            self.pending & self.pending.wrapping_neg()
+        let selected = if write_phase & !nmi_entry {
+            crate::interrupts::lowest(self.pending)
         } else {
             0
         };
@@ -93,8 +92,8 @@ impl NetCoreInterrupts {
         let vector = u8::from(inta & 0xAA != 0) << 3
             | u8::from(inta & 0xCC != 0) << 4
             | u8::from(inta & 0xF0 != 0) << 5
-            | u8::from(s.int_entry_m6 && write_phase && selected != 0) << 6
-            | u8::from(s.int_entry_m6 && nmi_entry) << 7;
+            | u8::from(s.int_entry_m6 & write_phase & (selected != 0)) << 6
+            | u8::from(s.int_entry_m6 & nmi_entry) << 7;
         Selected {
             int_pending: self.pending != 0,
             int_now: requested != 0,

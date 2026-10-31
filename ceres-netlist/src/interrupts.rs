@@ -57,10 +57,11 @@ pub enum Access {
     Entry,
 }
 
-/// The lowest interrupt that is requested and enabled, as a bit.
+/// The lowest interrupt that is requested and enabled, as a bit (in
+/// operations Aeneas models: not `isolate_lowest_one` nor `wrapping_neg`).
 #[must_use]
 pub const fn lowest(requested: u8) -> u8 {
-    requested.isolate_lowest_one()
+    requested & (!requested).wrapping_add(1)
 }
 
 /// The netlist's IF, and IE.
@@ -89,10 +90,17 @@ impl NetIf {
     /// entry takes.
     pub fn m_cycle(&mut self, access: Access, rises: [u8; 8]) -> (Option<u8>, Option<u8>) {
         // The read's latch, and the requests' latch, close at the start of E.
-        let read = matches!(access, Access::ReadIf).then_some(self.flags | !INT_MASK);
+        let read = match access {
+            Access::ReadIf => Some(self.flags | !INT_MASK),
+            _ => None,
+        };
         let selected = lowest(self.ie & self.flags);
-        let taken = matches!(access, Access::Entry).then_some(selected);
-        for (phase, rise) in PHASES.iter().zip(rises) {
+        let taken = match access {
+            Access::Entry => Some(selected),
+            _ => None,
+        };
+        for i in 0..PHASES.len() {
+            let (phase, rise) = (PHASES[i], rises[i]);
             let write = match access {
                 Access::WriteIf(val) if matches!(phase, Phase::E | Phase::F | Phase::G) => {
                     Some(val)

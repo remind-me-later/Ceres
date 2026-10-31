@@ -40,7 +40,7 @@ impl Register {
 
     /// The master takes `d` in `write_phase` while the write enable is on.
     pub const fn take(&mut self, we: bool, write_phase: bool, d: u8) {
-        if we && write_phase {
+        if we & write_phase {
             self.master = d;
         }
     }
@@ -167,8 +167,8 @@ impl NetRegisters {
             | (all8(c.reg_h_to_op2_en) & h)
             | (all8(c.reg_l_to_op2_en) & l)
             | (all8(c.reg_z_to_op2_en) & z)
-            | (all8(s.add_hl_ss_m0 && add_hl_sp) & spl)
-            | (all8(s.add_hl_ss_m1 && add_hl_sp) & sph)
+            | (all8(s.add_hl_ss_m0 & add_hl_sp) & spl)
+            | (all8(s.add_hl_ss_m1 & add_hl_sp) & sph)
             | all8(c.ff_to_op2_en)
             | (all8(c.flags_to_op2_en) & flags & 0xF0);
         // The IDU's input, the address: a register pair, PC, SP or WZ, with
@@ -176,19 +176,19 @@ impl NetRegisters {
         // @hw die: REG_BC_OUT, REG_DE_OUT (y1 and d_zero), REG_HL_OUT (y1),
         // REG_PC_OUT (y2, y3), REG_SP_OUT (y4, y5), REG_WZ_OUT (oai21,
         // oai31), REG_BUS_PCH_B
-        let from_w = s.jr_m2 || c.ld_nn_sp_or_ldx_exec;
+        let from_w = s.jr_m2 | c.ld_nn_sp_or_ldx_exec;
         let lo = (all8(c.reg_bc_to_idu_en) & cr)
             | (all8(c.reg_de_to_idu_en) & e)
             | (all8(c.reg_hl_to_idu_en) & l)
             | (all8(c.reg_pc_to_idu_en) & pcl)
             | (all8(c.reg_sp_to_idu_en) & spl)
-            | (all8(from_w || c.ld_n_a_or_ld_a_n_m1) & z);
-        let ff_high = c.ld_c_a_or_ld_a_c_m0 || c.ld_n_a_or_ld_a_n_m1;
+            | (all8(from_w | c.ld_n_a_or_ld_a_n_m1) & z);
+        let ff_high = c.ld_c_a_or_ld_a_c_m0 | c.ld_n_a_or_ld_a_n_m1;
         let hi = (all8(c.reg_bc_to_idu_en) & b)
             | (all8(c.reg_de_to_idu_en) & d)
             | all8(ff_high)
             | (all8(c.reg_hl_to_idu_en) & h)
-            | (all8(c.reg_pc_to_idu_en || s.jr_m1) & pch)
+            | (all8(c.reg_pc_to_idu_en | s.jr_m1) & pch)
             | (all8(c.reg_sp_to_idu_en) & sph)
             | (all8(from_w) & w);
         // PC and SP onto the data bus: their bits that are 0 pull it down.
@@ -202,15 +202,15 @@ impl NetRegisters {
             op2,
             idu_in: u16::from_be_bytes([hi, lo]),
             addr_from_w: from_w,
-            addr_late: c.reg_hl_to_idu_en || c.reg_sp_to_idu_en,
+            addr_late: c.reg_hl_to_idu_en | c.reg_sp_to_idu_en,
             addr_driven: c.reg_bc_to_idu_en
-                || c.reg_de_to_idu_en
-                || c.reg_hl_to_idu_en
-                || c.reg_pc_to_idu_en
-                || s.jr_m1
-                || c.reg_sp_to_idu_en
-                || ff_high
-                || from_w,
+                | c.reg_de_to_idu_en
+                | c.reg_hl_to_idu_en
+                | c.reg_pc_to_idu_en
+                | s.jr_m1
+                | c.reg_sp_to_idu_en
+                | ff_high
+                | from_w,
             db_pull,
         }
     }

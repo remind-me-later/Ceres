@@ -52,9 +52,9 @@ impl NetDma {
             self.count = 0;
             self.done = false;
         }
-        self.requested = write.is_some() || (self.requested && !self.start_2);
+        self.requested = write.is_some() | (self.requested & !self.start_2);
         // The start wins over the end.
-        self.enabled = self.start_2 || (self.enabled && !self.done);
+        self.enabled = self.start_2 | (self.enabled & !self.done);
     }
 
     /// One phase, with what the CPU writes to FF46 in it, while the CPU
@@ -72,8 +72,8 @@ impl NetDma {
     /// flip-flops clocked by it take their inputs.
     pub const fn rise(&mut self, writing: bool) {
         let was = *self;
-        self.start_1 = was.requested && !writing;
-        if was.enabled && !was.start_2 {
+        self.start_1 = was.requested & !writing;
+        if was.enabled & !was.start_2 {
             self.count = was.count.wrapping_add(1);
         }
         self.run = was.enabled;
@@ -83,7 +83,7 @@ impl NetDma {
     pub const fn fall(&mut self) {
         let was = *self;
         self.start_2 = was.start_1;
-        self.done = !was.start_2 && Self::last(was.count);
+        self.done = !was.start_2 & Self::last(was.count);
     }
 
     /// The OAM byte the DMA writes in this M-cycle, and the address it

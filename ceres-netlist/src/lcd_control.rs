@@ -42,7 +42,7 @@ impl NetLcdControl {
     // @hw die: XODO XAPO PYRY, LYHA LYFE
     #[must_use]
     pub const fn ppu_reset(&self, reset2: bool) -> bool {
-        self.lcdc & LCDC_ON_B == 0 || reset2
+        (self.lcdc & LCDC_ON_B == 0) | reset2
     }
 
     /// LCDC bit 2: sprites of 16 lines.

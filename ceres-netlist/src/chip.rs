@@ -1,7 +1,7 @@
 //! The chip's blocks, wired together as `hdl/rtl/dmg_cpu_b.vhd` wires them,
 //! edge by edge of the crystal.
 //!
-//! The clocks and resets, the divider and the timer, IF, OAM DMA, LCDC,
+//! The clock_out and resets, the divider and the timer, IF, OAM DMA, LCDC,
 //! the line timing, the OAM scan, OAM, render, the sprite store, VRAM's
 //! bus, and the bus side (the external bus, HRAM, the boot ROM's mapping,
 //! the joypad, the serial port): everything but the CPU core and the APU.
@@ -56,7 +56,7 @@ struct Lcdc {
 )]
 pub struct ChipInputs {
     /// The pins and the CPU core's enables as they are after the edge (the
-    /// divider's bit, which the clocks also take, comes from the chip).
+    /// divider's bit, which the clock_out also take, comes from the chip).
     pub ck1: bool,
     pub reset_pin_n: bool,
     pub t1: bool,
@@ -74,7 +74,7 @@ pub struct ChipInputs {
     pub data: u8,
     pub acks: u8,
     /// The core's request and write strobe as they are in the phase (the
-    /// clocks take them as they are at the edge, `mreq` and `write`).
+    /// clock_out take them as they are at the edge, `mreq` and `write`).
     pub mreq_in_phase: bool,
     pub write_in_phase: bool,
     /// The address the external bus's latches took as the core's request
@@ -131,8 +131,16 @@ pub struct NetChip {
     pub read_bus: Option<u8>,
 }
 
+/// `first` if a block drives it, else `second`.
+const fn first_of(first: Option<u8>, second: Option<u8>) -> Option<u8> {
+    match first {
+        Some(_) => first,
+        None => second,
+    }
+}
+
 /// What a step does that the CPU and the other blocks see.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the strobes' levels")]
 pub struct ChipEvents {
     /// The interrupt requests that rose in the phase: the timer's, the STAT
@@ -159,20 +167,24 @@ impl NetChip {
             ppu_reset: self.control.ppu_reset(self.clocks.reset2()),
             tall: self.control.tall(),
         };
-        // The clocks, with the divider's last bit as it was at the edge.
+        // The clock_out, with the divider's last bit as it was at the edge.
         let clock_inputs = self.clock_inputs(inputs);
         self.clocks.step(clock_inputs);
         let phase = self.clocks.phase();
-        let clocks = self.clocks.outputs(clock_inputs);
+        let clock_out = self.clocks.outputs(clock_inputs);
 
-        self.cpu_wr = clocks.cpu_wr_sync;
+        self.cpu_wr = clock_out.cpu_wr_sync;
         let timer_rose = self.step_timer(phase, inputs);
-        self.step_dma(clocks, inputs);
-        let bus = self.step_bus(phase, clocks, inputs, memories);
-        let write_lcdc = (self.cpu_wr && inputs.addr == 0xFF40).then_some(inputs.data);
-        self.control.settle(clocks.reset2, write_lcdc);
+        self.step_dma(clock_out, inputs);
+        let bus = self.step_bus(phase, clock_out, inputs, memories);
+        let write_lcdc = if self.cpu_wr & (inputs.addr == 0xFF40) {
+            Some(inputs.data)
+        } else {
+            None
+        };
+        self.control.settle(clock_out.reset2, write_lcdc);
         let lcdc = Lcdc {
-            ppu_reset: self.control.ppu_reset(clocks.reset2),
+            ppu_reset: self.control.ppu_reset(clock_out.reset2),
             tall: self.control.tall(),
         };
         // Mode 0 as the edge finds it (render's, which changes after the
@@ -182,30 +194,26 @@ impl NetChip {
         let (mut stat_rose, level, vblank_rose) =
             self.step_lcd(lcdc_at_edge, lcdc, mode0_at_edge, inputs);
         let (mode2, save) = self.step_scan(lcd_before, lcdc_at_edge, lcdc);
-        self.step_render(clocks, lcdc, save, inputs, bus, &mut memories.vram);
+        self.step_render(clock_out, lcdc, save, inputs, bus, &mut memories.vram);
         // Then mode 0, which rises after the edge's flip-flops.
-        let mut level = level;
-        for now in [
-            self.lcd.int_stat(mode0_at_edge),
-            self.lcd.int_stat(self.render.mode0()),
-        ] {
-            stat_rose |= now && !level;
-            level = now;
-        }
+        let at_edge = self.lcd.int_stat(mode0_at_edge);
+        let now = self.lcd.int_stat(self.render.mode0());
+        stat_rose |= (at_edge & !level) | (now & !at_edge);
 
         // IF: the sources' rises, the CPU's write and the acknowledges.
-        let rises = if bus.int_serial && !self.int_serial {
+        let rises = if bus.int_serial & !self.int_serial {
             SERIAL
         } else {
             0
-        } | if bus.int_jp && !self.int_jp {
-            JOYPAD
-        } else {
-            0
-        } | if timer_rose { TIMER } else { 0 }
+        } | if bus.int_jp & !self.int_jp { JOYPAD } else { 0 }
+            | if timer_rose { TIMER } else { 0 }
             | if stat_rose { STAT } else { 0 }
             | if vblank_rose { VBLANK } else { 0 };
-        let write_if = (self.cpu_wr && inputs.addr == 0xFF0F).then_some(inputs.data);
+        let write_if = if self.cpu_wr & (inputs.addr == 0xFF0F) {
+            Some(inputs.data)
+        } else {
+            None
+        };
         // A read of IF takes the flags as they were when it started.
         let flags_before = self.interrupts.flags;
         self.interrupts.phase(rises, write_if, inputs.acks);
@@ -226,7 +234,7 @@ impl NetChip {
         }
     }
 
-    /// The clocks' inputs at an edge: the pins and the CPU core's, and the
+    /// The clock_out' inputs at an edge: the pins and the CPU core's, and the
     /// divider's last bit.
     #[must_use]
     pub const fn clock_inputs(&self, inputs: ChipInputs) -> ClockInputs {
@@ -247,8 +255,8 @@ impl NetChip {
     /// The DMA's clock: high in A to D, and while the CPU is halted.
     // @hw die: the chip's dma_phi <= not data_phase
     #[must_use]
-    pub const fn dma_phi(clocks: ClockOutputs) -> bool {
-        !clocks.data_phase
+    pub const fn dma_phi(clock_out: ClockOutputs) -> bool {
+        !clock_out.data_phase
     }
 
     /// The divider and the timer: the A edge, then the access in E to G.
@@ -260,20 +268,20 @@ impl NetChip {
             _ => Access::None,
         };
         self.timer.phase(phase, access);
-        self.timer.int_timer && !int_timer
+        self.timer.int_timer & !int_timer
     }
 
     /// OAM DMA, on `dma_phi`.
-    const fn step_dma(&mut self, clocks: ClockOutputs, inputs: ChipInputs) {
-        let dma_phi = Self::dma_phi(clocks);
-        let write = if self.cpu_wr && inputs.addr == 0xFF46 {
+    const fn step_dma(&mut self, clock_out: ClockOutputs, inputs: ChipInputs) {
+        let dma_phi = Self::dma_phi(clock_out);
+        let write = if self.cpu_wr & (inputs.addr == 0xFF46) {
             Some(inputs.data)
         } else {
             None
         };
-        if dma_phi && !self.dma_phi {
+        if dma_phi & !self.dma_phi {
             self.dma.rise(write.is_some());
-        } else if !dma_phi && self.dma_phi {
+        } else if !dma_phi & self.dma_phi {
             self.dma.fall();
         } else {
             // No edge of the DMA's clock.
@@ -303,29 +311,34 @@ impl NetChip {
             }
         }
         let mut level = self.lcd.int_stat(mode0_at_edge);
-        if self.cpu_wr && matches!(inputs.addr, 0xFF41 | 0xFF45) {
+        if self.cpu_wr & matches!(inputs.addr, 0xFF41 | 0xFF45) {
+            // As the write's latch opens, it takes the bus as it was first.
             let opens = !self.wr_before;
-            for data in [opens.then_some(self.data_before), Some(inputs.data)]
-                .into_iter()
-                .flatten()
-            {
-                self.lcd.write(inputs.addr, data);
-                let now = self.lcd.int_stat(mode0_at_edge);
-                rose |= now && !level;
-                level = now;
+            for pass in 0..2 {
+                if opens | (pass == 1) {
+                    let data = if pass == 0 {
+                        self.data_before
+                    } else {
+                        inputs.data
+                    };
+                    self.lcd.write(inputs.addr, data);
+                    let now = self.lcd.int_stat(mode0_at_edge);
+                    rose |= now & !level;
+                    level = now;
+                }
             }
         }
         if lcdc.ppu_reset {
             self.lcd.reset();
         }
         // @hw die: the chip's int_vbl <= mode1
-        (rose, level, self.lcd.mode1 && !mode1)
+        (rose, level, self.lcd.mode1 & !mode1)
     }
 
-    /// The OAM scan, on the line timing's clocks (`lcd` as the edge found
+    /// The OAM scan, on the line timing's clock_out (`lcd` as the edge found
     /// them), with what OAM's latches held; then the latches. Mode 2 for
     /// OAM and STAT, and the save strobes.
-    fn step_scan(&mut self, lcd: NetLcd, at_edge: Lcdc, lcdc: Lcdc) -> (bool, u16) {
+    const fn step_scan(&mut self, lcd: NetLcd, at_edge: Lcdc, lcdc: Lcdc) -> (bool, u16) {
         if at_edge.ppu_reset {
             self.scan.reset();
         } else {
@@ -343,15 +356,16 @@ impl NetChip {
         if lcdc.ppu_reset {
             self.scan.reset();
         }
-        let save = self
-            .scan
-            .save(
-                self.lcd.wosu,
-                self.render.oam.second_even,
-                self.lcd.ly,
-                lcdc.tall,
-            )
-            .map_or(0, |slot| 1 << slot);
+        let save = self.scan.save(
+            self.lcd.wosu,
+            self.render.oam.second_even,
+            self.lcd.ly,
+            lcdc.tall,
+        );
+        let save = match save {
+            Some(slot) => 1 << slot,
+            None => 0,
+        };
         (self.mode2(), save)
     }
 
@@ -376,7 +390,7 @@ impl NetChip {
     fn step_bus(
         &mut self,
         phase: Phase,
-        clocks: ClockOutputs,
+        clock_out: ClockOutputs,
         inputs: ChipInputs,
         memories: &mut ChipMemories,
     ) -> BusOutputs {
@@ -386,15 +400,15 @@ impl NetChip {
             write: inputs.write_in_phase,
             mreq: inputs.mreq_in_phase,
             data: inputs.data,
-            clk_t4: clocks.clk_t4,
-            exec_phase: clocks.exec_phase,
-            cpu_wr_sync: clocks.cpu_wr_sync,
-            cpu_ext_cs_en: clocks.cpu_ext_cs_en,
-            clk_1mhz: clocks.clk_1mhz,
+            clk_t4: clock_out.clk_t4,
+            exec_phase: clock_out.exec_phase,
+            cpu_wr_sync: clock_out.cpu_wr_sync,
+            cpu_ext_cs_en: clock_out.cpu_ext_cs_en,
+            clk_1mhz: clock_out.clk_1mhz,
             starts_a: matches!(phase, Phase::A),
-            reset2: clocks.reset2,
-            reset: clocks.reset,
-            dma_addr_ext: self.dma.run && !self.dma_from_vram(),
+            reset2: clock_out.reset2,
+            reset: clock_out.reset,
+            dma_addr_ext: self.dma.run & !self.dma_from_vram(),
             dma_addr: u16::from_be_bytes([self.dma.source, self.dma.count]),
             div: self.timer.count,
             p10_13: inputs.p10_13,
@@ -443,19 +457,19 @@ impl NetChip {
     /// then OAM's latches, with the sprite fetch's new strobes.
     fn step_render(
         &mut self,
-        clocks: ClockOutputs,
+        clock_out: ClockOutputs,
         lcdc: Lcdc,
         save: u16,
         inputs: ChipInputs,
         bus: BusOutputs,
         vram: &mut [u8; 0x2000],
     ) {
-        let line_start = self.scan.line_start() || lcdc.ppu_reset;
+        let line_start = self.scan.line_start() | lcdc.ppu_reset;
         self.render.edge(
             RenderInputs {
                 clk: self.clocks.clk,
                 ppu_reset: lcdc.ppu_reset,
-                hard_reset: clocks.reset2,
+                hard_reset: clock_out.reset2,
                 hclk: self.lcd.vena,
                 mode1: self.lcd.mode1,
                 ly: self.lcd.ly,
@@ -466,13 +480,13 @@ impl NetChip {
                 rd: inputs.read,
                 non_vram_mreq: bus.non_vram_mreq,
                 write: inputs.write,
-                cpu_wr_sync: clocks.cpu_wr_sync,
-                cpu_ext_cs_en: clocks.cpu_ext_cs_en,
-                clk_t4: clocks.clk_t4,
-                vram_to_oam: self.dma.run && self.dma_from_vram(),
+                cpu_wr_sync: clock_out.cpu_wr_sync,
+                cpu_ext_cs_en: clock_out.cpu_ext_cs_en,
+                clk_t4: clock_out.clk_t4,
+                vram_to_oam: self.dma.run & self.dma_from_vram(),
                 dma_addr: u16::from_be_bytes([self.dma.source, self.dma.count]),
                 line_start,
-                stop_scan: self.scan.stop_scan() && !line_start,
+                stop_scan: self.scan.stop_scan() & !line_start,
                 ceno: self.scan.ceno,
                 save,
                 // The Y comparator's difference, Y - LY - 1: its low four bits.
@@ -480,7 +494,7 @@ impl NetChip {
                 wuvu: self.lcd.wuvu,
                 wosu: self.lcd.wosu,
                 dma_phi: self.dma_phi,
-                dma_addr_ext: self.dma.run && !self.dma_from_vram(),
+                dma_addr_ext: self.dma.run & !self.dma_from_vram(),
                 d: bus.pins.d,
                 dma_run: self.dma.run,
                 dma_index: self.dma.count,
@@ -493,7 +507,7 @@ impl NetChip {
 
     /// A read: the AND of what drives the bus from E to H, which the core
     /// takes in H. `flags_before` is IF as the phase found it.
-    fn step_read(
+    const fn step_read(
         &mut self,
         phase: Phase,
         mode2: bool,
@@ -501,35 +515,42 @@ impl NetChip {
         inputs: ChipInputs,
         bus: BusOutputs,
     ) -> Option<u8> {
-        let shown = self
-            .control
-            .read(inputs.addr)
-            .or_else(|| self.lcd.read(inputs.addr, mode2, self.render.mode3))
-            .or_else(|| self.render.read(inputs.addr))
-            .or_else(|| self.render.read_vram())
-            .or_else(|| self.render.oam.read(&self.render.oam_inputs()))
-            .or_else(|| (inputs.addr == 0xFF46).then_some(self.dma.source))
-            .or(bus.data_out)
-            .or_else(|| self.read_timer_if(phase, flags_before, inputs.addr))
-            .or(inputs.apu)
-            // Nothing else drives the precharged bus: VRAM and OAM while the
-            // PPU or OAM DMA holds them, the addresses nothing decodes.
-            .or_else(|| {
-                (inputs.addr >= 0xFE00 || (0x8000..=0x9FFF).contains(&inputs.addr)).then_some(0xFF)
-            });
+        // The block that decodes the address drives the bus.
+        let addr = inputs.addr;
+        let mut shown = self.control.read(addr);
+        shown = first_of(shown, self.lcd.read(addr, mode2, self.render.mode3));
+        shown = first_of(shown, self.render.read(addr));
+        shown = first_of(shown, self.render.read_vram());
+        shown = first_of(shown, self.render.oam.read(&self.render.oam_inputs()));
+        if addr == 0xFF46 {
+            shown = first_of(shown, Some(self.dma.source));
+        }
+        shown = first_of(shown, bus.data_out);
+        shown = first_of(shown, self.read_timer_if(phase, flags_before, addr));
+        shown = first_of(shown, inputs.apu);
+        // Nothing else drives the precharged bus: VRAM and OAM while the
+        // PPU or OAM DMA holds them, the addresses nothing decodes.
+        if (addr >= 0xFE00) | ((addr >= 0x8000) & (addr <= 0x9FFF)) {
+            shown = first_of(shown, Some(0xFF));
+        }
         // The bus is precharged high; what drives it pulls bits low.
-        let driven = |held: Option<u8>| match (held, shown) {
-            (Some(held), Some(byte)) => Some(held & byte),
-            (held, None) => held,
-            (None, byte) => byte,
+        self.read_bus = if inputs.read {
+            match phase {
+                Phase::E => shown,
+                Phase::F | Phase::G | Phase::H => match (self.read_bus, shown) {
+                    (Some(held), Some(byte)) => Some(held & byte),
+                    (held, None) => held,
+                    (None, byte) => byte,
+                },
+                Phase::A | Phase::B | Phase::C | Phase::D => None,
+            }
+        } else {
+            None
         };
-        self.read_bus = match (inputs.read, phase) {
-            (true, Phase::E) => shown,
-            (true, Phase::F | Phase::G | Phase::H) => driven(self.read_bus),
-            _ => None,
-        };
-        (inputs.read && matches!(phase, Phase::H))
-            .then_some(self.read_bus)
-            .flatten()
+        if inputs.read & matches!(phase, Phase::H) {
+            self.read_bus
+        } else {
+            None
+        }
     }
 }

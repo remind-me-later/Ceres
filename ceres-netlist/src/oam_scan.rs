@@ -62,7 +62,7 @@ impl NetScan {
     #[must_use]
     pub const fn y_match(y: u8, ly: u8, tall: bool) -> bool {
         let difference = y as u16 + !ly as u16;
-        difference & 0x100 != 0 && difference & 0xF0 == 0 && (tall || difference & 8 != 0)
+        (difference & 0x100 != 0) & (difference & 0xF0 == 0) & (tall | (difference & 8 != 0))
     }
 
     /// From the start until `anel` follows, the line starts over: the
@@ -70,14 +70,14 @@ impl NetScan {
     // @hw die: BYHA ATEJ, ANOM
     #[must_use]
     pub const fn line_start(&self) -> bool {
-        self.start_scan && !self.anel
+        self.start_scan & !self.anel
     }
 
     /// The scan is done: mode 3 starts.
     // @hw die: BEBU AVAP
     #[must_use]
     pub const fn stop_scan(&self) -> bool {
-        self.byba && !self.doba && !self.line_start()
+        self.byba & !self.doba & !self.line_start()
     }
 
     /// A sprite on the line is saved while `wosu` is low, with its `y`, LY
@@ -85,14 +85,14 @@ impl NetScan {
     // @hw die: CARE DYTY
     #[must_use]
     pub const fn save_enable(&self, wosu: bool, y: u8, ly: u8, tall: bool) -> bool {
-        !wosu && self.ceno && Self::y_match(y, ly, tall)
+        !wosu & self.ceno & Self::y_match(y, ly, tall)
     }
 
     /// The slot a save goes to, if the store has room.
     // @hw die: the decoders of the slots
     #[must_use]
     pub const fn save(&self, wosu: bool, y: u8, ly: u8, tall: bool) -> Option<u8> {
-        if self.save_enable(wosu, y, ly, tall) && self.count < SLOTS {
+        if self.save_enable(wosu, y, ly, tall) & (self.count < SLOTS) {
             Some(self.count)
         } else {
             None
@@ -108,25 +108,25 @@ impl NetScan {
         } else {
             // @hw die: DEZY (dffr): the save as the clock falls
             let saving = self.save_enable(clocks.wosu_before, y, clocks.ly, tall);
-            let not_saving_rose = !saving && !self.not_saving;
+            let not_saving_rose = !saving & !self.not_saving;
             self.not_saving = !saving;
             let full = self.count & 0b1010 == 0b1010;
-            if not_saving_rose && !full {
+            if not_saving_rose & !full {
                 // @hw die: BESE..DYBE (dffr)
                 self.count += 1;
             }
-            if !clocks.wuvu_before && clocks.wuvu_after {
+            if !clocks.wuvu_before & clocks.wuvu_after {
                 // @hw die: CATU (dffr), ABOV ALES XYVO; CENO (dffr); BYBA
                 // (dffr); YFEL..FONY (dffr), GAVA
                 let last = self.index == LAST;
-                self.start_scan = clocks.vclk && clocks.ly & 0x90 != 0x90;
+                self.start_scan = clocks.vclk & (clocks.ly & 0x90 != 0x90);
                 self.ceno = self.scanning;
                 self.byba = last;
                 if !last {
                     self.index += 1;
                 }
             }
-            if clocks.wuvu_before && !clocks.wuvu_after {
+            if clocks.wuvu_before & !clocks.wuvu_after {
                 // @hw die: ANEL (dffr), AWOH
                 self.anel = self.start_scan;
             }

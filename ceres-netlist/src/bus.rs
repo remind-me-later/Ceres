@@ -15,16 +15,17 @@
 /// xorshift with `seed` (`arbitrary` in `hdl/board/gameboy.vhd`; work RAM
 /// has seed 1, VRAM seed 2).
 #[must_use]
+#[expect(clippy::cast_possible_truncation, reason = "the low byte")]
 pub fn arbitrary(length: usize, seed: u32) -> Vec<u8> {
     let mut x = seed;
-    (0..length)
-        .map(|_| {
-            x ^= x << 13;
-            x ^= x >> 17;
-            x ^= x << 5;
-            x.to_le_bytes()[0]
-        })
-        .collect()
+    let mut bytes = vec![0; length];
+    for i in 0..length {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        bytes[i] = x as u8;
+    }
+    bytes
 }
 
 /// The cartridge's MBC, from the header's byte 0147.
@@ -52,12 +53,18 @@ impl Cartridge {
     /// A cartridge with `rom`, its MBC and RAM as its header says.
     #[must_use]
     pub fn new(rom: Vec<u8>) -> Self {
-        let mbc = match rom.get(0x147) {
-            Some(0x01..=0x03) => Mbc::Mbc1,
-            Some(0x19..=0x1E) => Mbc::Mbc5,
+        // A ROM too short for a header has neither.
+        let (kind, ram_size) = if rom.len() > 0x149 {
+            (rom[0x147], rom[0x149])
+        } else {
+            (0, 0)
+        };
+        let mbc = match kind {
+            0x01..=0x03 => Mbc::Mbc1,
+            0x19..=0x1E => Mbc::Mbc5,
             _ => Mbc::None,
         };
-        let has_ram = rom.get(0x149).is_some_and(|&size| size != 0);
+        let has_ram = ram_size != 0;
         Self {
             rom,
             ram: vec![0; 0x40000],
@@ -95,30 +102,30 @@ impl Cartridge {
                 (a & 0x7FFF) as usize,
                 a & 0x8000 == 0,
                 (a & 0x1FFF) as usize,
-                !cs_n && a & 0x2000 != 0,
+                !cs_n & (a & 0x2000 != 0),
             ),
             Mbc::Mbc1 => {
-                let bank = if reset || !a14 {
+                let bank = if reset | !a14 {
                     0
                 } else if self.rom_bank.is_multiple_of(0x20) {
                     1
                 } else {
                     (self.rom_bank & 0x1F) as usize
                 };
-                let upper = if self.mode || a14 {
+                let upper = if self.mode | a14 {
                     (self.ram_bank & 3) as usize
                 } else {
                     0
                 };
                 (
                     (upper * 32 + bank) * 0x4000 + low,
-                    reset || (a & 0x8000 == 0 && !rd_n),
+                    reset | ((a & 0x8000 == 0) & !rd_n),
                     upper * 0x2000 + (a & 0x1FFF) as usize,
-                    self.enabled && !cs_n && !a14,
+                    self.enabled & !cs_n & !a14,
                 )
             }
             Mbc::Mbc5 => {
-                let bank = if reset || !a14 {
+                let bank = if reset | !a14 {
                     0
                 } else {
                     self.rom_bank as usize
@@ -132,7 +139,7 @@ impl Cartridge {
                     bank * 0x4000 + low,
                     a & 0x8000 == 0,
                     ram,
-                    self.enabled && !cs_n && !a14,
+                    self.enabled & !cs_n & !a14,
                 )
             }
         }
@@ -160,11 +167,8 @@ impl Cartridge {
             Mbc::None => {}
         }
         let (_, _, ram_offset, ram_selected) = self.decode(a, true, cs_n, false);
-        if self.has_ram
-            && ram_selected
-            && let Some(cell) = self.ram.get_mut(ram_offset)
-        {
-            *cell = d;
+        if self.has_ram & ram_selected & (ram_offset < self.ram.len()) {
+            self.ram[ram_offset] = d;
         }
     }
 
@@ -175,10 +179,19 @@ impl Cartridge {
         let (rom_offset, rom_selected, ram_offset, ram_selected) =
             self.decode(pins.a, pins.rd_n, pins.cs_n, reset);
         let reads = !pins.rd_n;
-        if self.has_ram && ram_selected && reads && pins.wr_n {
-            self.ram.get(ram_offset).copied()
-        } else if !self.rom.is_empty() && rom_selected && reads {
-            Some(self.rom.get(rom_offset).copied().unwrap_or(0xFF))
+        if self.has_ram & ram_selected & reads & pins.wr_n {
+            if ram_offset < self.ram.len() {
+                Some(self.ram[ram_offset])
+            } else {
+                None
+            }
+        } else if (self.rom.len() > 0) & rom_selected & reads {
+            // Past the ROM's end, nothing drives the pins.
+            Some(if rom_offset < self.rom.len() {
+                self.rom[rom_offset]
+            } else {
+                0xFF
+            })
         } else {
             None
         }
@@ -205,15 +218,17 @@ impl NetBoard {
     /// What the board's chips drive on the data pins, if anything.
     #[must_use]
     pub fn drive(&self, pins: &BusPins, reset: bool) -> Option<u8> {
-        let work_ram = (!pins.cs_n && pins.a & 0x4000 != 0 && !pins.rd_n && pins.wr_n)
-            .then(|| self.work_ram[usize::from(pins.a & 0x1FFF)]);
-        work_ram.or_else(|| self.cartridge.read(pins, reset))
+        if !pins.cs_n & (pins.a & 0x4000 != 0) & !pins.rd_n & pins.wr_n {
+            Some(self.work_ram[usize::from(pins.a & 0x1FFF)])
+        } else {
+            self.cartridge.read(pins, reset)
+        }
     }
 
     /// The rise of /WR: work RAM takes the data pins if selected, and the
     /// cartridge sees the write.
     pub fn write(&mut self, pins: &BusPins) {
-        if !pins.cs_n && pins.a & 0x4000 != 0 {
+        if !pins.cs_n & (pins.a & 0x4000 != 0) {
             self.work_ram[usize::from(pins.a & 0x1FFF)] = pins.d;
         }
         self.cartridge.write(pins.a, pins.d, pins.cs_n);
@@ -232,7 +247,7 @@ pub struct BusPins {
 
 /// What the bus side takes in, in a phase: the CPU core's access, the
 /// clocks', OAM DMA's, the divider, the joypad's and the serial port's pins.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the strobes' levels")]
 pub struct BusInputs {
     /// The core's address, its read and write, its memory request, and the
@@ -271,7 +286,7 @@ pub struct BusInputs {
 }
 
 /// The netlist's bus side, between phases.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
 pub struct NetBus {
     /// HRAM (FF80 to FFFE).
@@ -318,7 +333,7 @@ pub struct Before {
 }
 
 /// What a phase of the bus side gives the rest of the chip and the board.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the strobes' levels")]
 pub struct BusOutputs {
     pub pins: BusPins,
@@ -387,20 +402,20 @@ impl NetBus {
 
         // The boot ROM's mapping: FF50 bit 0 unmaps it, as the write ends.
         // @hw die: the boot ROM's FF50 latch
-        let write_ff50 = cpu_wr && addr == 0xFF50;
+        let write_ff50 = cpu_wr & (addr == 0xFF50);
         if i.reset2 {
             self.unmapped = false;
-        } else if b.write_ff50 && !write_ff50 {
+        } else if b.write_ff50 & !write_ff50 {
             self.unmapped |= b.data & 1 != 0;
         } else {
             // The flip-flop holds.
         }
-        let boot_sel = !self.unmapped && addr >> 8 == 0;
+        let boot_sel = !self.unmapped & (addr >> 8 == 0);
 
         // HRAM.
         let hram_index = (addr & 0x7F) as usize;
-        let hram_selected = addr >> 7 == 0x1FF && addr != 0xFFFF;
-        if hram_selected && cpu_wr {
+        let hram_selected = (addr >> 7 == 0x1FF) & (addr != 0xFFFF);
+        if hram_selected & cpu_wr {
             self.high_ram[hram_index] = i.data;
         }
 
@@ -408,10 +423,10 @@ impl NetBus {
         // @hw die: SORE TEVY TEXO; ALOR..NYRE (dlatch); SOBY SEPY; TYNU TUMA
         // TOZA TYHO; MOCA LAGU LYWE MOTY; TYMU UGAC URUN..USUF; SOMA..SAZY
         let vram_addr = addr >> 13 == 0b100;
-        let non_vram_mreq = i.mreq && !vram_addr;
+        let non_vram_mreq = i.mreq & !vram_addr;
         if non_vram_mreq {
             self.latched_addr = addr & 0x7FFF;
-        } else if i.starts_a && b.non_vram_mreq {
+        } else if i.starts_a & b.non_vram_mreq {
             // As an access ends, the core changes its address's high byte
             // before its request falls, and the low byte after: the latches
             // take the high byte of the precharged bus, 00.
@@ -422,7 +437,7 @@ impl NetBus {
         } else {
             // The latches hold.
         }
-        let a15_cpu = !(i.cpu_ext_cs_en && addr & 0x8000 == 0 && !boot_sel);
+        let a15_cpu = !(i.cpu_ext_cs_en & (addr & 0x8000 == 0) & !boot_sel);
         let a = if i.dma_addr_ext {
             i.dma_addr
         } else {
@@ -431,11 +446,11 @@ impl NetBus {
         let cs = if i.dma_addr_ext {
             i.dma_addr & 0x8000 != 0
         } else {
-            i.cpu_ext_cs_en && (addr >> 13 == 0b101 || addr >> 14 == 0b11) && addr >> 9 != 0x7F
+            i.cpu_ext_cs_en & ((addr >> 13 == 0b101) | (addr >> 14 == 0b11)) & (addr >> 9 != 0x7F)
         };
-        let pins_out = non_vram_mreq && i.write;
-        let rd_n = !i.dma_addr_ext && pins_out;
-        let wr_n = !(!i.dma_addr_ext && i.cpu_wr_sync && non_vram_mreq);
+        let pins_out = non_vram_mreq & i.write;
+        let rd_n = !i.dma_addr_ext & pins_out;
+        let wr_n = !(!i.dma_addr_ext & i.cpu_wr_sync & non_vram_mreq);
         let mut pins = BusPins {
             a,
             d: 0xFF,
@@ -451,24 +466,22 @@ impl NetBus {
         } else {
             board.drive(&pins, i.reset)
         };
-        let pins_driven = pins_out || board_drives.is_some();
-        pins.d = if pins_out {
-            i.data
-        } else if let (Some(_), true, None) = (i.latch_glitch, i.write, board_drives) {
+        let pins_driven = pins_out | board_drives.is_some();
+        pins.d = match (pins_out, i.latch_glitch, i.write, board_drives) {
             // The core's pulse also drives the pins with the chip's data
             // bus for a moment, as a write: the keeper holds that.
-            i.data
-        } else {
-            board_drives.unwrap_or(b.pins.d)
+            (true, _, _, _) | (false, Some(_), true, None) => i.data,
+            (false, _, _, Some(byte)) => byte,
+            (false, _, _, None) => b.pins.d,
         };
         // The board's chips take the data pins as /WR rises.
-        if !b.pins.wr_n && pins.wr_n {
+        if !b.pins.wr_n & pins.wr_n {
             board.write(&b.pins);
         }
         if i.reset {
             board.cartridge.reset();
         }
-        let read_pins = i.read && non_vram_mreq && i.clk_t4;
+        let read_pins = i.read & non_vram_mreq & i.clk_t4;
         if !read_pins {
             self.latched_data = pins.d;
             self.latched_floating = !pins_driven;
@@ -477,11 +490,11 @@ impl NetBus {
         // The joypad.
         // @hw die: the joypad's P1 flip-flops, read latch, KEVU..; the
         // debounce, the wake-up latch
-        let write_p1 = cpu_wr && addr == 0xFF00;
-        let read_p1 = cpu_rd && addr == 0xFF00;
+        let write_p1 = cpu_wr & (addr == 0xFF00);
+        let read_p1 = cpu_rd & (addr == 0xFF00);
         if i.reset2 {
             self.p1 = 0;
-        } else if b.write_p1 && !write_p1 {
+        } else if b.write_p1 & !write_p1 {
             self.p1 = b.data;
         } else {
             // The flip-flops hold.
@@ -504,24 +517,27 @@ impl NetBus {
 
         // The serial port.
         // @hw die: the serial port's SB, SC, its clock and counter
-        let write_sb = cpu_wr && addr == 0xFF01;
-        let write_sc = cpu_wr && addr == 0xFF02;
+        let write_sb = cpu_wr & (addr == 0xFF01);
+        let write_sc = cpu_wr & (addr == 0xFF02);
         if i.reset2 {
             self.internal_clock = false;
             self.transfer = false;
         } else {
-            if b.write_sc && !write_sc {
+            if b.write_sc & !write_sc {
                 self.transfer = b.data & 0x80 != 0;
             }
-            if b.write_sc && !write_sc {
+            if b.write_sc & !write_sc {
                 self.internal_clock = b.data & 1 != 0;
             }
         }
         let div5 = i.div & 0x20 != 0;
         if write_sc {
             self.half = Some(false);
-        } else if b.div5 && !div5 {
-            self.half = self.half.map(|half| !half);
+        } else if b.div5 & !div5 {
+            self.half = match self.half {
+                Some(half) => Some(!half),
+                None => None,
+            };
         } else {
             // The flip-flop holds.
         }
@@ -529,7 +545,10 @@ impl NetBus {
             true
         } else if self.internal_clock {
             // An unknown half clock: as the model's 'U', no edge.
-            self.half.is_none_or(|half| !half)
+            match self.half {
+                Some(half) => !half,
+                None => true,
+            }
         } else {
             i.sck
         };
@@ -537,21 +556,21 @@ impl NetBus {
             self.sb = 0;
         } else if write_sb {
             self.sb = i.data;
-        } else if serial_clock && !b.serial_clock {
+        } else if serial_clock & !b.serial_clock {
             self.sb = self.sb << 1 | u8::from(i.sin);
         } else {
             // The shift register holds.
         }
         if i.reset2 {
             self.ser_out = false;
-        } else if !serial_clock && b.serial_clock {
+        } else if !serial_clock & b.serial_clock {
             self.ser_out = self.sb & 0x80 != 0;
         } else {
             // The flip-flop holds.
         }
-        if write_sc || i.reset2 {
+        if write_sc | i.reset2 {
             self.count = 0;
-        } else if serial_clock && !b.serial_clock {
+        } else if serial_clock & !b.serial_clock {
             self.count = (self.count + 1) & 0x0F;
         } else {
             // The counter holds.
@@ -567,8 +586,13 @@ impl NetBus {
             Some(0xFF)
         } else if read_pins {
             Some(self.latched_data)
-        } else if cpu_rd && boot_sel {
-            boot_rom.get(usize::from(addr & 0x0FFF)).copied()
+        } else if cpu_rd & boot_sel {
+            let at = usize::from(addr & 0x0FFF);
+            if at < boot_rom.len() {
+                Some(boot_rom[at])
+            } else {
+                None
+            }
         } else if cpu_rd {
             match addr {
                 0xFF50 => Some(0xFE | u8::from(self.unmapped)),
@@ -599,7 +623,7 @@ impl NetBus {
             boot_sel,
             data_out,
             int_serial: self.count & 8 != 0,
-            int_jp: self.jp_history & 1 != 0 && self.jp_history & 8 != 0,
+            int_jp: (self.jp_history & 1 != 0) & (self.jp_history & 8 != 0),
             cpu_wakeup: self.jp_wakeup,
             sck: if self.internal_clock {
                 serial_clock

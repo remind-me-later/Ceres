@@ -28,7 +28,7 @@ impl OamInputs {
     // @hw die: ACYL BOGE
     #[must_use]
     pub const fn mode2(self) -> bool {
-        self.scanning && !self.run
+        self.scanning & !self.run
     }
 
     /// The first latches are open: the scan reads, while `wosu` is low, or
@@ -36,7 +36,7 @@ impl OamInputs {
     // @hw die: BOTA, AJEP XUJA ASYT BODE
     #[must_use]
     pub const fn latch_open(self) -> bool {
-        (self.mode2() && !self.wosu) || self.fetch_read
+        (self.mode2() & !self.wosu) | self.fetch_read
     }
 
     /// The RAM is precharged, and the second latches take the first: out of
@@ -45,9 +45,7 @@ impl OamInputs {
     // @hw die: CUFE XUJY AVER BYCU COTA
     #[must_use]
     pub const fn precharge(self) -> bool {
-        (!self.run || self.dma_phi)
-            && !self.fetch_hold
-            && !(self.mode2() && !(self.wosu && self.wuvu))
+        (!self.run | self.dma_phi) & !self.fetch_hold & !(self.mode2() & !(self.wosu & self.wuvu))
     }
 }
 
@@ -199,9 +197,9 @@ impl NetOam {
         OamWires {
             fexx: i.addr >> 8 == 0xFE,
             // not dma_run and not mode2 and not (mode3 and not dma_run)
-            free: !i.dma_run && !i.mode2 && !i.mode3,
-            cpu_access: w.fexx && w.free,
-            addr: if !i.mode2 && !i.mode3 && !i.dma_run {
+            free: !i.dma_run & !i.mode2 & !i.mode3,
+            cpu_access: w.fexx & w.free,
+            addr: if !i.mode2 & !i.mode3 & !i.dma_run {
                 i.addr as u8
             } else if i.dma_run {
                 i.dma_index
@@ -211,17 +209,17 @@ impl NetOam {
                 i.render_index << 2 | 3
             },
             word: w.addr >> 1,
-            dma_write: i.dma_run && !i.dma_phi && !self.maka,
-            write: (w.cpu_access && i.wr) || w.dma_write,
-            write_odd: w.write && w.addr & 1 != 0,
-            write_even: w.write && w.addr & 1 == 0,
-            cpu_read_oam: w.fexx && i.rd && !i.clk_t4,
-            latch_open: (i.mode2 && !i.wosu) || i.fetch_read || w.cpu_read_oam,
-            precharge: (!(w.fexx || i.dma_run) || i.dma_phi)
-                && !i.fetch_hold
-                && !(i.mode2 && !(i.wosu && i.wuvu)),
-            word_line: (w.latch_open || w.write) && !w.precharge,
-            read_ram: w.latch_open && w.word_line,
+            dma_write: i.dma_run & !i.dma_phi & !self.maka,
+            write: (w.cpu_access & i.wr) | w.dma_write,
+            write_odd: w.write & (w.addr & 1 != 0),
+            write_even: w.write & (w.addr & 1 == 0),
+            cpu_read_oam: w.fexx & i.rd & !i.clk_t4,
+            latch_open: (i.mode2 & !i.wosu) | i.fetch_read | w.cpu_read_oam,
+            precharge: (!(w.fexx | i.dma_run) | i.dma_phi)
+                & !i.fetch_hold
+                & !(i.mode2 & !(i.wosu & i.wuvu)),
+            word_line: (w.latch_open | w.write) & !w.precharge,
+            read_ram: w.latch_open & w.word_line,
         }
     }
 
@@ -250,12 +248,12 @@ impl NetOam {
     pub const fn bus_drivers(&self, i: &NetOamInputs) -> Option<(u8, u8)> {
         let w = &self.wires;
         // The CPU's access, unless WUJE (after its write) holds it off.
-        let cpu_drives = w.cpu_access && !self.wuje;
+        let cpu_drives = w.cpu_access & !self.wuje;
         if i.dma_addr_ext {
             Some((i.d, i.d))
         } else if i.vram_to_oam {
             Some((i.md, i.md))
-        } else if cpu_drives || (w.free && !w.fexx) {
+        } else if cpu_drives | (w.free & !w.fexx) {
             Some((i.data, i.data))
         } else if w.read_ram {
             Some((self.bit_lines_even, self.bit_lines_odd))
@@ -274,7 +272,7 @@ impl NetOam {
         let (cur, w) = (self, &self.wires);
         let mut next = *cur;
         next.wires = cur.next_wires(i);
-        if w.fexx && i.wr {
+        if w.fexx & i.wr {
             next.wuje = false;
         } else if i.dma_phi {
             next.wuje = true;
@@ -323,7 +321,7 @@ impl NetOam {
     #[must_use]
     pub const fn read(&self, i: &NetOamInputs) -> Option<u8> {
         let w = &self.wires;
-        if w.cpu_access && i.rd && i.clk_t4 {
+        if w.cpu_access & i.rd & i.clk_t4 {
             Some(if i.addr & 1 != 0 {
                 self.first_odd
             } else {

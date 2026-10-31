@@ -68,10 +68,10 @@ impl NetLcd {
     /// SUKO: the STAT interrupt's line, with the HBlank source `mode0`.
     #[must_use]
     pub const fn int_stat(&self, mode0: bool) -> bool {
-        (self.stat_enable & STAT_IF_LYC_B != 0 && self.lyc_match)
-            || (self.stat_enable & STAT_IF_OAM_B != 0 && self.vclk && !self.mode1)
-            || (self.stat_enable & STAT_IF_VBLANK_B != 0 && self.mode1)
-            || (self.stat_enable & STAT_IF_HBLANK_B != 0 && mode0)
+        ((self.stat_enable & STAT_IF_LYC_B != 0) & self.lyc_match)
+            | ((self.stat_enable & STAT_IF_OAM_B != 0) & self.vclk & !self.mode1)
+            | ((self.stat_enable & STAT_IF_VBLANK_B != 0) & self.mode1)
+            | ((self.stat_enable & STAT_IF_HBLANK_B != 0) & mode0)
     }
 
     /// The next edge of the PPU's clock: whether the STAT interrupt's line
@@ -95,8 +95,8 @@ impl NetLcd {
         self.wuvu = !self.wuvu;
 
         // hclk's edge: what it clocks.
-        let hclk_rose = !old_vena && self.vena;
-        let hclk_fell = old_vena && !self.vena;
+        let hclk_rose = !old_vena & self.vena;
+        let hclk_fell = old_vena & !self.vena;
         let (old_vclk, old_nype) = (self.vclk, self.nype);
         if hclk_rose {
             // @hw die: SAXO..TYRY (dffr); NYPE (dffr); ROPO (dffr)
@@ -119,18 +119,18 @@ impl NetLcd {
             // vclk holds LX at 0.
             self.lx = 0;
         }
-        if !old_vclk && self.vclk && !self.line_153 {
+        if !old_vclk & self.vclk & !self.line_153 {
             // @hw die: MUWY..LAFO (dffr)
             self.ly = self.ly.wrapping_add(1);
         }
-        if old_vclk && !self.vclk {
+        if old_vclk & !self.vclk {
             self.line_parity = !self.line_parity;
         }
-        if !old_nype && self.nype {
+        if !old_nype & self.nype {
             // @hw die: XYVO, POPU (dffr)
             self.mode1 = self.ly & 0x90 == 0x90;
         }
-        if old_nype && !self.nype {
+        if old_nype & !self.nype {
             // @hw die: NOKO MYTA (dffr)
             self.line_153 = self.ly == 153;
             self.first_line = self.ly == 0;
@@ -138,7 +138,7 @@ impl NetLcd {
         Self::stage(self.int_stat(mode0), &mut level, &mut rose);
 
         // What mode 1 and line 153 clock and reset.
-        if !old_mode1 && self.mode1 {
+        if !old_mode1 & self.mode1 {
             self.frame = !self.frame;
         }
         if self.line_153 {
@@ -192,8 +192,8 @@ impl NetLcd {
             0xFF41 => Some(
                 0x80 | self.stat_enable
                     | if self.lyc_match { 4 } else { 0 }
-                    | if mode2 || mode3 { 2 } else { 0 }
-                    | if mode3 || self.mode1 { 1 } else { 0 },
+                    | if mode2 | mode3 { 2 } else { 0 }
+                    | if mode3 | self.mode1 { 1 } else { 0 },
             ),
             0xFF44 => Some(self.ly),
             0xFF45 => Some(self.lyc),
@@ -203,7 +203,7 @@ impl NetLcd {
 
     /// The line after a stage of an edge: a rise counts.
     const fn stage(now: bool, level: &mut bool, rose: &mut bool) {
-        *rose |= now && !*level;
+        *rose |= now & !*level;
         *level = now;
     }
 }

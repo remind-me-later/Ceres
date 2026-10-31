@@ -32,7 +32,7 @@
 use crate::oam::{NetOam, NetOamInputs};
 
 /// What render takes in.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the inputs' levels")]
 pub struct RenderInputs {
     /// The PPU's clock (the chip's).
@@ -87,9 +87,44 @@ pub struct RenderInputs {
     pub dma_addr: u16,
 }
 
+flat_eq!(RenderInputs {
+    clk,
+    ppu_reset,
+    hard_reset,
+    hclk,
+    mode1,
+    ly,
+    lcdc,
+    addr,
+    wr,
+    data,
+    line_start,
+    stop_scan,
+    ceno,
+    save,
+    scan_line,
+    wuvu,
+    wosu,
+    dma_run,
+    dma_index,
+    scanning,
+    scan_index,
+    dma_phi,
+    dma_addr_ext,
+    d,
+    rd,
+    non_vram_mreq,
+    write,
+    cpu_wr_sync,
+    cpu_ext_cs_en,
+    clk_t4,
+    vram_to_oam,
+    dma_addr,
+});
+
 /// The wires: render's concurrent statements, each a delta cycle behind
 /// what it is made of.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's gates")]
 pub struct Wires {
     pub stop_mode3: bool,
@@ -149,17 +184,63 @@ pub struct Wires {
     pub oam_driver: Option<(u8, u8)>,
 }
 
+flat_eq!(Wires {
+    stop_mode3,
+    dot,
+    segu,
+    clkpipe,
+    fetch_reset,
+    fetch_done,
+    fetch_clock,
+    myso,
+    bg_tile_clock,
+    wy_match,
+    wxy_match,
+    win_reset,
+    win_start,
+    wx_clk,
+    fine_reset,
+    fine_done,
+    restart,
+    fetch_start,
+    step_reset,
+    sycu,
+    loaded,
+    sprite_cycles,
+    sp_data,
+    sprite_on,
+    rendering,
+    enabled,
+    matches,
+    selected,
+    x_match,
+    line,
+    oam_index,
+    mode2,
+    render_ma,
+    cpu_vram,
+    cpu_write,
+    mcs_n,
+    mrd_n,
+    mwr_n,
+    md_pins,
+    md_driven,
+    md,
+    oam_driver,
+});
+
 /// VRAM at power-on: the board's arbitrary bytes, from its 32-bit xorshift
 /// with seed 2 (`arbitrary` in `hdl/board/gameboy.vhd`).
 #[must_use]
+#[expect(clippy::cast_possible_truncation, reason = "the low byte")]
 pub fn vram_power_on() -> Box<[u8; 0x2000]> {
     let mut x: u32 = 2;
     let mut vram = Box::new([0; 0x2000]);
-    for byte in &mut *vram {
+    for i in 0..vram.len() {
         x ^= x << 13;
         x ^= x >> 17;
         x ^= x << 5;
-        *byte = x.to_le_bytes()[0];
+        vram[i] = x as u8;
     }
     vram
 }
@@ -185,7 +266,7 @@ pub struct NetSpriteStore {
 
 /// The netlist's render: its registers, flip-flops and latches, and its
 /// wires, as the last edge left them.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
 pub struct NetRender {
     /// SCY, SCX, WY, WX, BGP, OBP0, OBP1: latches, open while the CPU writes.
@@ -275,8 +356,73 @@ pub struct NetRender {
     pub inputs: RenderInputs,
 }
 
+flat_eq!(NetRender {
+    scy,
+    scx,
+    wy,
+    wx,
+    bgp,
+    obp0,
+    obp1,
+    mode3,
+    voga,
+    px,
+    px9,
+    fetch_count,
+    lyzu,
+    lovy,
+    fetching,
+    nyka,
+    pory,
+    pygo,
+    started,
+    bg_tile,
+    bg_low,
+    bg_shift_a,
+    bg_shift_b,
+    sary,
+    wy_latch,
+    pyco,
+    nunu,
+    nopa,
+    in_window,
+    win_x,
+    win_y,
+    rydy,
+    sovy,
+    fine,
+    puxa,
+    nyze,
+    paho,
+    discard,
+    ryfa,
+    rene,
+    line_started,
+    sobu,
+    suda,
+    sprite_step,
+    busy,
+    tobu,
+    vonu,
+    seba,
+    tyfo,
+    sp_low_a,
+    sp_low_b,
+    sp_a,
+    sp_b,
+    sp_palette,
+    sp_priority,
+    store,
+    vram_ma,
+    render_settled,
+    md_kept,
+    oam,
+    wires,
+    inputs,
+});
+
 /// A flip-flop's change, `tco` after its clock's edge.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 enum Tx {
     Mode3(bool),
     Voga(bool),
@@ -328,6 +474,11 @@ enum Tx {
 }
 
 impl Tx {
+    /// Mode 3's rise.
+    const fn is_mode3_rise(self) -> bool {
+        matches!(self, Self::Mode3(true))
+    }
+
     /// The flip-flop it changes, so that a later change replaces it.
     const fn target(self) -> u8 {
         match self {
@@ -373,10 +524,20 @@ impl Tx {
     }
 }
 
+/// How many flip-flops (`Tx::target`) a change can be pending for.
+const TARGETS: usize = 38;
+
+/// No change is pending for a target.
+const NEVER: u32 = u32::MAX;
+
 /// The changes scheduled for later nanoseconds of an edge.
 struct Schedule {
-    /// (nanosecond, change), in the order they were made.
-    pending: Vec<(u32, Tx)>,
+    /// The nanosecond of the change pending for each flip-flop (by
+    /// `Tx::target`), `NEVER` if none, and the change. Each target changes
+    /// its own flip-flops, so the order in which a nanosecond's changes
+    /// apply does not matter.
+    due: [u32; TARGETS],
+    pending: [Tx; TARGETS],
     /// The nanosecond being settled.
     now: u32,
 }
@@ -384,21 +545,65 @@ struct Schedule {
 impl Schedule {
     /// A flip-flop's change, `tco` from now. As VHDL's inertial delay does,
     /// it replaces a change still pending for the same flip-flop.
-    fn after_tco(&mut self, tx: Tx) {
+    const fn after_tco(&mut self, tx: Tx) {
         self.after(1, tx);
     }
 
     /// A change `ns` from now, replacing one still pending.
-    fn after(&mut self, ns: u32, tx: Tx) {
-        self.pending.retain(|&(_, p)| p.target() != tx.target());
-        self.pending.push((self.now + ns, tx));
+    const fn after(&mut self, ns: u32, tx: Tx) {
+        let target = tx.target() as usize;
+        self.due[target] = self.now + ns;
+        self.pending[target] = tx;
     }
 
     /// A zero-delay assignment to a flip-flop (its reset) cancels what is
     /// pending for it.
-    fn cancel(&mut self, target: Tx) {
-        self.pending.retain(|&(_, p)| p.target() != target.target());
+    const fn cancel(&mut self, target: Tx) {
+        self.due[target.target() as usize] = NEVER;
     }
+
+    /// The nanosecond of the earliest change pending, `NEVER` if none.
+    const fn next_due(&self) -> u32 {
+        let mut first = NEVER;
+        let mut target = 0;
+        while target < TARGETS {
+            if self.due[target] < first {
+                first = self.due[target];
+            }
+            target += 1;
+        }
+        first
+    }
+
+    /// Mode 3's rise is pending.
+    const fn mode3_rises(&self) -> bool {
+        let target = Tx::Mode3(true).target() as usize;
+        (self.due[target] != NEVER) & self.pending[target].is_mode3_rise()
+    }
+}
+
+/// A byte with its bits in the other order: a sprite's row flipped in X
+/// (in operations Aeneas models: not `reverse_bits`).
+const fn flipped(byte: u8) -> u8 {
+    let mut out = 0;
+    let mut bit = 0;
+    while bit < 8 {
+        out |= (byte >> bit & 1) << (7 - bit);
+        bit += 1;
+    }
+    out
+}
+
+/// The lowest of the sprite store's slots whose bit is set in `bits`.
+const fn first_slot(bits: u16) -> Option<usize> {
+    let mut slot = 0;
+    while slot < 10 {
+        if bits & 1 << slot != 0 {
+            return Some(slot);
+        }
+        slot += 1;
+    }
+    None
 }
 
 /// When the other blocks' changes reach render: with the flip-flops, 1 ns
@@ -424,11 +629,11 @@ const PINS_AT: u32 = 2;
 const MAX_DELTAS: usize = 1000;
 
 const fn rose(before: bool, now: bool) -> bool {
-    !before && now
+    !before & now
 }
 
 const fn fell(before: bool, now: bool) -> bool {
-    before && !now
+    before & !now
 }
 
 impl NetRender {
@@ -441,7 +646,8 @@ impl NetRender {
     /// If render does not settle (a loop of its wires oscillates).
     pub fn edge(&mut self, inputs: RenderInputs, vram: &mut [u8; 0x2000]) {
         let mut schedule = Schedule {
-            pending: Vec::new(),
+            due: [NEVER; TARGETS],
+            pending: [Tx::Mode3(false); TARGETS],
             now: 0,
         };
         let mut prev = *self;
@@ -464,19 +670,18 @@ impl NetRender {
                 deltas += 1;
                 assert!(deltas < MAX_DELTAS, "render oscillates");
             }
-            // The next nanosecond: the inputs at 1 ns, and the flip-flops.
-            let inputs_due = [INPUTS_AT, SCAN_AT, SCAN_INDEX_AT, DATA_AT]
-                .into_iter()
-                .find(|&at| at > schedule.now);
-            let Some(at) = schedule
-                .pending
-                .iter()
-                .map(|&(at, _)| at)
-                .chain(inputs_due)
-                .min()
-            else {
+            // The next nanosecond: the inputs' next arrival, or the
+            // earliest change pending.
+            let arrivals = [INPUTS_AT, SCAN_AT, SCAN_INDEX_AT, DATA_AT];
+            let mut at = schedule.next_due();
+            for k in 0..arrivals.len() {
+                if (arrivals[k] > schedule.now) & (arrivals[k] < at) {
+                    at = arrivals[k];
+                }
+            }
+            if at == NEVER {
                 break;
-            };
+            }
             schedule.now = at;
             prev = *self;
             let was = self.inputs;
@@ -492,7 +697,7 @@ impl NetRender {
                     wr: was.wr,
                     d: was.d,
                     // stop_scan falls with doba, rises with byba.
-                    stop_scan: was.stop_scan && inputs.stop_scan,
+                    stop_scan: was.stop_scan & inputs.stop_scan,
                     ..inputs
                 };
             }
@@ -514,11 +719,11 @@ impl NetRender {
                 self.inputs.scanning = inputs.scanning;
                 self.inputs.stop_scan = inputs.stop_scan;
             }
-            let (due, later): (Vec<_>, Vec<_>) =
-                schedule.pending.iter().partition(|&&(when, _)| when == at);
-            schedule.pending = later;
-            for (_, tx) in due {
-                self.apply(tx);
+            for target in 0..TARGETS {
+                if schedule.due[target] == at {
+                    schedule.due[target] = NEVER;
+                    self.apply(schedule.pending[target]);
+                }
             }
         }
     }
@@ -597,60 +802,65 @@ impl NetRender {
         let n = &mut wires;
         // The wires.
         // @hw die: WODU XUGU XENA, TYFA SOCY VYBO SEGU, SACU
-        n.stop_mode3 = cur.px == 167 && !w.x_match;
-        n.dot = !cur.rydy && cur.started && !w.x_match && !w.stop_mode3 && i.clk;
+        n.stop_mode3 = (cur.px == 167) & !w.x_match;
+        n.dot = !cur.rydy & cur.started & !w.x_match & !w.stop_mode3 & i.clk;
         n.segu = !w.dot;
-        n.clkpipe = w.segu || cur.discard;
+        n.clkpipe = w.segu | cur.discard;
         // @hw die: LEBO MOCE, NYXU; MYSO, XUHA; MOFU
-        n.fetch_reset = i.stop_scan || w.win_start || w.restart;
-        n.fetch_done = count2 && count0 && !w.fetch_reset;
+        n.fetch_reset = i.stop_scan | w.win_start | w.restart;
+        n.fetch_done = count2 & count0 & !w.fetch_reset;
         // not (clk and not fetch_done)
-        n.fetch_clock = !i.clk || w.fetch_done;
-        n.myso = cur.mode3 && count0 && !cur.lyzu;
-        n.bg_tile_clock = w.myso && !count1;
+        n.fetch_clock = !i.clk | w.fetch_done;
+        n.myso = cur.mode3 & count0 & !cur.lyzu;
+        n.bg_tile_clock = w.myso & !count1;
         // @hw die: PAFU ROGE, NOGY NUKO, XOFO, NUNY, VETU
-        n.wy_match = i.lcdc & 0x20 != 0 && cur.wy == i.ly;
-        n.wxy_match = cur.wy_latch && cur.wx == cur.px;
-        n.win_reset = i.lcdc & 0x20 == 0 || i.line_start;
-        n.win_start = cur.in_window && !cur.nopa;
-        n.wx_clk = w.restart && cur.in_window;
+        n.wy_match = (i.lcdc & 0x20 != 0) & (cur.wy == i.ly);
+        n.wxy_match = cur.wy_latch & (cur.wx == cur.px);
+        n.win_reset = (i.lcdc & 0x20 == 0) | i.line_start;
+        n.win_start = cur.in_window & !cur.nopa;
+        n.wx_clk = w.restart & cur.in_window;
         // @hw die: PASO, POVA, TEVO
-        n.fine_reset = !cur.mode3 || w.restart;
-        n.fine_done = cur.puxa && !cur.nyze;
-        n.restart = (cur.ryfa && !cur.rene)
-            || (cur.sovy && !cur.rydy)
-            || (cur.mode3 && !cur.started && cur.nyka && cur.pory);
+        n.fine_reset = !cur.mode3 | w.restart;
+        n.fine_done = cur.puxa & !cur.nyze;
+        n.restart = (cur.ryfa & !cur.rene)
+            | (cur.sovy & !cur.rydy)
+            | (cur.mode3 & !cur.started & cur.nyka & cur.pory);
         // @hw die: RYCE TEKY, SECA; SYCU TUVO, WUTY, TEXY; XONO
-        n.fetch_start = cur.sobu && !cur.suda;
-        n.step_reset = w.fetch_start || i.ppu_reset || i.line_start;
-        n.sycu = cur.sprite_step & 1 != 0 && cur.mode3 && !cur.tyfo;
-        n.loaded = cur.tyfo && cur.sprite_step & 1 != 0 && cur.seba && cur.vonu;
-        n.sprite_cycles = cur.mode3 && (cur.sprite_step & 2 != 0 || cur.vonu);
-        n.sp_data = if cur.oam.second_odd & 0x20 != 0 && w.sprite_cycles {
-            w.md.reverse_bits()
+        n.fetch_start = cur.sobu & !cur.suda;
+        n.step_reset = w.fetch_start | i.ppu_reset | i.line_start;
+        n.sycu = (cur.sprite_step & 1 != 0) & cur.mode3 & !cur.tyfo;
+        n.loaded = cur.tyfo & (cur.sprite_step & 1 != 0) & cur.seba & cur.vonu;
+        n.sprite_cycles = cur.mode3 & ((cur.sprite_step & 2 != 0) | cur.vonu);
+        n.sp_data = if (cur.oam.second_odd & 0x20 != 0) & w.sprite_cycles {
+            flipped(w.md)
         } else {
             w.md
         };
         n.sprite_on = if w.loaded { !(cur.sp_a | cur.sp_b) } else { 0 };
 
         // @hw die: ACYL BOGE
-        n.mode2 = i.scanning && !i.dma_run;
+        n.mode2 = i.scanning & !i.dma_run;
 
         // The sprite store's.
-        n.rendering = cur.mode3 && !i.ceno;
-        n.enabled = w.rendering && i.lcdc & 2 != 0;
-        n.matches = (0..10)
-            .filter(|&slot| w.enabled && store.xs[slot] == cur.px)
-            .fold(0, |m, slot| m | 1 << slot);
-        n.selected = w.matches & w.matches.wrapping_neg();
+        n.rendering = cur.mode3 & !i.ceno;
+        n.enabled = w.rendering & (i.lcdc & 2 != 0);
+        n.matches = 0;
+        for slot in 0..10 {
+            if w.enabled & (store.xs[slot] == cur.px) {
+                n.matches |= 1 << slot;
+            }
+        }
+        // The lowest slot that matches.
+        n.selected = w.matches & (!w.matches).wrapping_add(1);
         n.x_match = w.matches != 0;
-        n.line = (0..10)
-            .find(|&slot| w.selected & 1 << slot != 0)
-            .map_or(i.scan_line, |slot| store.lines[slot]);
+        n.line = match first_slot(w.selected) {
+            Some(slot) => store.lines[slot],
+            None => i.scan_line,
+        };
 
         // OAM's address, bits 7 to 2: the CPU's, the DMA's, the scan's, or
         // the store's index lines in mode 3.
-        n.oam_index = if !w.mode2 && !cur.mode3 && !i.dma_run {
+        n.oam_index = if !w.mode2 & !cur.mode3 & !i.dma_run {
             (i.addr >> 2 & 0x3F) as u8
         } else if i.dma_run {
             i.dma_index >> 2
@@ -664,17 +874,16 @@ impl NetRender {
         // TODE SOKY ROSU; RYLU..RONU; TUJA..RAGU
         n.render_ma = cur.ma();
         let fexx_ffxx = i.addr >> 9 == 0x7F;
-        let sose = i.addr & 0x8000 != 0 && !fexx_ffxx && !i.non_vram_mreq;
-        n.cpu_vram = sose && i.cpu_ext_cs_en && !cur.mode3;
-        n.cpu_write = w.cpu_vram && sose && i.write;
-        let sprite_mrd = w.sprite_cycles && !(cur.sprite_step & 1 == 0 && cur.tyfo);
-        n.mcs_n = !(cur.fetching || i.vram_to_oam || w.sprite_cycles || w.cpu_vram);
+        let sose = (i.addr & 0x8000 != 0) & !fexx_ffxx & !i.non_vram_mreq;
+        n.cpu_vram = sose & i.cpu_ext_cs_en & !cur.mode3;
+        n.cpu_write = w.cpu_vram & sose & i.write;
+        let sprite_mrd = w.sprite_cycles & !((cur.sprite_step & 1 == 0) & cur.tyfo);
+        n.mcs_n = !(cur.fetching | i.vram_to_oam | w.sprite_cycles | w.cpu_vram);
         // (not (sose and write) nand not mode3) and not sprite_mrd and ...
-        n.mrd_n =
-            ((sose && i.write) || cur.mode3) && !sprite_mrd && !cur.fetching && !i.vram_to_oam;
-        n.mwr_n = !(sose && i.cpu_wr_sync && w.cpu_vram);
-        let vram_drives = !w.mcs_n && !w.mrd_n && w.mwr_n;
-        n.md_driven = w.cpu_write || vram_drives;
+        n.mrd_n = ((sose & i.write) | cur.mode3) & !sprite_mrd & !cur.fetching & !i.vram_to_oam;
+        n.mwr_n = !(sose & i.cpu_wr_sync & w.cpu_vram);
+        let vram_drives = !w.mcs_n & !w.mrd_n & w.mwr_n;
+        n.md_driven = w.cpu_write | vram_drives;
         // md_pins <= to_x01(md) when cpu_write: the bus's own md, a delta
         // behind the CPU's data bus.
         n.md_pins = if w.cpu_write {
@@ -700,7 +909,7 @@ impl NetRender {
         vram: &mut [u8; 0x2000],
     ) {
         let (cur, i, w) = (self, &self.inputs, &self.wires);
-        if !i.vram_to_oam && !cur.mode3 {
+        if !i.vram_to_oam & !cur.mode3 {
             next.vram_ma = i.addr & 0x1FFF;
         } else if i.vram_to_oam {
             next.vram_ma = i.dma_addr & 0x1FFF;
@@ -715,7 +924,7 @@ impl NetRender {
         if w.md_driven {
             next.md_kept = w.md_pins;
         }
-        if !w.mcs_n && !w.mwr_n {
+        if !w.mcs_n & !w.mwr_n {
             vram[usize::from(cur.vram_ma)] = w.md_pins;
         }
     }
@@ -724,7 +933,7 @@ impl NetRender {
     // @hw die: TYVY SEBY, RUGA..TOKU (not_if1)
     #[must_use]
     pub const fn read_vram(&self) -> Option<u8> {
-        if self.wires.cpu_vram && self.inputs.rd && self.inputs.clk_t4 {
+        if self.wires.cpu_vram & self.inputs.rd & self.inputs.clk_t4 {
             Some(self.wires.md)
         } else {
             None
@@ -859,13 +1068,10 @@ impl NetRender {
 
         // Mode 3: set a nanosecond after the scan stops.
         // @hw die: XYMU (nor_latch); VOGA (dffr)
-        if i.ppu_reset || cur.voga {
+        if i.ppu_reset | cur.voga {
             next.mode3 = false;
             schedule.cancel(Tx::Mode3(false));
-        } else if i.stop_scan
-            && !cur.mode3
-            && !schedule.pending.iter().any(|&(_, p)| p == Tx::Mode3(true))
-        {
+        } else if i.stop_scan & !cur.mode3 & !schedule.mode3_rises() {
             schedule.after_tco(Tx::Mode3(true));
         } else {
             // The latch holds.
@@ -893,7 +1099,7 @@ impl NetRender {
                 schedule.after_tco(Tx::PxHigh((cur.px >> 4).wrapping_add(1) & 0x0F));
             }
         }
-        if i.ppu_reset || cur.voga {
+        if i.ppu_reset | cur.voga {
             next.px9 = false;
         } else if cur.px & 9 == 9 {
             next.px9 = true;
@@ -929,7 +1135,7 @@ impl NetRender {
         }
         if w.fetch_reset {
             next.fetching = true;
-        } else if cur.lovy || !cur.mode3 {
+        } else if cur.lovy | !cur.mode3 {
             next.fetching = false;
         } else {
             // The latch holds.
@@ -937,7 +1143,7 @@ impl NetRender {
 
         // The first fetch of the line.
         // @hw die: NYKA PORY PYGO (dffr), POKY (nor_latch)
-        if !cur.mode3 || w.win_start {
+        if !cur.mode3 | w.win_start {
             next.nyka = false;
             next.pory = false;
             schedule.cancel(Tx::Nyka(false));
@@ -973,7 +1179,7 @@ impl NetRender {
         if fell(pw.bg_tile_clock, w.bg_tile_clock) {
             schedule.after_tco(Tx::BgTile(w.md));
         }
-        if w.myso && cur.fetch_count == 3 {
+        if w.myso & (cur.fetch_count == 3) {
             next.bg_low = w.md;
         }
         if w.fetch_reset {
@@ -997,7 +1203,7 @@ impl NetRender {
         } else {
             // The flip-flop holds.
         }
-        if i.mode1 || i.ppu_reset {
+        if i.mode1 | i.ppu_reset {
             next.wy_latch = false;
         } else if cur.sary {
             next.wy_latch = true;
@@ -1037,7 +1243,7 @@ impl NetRender {
         } else {
             // The counter holds.
         }
-        if i.mode1 || i.ppu_reset {
+        if i.mode1 | i.ppu_reset {
             next.win_y = 0;
             schedule.cancel(Tx::WinY(0));
         } else if fell(prev.in_window, cur.in_window) {
@@ -1045,7 +1251,7 @@ impl NetRender {
         } else {
             // The counter holds.
         }
-        if cur.pory || i.ppu_reset {
+        if cur.pory | i.ppu_reset {
             next.rydy = false;
         } else if w.win_start {
             next.rydy = true;
@@ -1067,14 +1273,14 @@ impl NetRender {
         if w.fine_reset {
             next.fine = 0;
             schedule.cancel(Tx::Fine(0));
-        } else if fell(pw.dot, w.dot) && cur.fine != 7 {
+        } else if fell(pw.dot, w.dot) & (cur.fine != 7) {
             schedule.after_tco(Tx::Fine(cur.fine + 1));
         } else {
             // The counter holds.
         }
         if cur.mode3 {
             if rose(pw.dot, w.dot) {
-                schedule.after_tco(Tx::Puxa(cur.discard && cur.fine == cur.scx & 7));
+                schedule.after_tco(Tx::Puxa(cur.discard & (cur.fine == cur.scx & 7)));
                 schedule.after_tco(Tx::Paho(cur.px & 8 != 0));
             }
             if clk_fell {
@@ -1097,7 +1303,7 @@ impl NetRender {
         }
         if cur.mode3 {
             if rose(pw.segu, w.segu) {
-                schedule.after_tco(Tx::Ryfa(cur.fine == 7 && !w.wxy_match));
+                schedule.after_tco(Tx::Ryfa((cur.fine == 7) & !w.wxy_match));
             }
             if clk_rose {
                 schedule.after_tco(Tx::Rene(cur.ryfa));
@@ -1111,7 +1317,7 @@ impl NetRender {
 
         // ST.
         // @hw die: RUJU POME POFY (nor_latch)
-        if cur.paho || i.ppu_reset {
+        if cur.paho | i.ppu_reset {
             next.line_started = true;
         } else if i.stop_scan {
             next.line_started = false;
@@ -1123,9 +1329,7 @@ impl NetRender {
         // @hw die: SOBU SUDA (dffr); TOXE TULY TESE (dffr); TAKA (nand_latch);
         // TOBU VONU SEBA TYFO (dffr)
         if clk_rose {
-            schedule.after_tco(Tx::Sobu(
-                w.x_match && !cur.rydy && w.fetch_done && !cur.busy,
-            ));
+            schedule.after_tco(Tx::Sobu(w.x_match & !cur.rydy & w.fetch_done & !cur.busy));
         }
         if clk_fell {
             schedule.after_tco(Tx::Suda(cur.sobu));
@@ -1133,14 +1337,14 @@ impl NetRender {
         if w.step_reset {
             next.sprite_step = 0;
             schedule.cancel(Tx::SpriteStep(0));
-        } else if clk_rose && cur.sprite_step != 5 {
+        } else if clk_rose & (cur.sprite_step != 5) {
             schedule.after_tco(Tx::SpriteStep(cur.sprite_step + 1));
         } else {
             // The counter holds.
         }
         if w.step_reset {
             next.busy = true;
-        } else if w.loaded || (cur.mode3 && !cur.started && cur.nyka && cur.pory) {
+        } else if w.loaded | (cur.mode3 & !cur.started & cur.nyka & cur.pory) {
             next.busy = false;
         } else {
             // The latch holds.
@@ -1158,15 +1362,15 @@ impl NetRender {
         }
         if clk_fell {
             schedule.after_tco(Tx::Tyfo(cur.sprite_step & 1 != 0));
-            schedule.after_tco(Tx::Seba(cur.mode3 && cur.vonu));
+            schedule.after_tco(Tx::Seba(cur.mode3 & cur.vonu));
         }
 
         // The sprite's two bytes.
         // @hw die: PEFO..RYDU, REWO..SEGA (dlatch_ee_q)
-        if cur.vonu && w.sycu {
+        if cur.vonu & w.sycu {
             next.sp_low_a = w.sp_data;
         }
-        if cur.sprite_step & 2 != 0 && w.sycu {
+        if (cur.sprite_step & 2 != 0) & w.sycu {
             next.sp_low_b = w.sp_data;
         }
 
@@ -1189,7 +1393,7 @@ impl NetRender {
             next.sp_palette = cur.sp_palette & !on | palette & on;
             next.sp_priority = cur.sp_priority & !on | priority & on;
         }
-        if rose(pw.clkpipe, w.clkpipe) && on != 0xFF {
+        if rose(pw.clkpipe, w.clkpipe) & (on != 0xFF) {
             schedule.after_tco(Tx::SpShift {
                 mask: !on,
                 a: cur.sp_a << 1,
@@ -1215,7 +1419,7 @@ impl NetRender {
             schedule.after_tco(Tx::Scanned(w.oam_index));
         }
         for slot in 0..10 {
-            if i.line_start || store.fetched & 1 << slot != 0 {
+            if i.line_start | (store.fetched & 1 << slot != 0) {
                 next.store.xs[slot] = 0xFF;
             } else if i.save & 1 << slot != 0 {
                 next.store.xs[slot] = cur.oam.second_odd;
@@ -1239,7 +1443,7 @@ impl NetRender {
         }
         if !w.rendering {
             next.store.index = store.scanned;
-        } else if let Some(slot) = (0..10).find(|&slot| w.selected & 1 << slot != 0) {
+        } else if let Some(slot) = first_slot(w.selected) {
             next.store.index = store.indexes[slot];
         } else {
             // The lines keep their value.
@@ -1266,19 +1470,19 @@ impl NetRender {
     /// after mode 3 ends, within the phase).
     #[must_use]
     pub const fn mode0(&self) -> bool {
-        self.wires.stop_mode3 && !self.inputs.mode1
+        self.wires.stop_mode3 & !self.inputs.mode1
     }
 
     /// The sprite fetch reads OAM, and holds the second latches.
     // @hw die: TUVO WEFY TACU VAPE, SAKY TYSO
     #[must_use]
     pub const fn fetch_read(&self) -> bool {
-        self.mode3 && self.sprite_step & 6 == 0 && !self.tyfo
+        self.mode3 & (self.sprite_step & 6 == 0) & !self.tyfo
     }
 
     #[must_use]
     pub const fn fetch_hold(&self) -> bool {
-        self.mode3 && self.sprite_step & 6 == 0 && !(self.sprite_step & 1 == 0 && self.tyfo)
+        self.mode3 & (self.sprite_step & 6 == 0) & !((self.sprite_step & 1 == 0) & self.tyfo)
     }
 
     /// The VRAM address of a fetch, if one is under way.
@@ -1290,9 +1494,9 @@ impl NetRender {
         let map_x = self.px.wrapping_add(self.scx);
         let map_y = i.ly.wrapping_add(self.scy);
         let count12 = self.fetch_count & 6 != 0;
-        let tile_map_cycle = self.fetching && !count12;
-        let bit_plane_cycle = self.fetching && count12;
-        if tile_map_cycle && !self.in_window {
+        let tile_map_cycle = self.fetching & !count12;
+        let bit_plane_cycle = self.fetching & count12;
+        if tile_map_cycle & !self.in_window {
             Some(
                 0x1800
                     | ((i.lcdc >> 3 & 1) as u16) << 10
@@ -1306,7 +1510,7 @@ impl NetRender {
                     | ((self.win_y >> 3) as u16) << 5
                     | self.win_x as u16,
             )
-        } else if bit_plane_cycle && !self.in_window {
+        } else if bit_plane_cycle & !self.in_window {
             Some(self.tile_row(map_y))
         } else if bit_plane_cycle {
             Some(self.tile_row(self.win_y))
@@ -1328,7 +1532,7 @@ impl NetRender {
 
     /// A bit plane's address: the tile, its row, the fetcher's plane.
     const fn tile_row(&self, row: u8) -> u16 {
-        let high = self.bg_tile & 0x80 == 0 && self.inputs.lcdc & 0x10 == 0;
+        let high = (self.bg_tile & 0x80 == 0) & (self.inputs.lcdc & 0x10 == 0);
         (high as u16) << 12
             | (self.bg_tile as u16) << 4
             | ((row & 7) as u16) << 1
@@ -1342,11 +1546,11 @@ impl NetRender {
     #[must_use]
     pub const fn pins(&self) -> (bool, bool, u8) {
         let lcdc = self.inputs.lcdc;
-        let bg_a = self.bg_shift_a & 0x80 != 0 && lcdc & 1 != 0;
-        let bg_b = self.bg_shift_b & 0x80 != 0 && lcdc & 1 != 0;
-        let obj_a = self.sp_a & 0x80 != 0 && lcdc & 2 != 0;
-        let obj_b = self.sp_b & 0x80 != 0 && lcdc & 2 != 0;
-        let show_sprite = (obj_a || obj_b) && !(self.sp_priority & 0x80 != 0 && (bg_a || bg_b));
+        let bg_a = (self.bg_shift_a & 0x80 != 0) & (lcdc & 1 != 0);
+        let bg_b = (self.bg_shift_b & 0x80 != 0) & (lcdc & 1 != 0);
+        let obj_a = (self.sp_a & 0x80 != 0) & (lcdc & 2 != 0);
+        let obj_b = (self.sp_b & 0x80 != 0) & (lcdc & 2 != 0);
+        let show_sprite = (obj_a | obj_b) & !((self.sp_priority & 0x80 != 0) & (bg_a | bg_b));
         let pixel = if show_sprite {
             (obj_a as u8) << 1 | obj_b as u8
         } else {
@@ -1359,7 +1563,7 @@ impl NetRender {
         } else {
             self.obp0
         };
-        let cp = (self.px9 && self.wires.clkpipe) || self.wires.fine_done;
+        let cp = (self.px9 & self.wires.clkpipe) | self.wires.fine_done;
         (cp, !self.line_started, palette >> (2 * pixel) & 3)
     }
 }

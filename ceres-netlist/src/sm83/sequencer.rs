@@ -120,13 +120,13 @@ impl NetSequencer {
     /// The core is idle: halted, or in reset.
     #[must_use]
     pub const fn idle(&self, sys_reset: bool) -> bool {
-        self.halt || sys_reset
+        self.halt | sys_reset
     }
 
     /// The decoder's "int": the interrupt's entry, or idle.
     #[must_use]
     pub const fn in_intr(&self, sys_reset: bool) -> bool {
-        self.idle(sys_reset) || self.int_entry
+        self.idle(sys_reset) | self.int_entry
     }
 
     /// The opcode came after the CB prefix (which counts in M-cycles 0 to
@@ -134,7 +134,7 @@ impl NetSequencer {
     // @hw die: XURI, XTIP, XUDO
     #[must_use]
     pub const fn table_cb(&self) -> bool {
-        self.cb_flag && self.mcyc & 4 == 0
+        self.cb_flag & (self.mcyc & 4 == 0)
     }
 
     /// `clk` rises: the flip-flops take what the phase before left.
@@ -143,13 +143,13 @@ impl NetSequencer {
     pub const fn clock(&mut self, sampled: Sampled) {
         let was = *self;
         self.mcyc = sampled.next_mcyc;
-        self.sel_reg_w = sampled.mread && !was.sel_reg_w;
+        self.sel_reg_w = sampled.mread & !was.sel_reg_w;
         self.halt_delayed = sampled.halt_step;
         self.stop_delayed = sampled.stop;
         self.pending_delayed = sampled.int_pending;
         self.not_ready_1 = sampled.not_ready;
         self.not_ready_2 = was.not_ready_1;
-        self.int_entry = was.entering || was.nmi_entering;
+        self.int_entry = was.entering | was.nmi_entering;
         self.no_nmi_1 = was.no_nmi;
         self.nmi_low_1 = !sampled.nmi;
         self.nmi_entry = was.nmi_entering;
@@ -158,7 +158,7 @@ impl NetSequencer {
     /// `exec_phase` falls, at the end of the M-cycle: IME takes effect.
     // @hw die: ZIVV (dff), ZOXC
     pub const fn exec_falls(&mut self) {
-        self.ime = self.no_nmi && self.ime_state;
+        self.ime = self.no_nmi & self.ime_state;
     }
 
     /// The latches, in a phase.
@@ -170,12 +170,12 @@ impl NetSequencer {
         // IR and the CB prefix take what the core fetches, in
         // write_phase; HALT clears the prefix.
         // @hw die: REG_IR; XURG (dffre)
-        if c.fetch && write {
+        if c.fetch & write {
             self.ir_next = i.db;
         }
         if self.halt {
             self.cb_next = false;
-        } else if c.fetch && write {
+        } else if c.fetch & write {
             self.cb_next = s.cb_prefix;
         } else {
             // The master holds.
@@ -187,15 +187,15 @@ impl NetSequencer {
         // An instruction ends where it fetches the next opcode (but not
         // after the CB prefix), or while idle.
         // @hw die: XOGS
-        let boundary = (data && c.fetch && !s.cb_prefix) || idle;
+        let boundary = (data & c.fetch & !s.cb_prefix) | idle;
 
         // HALT and STOP.
         // @hw die: YNOZ, ZIKS ZUDN, YOLU, ZHZO ZKON, YKUA, YNKW (srlatch),
         // ZUMN (srlatch), ZWLM, XWEE ZJBF, YCNF
-        let any_reset = i.sys_reset || i.pwron_reset;
-        let halt_set = i.pwron_reset || self.stop_delayed || self.halt_delayed;
+        let any_reset = i.sys_reset | i.pwron_reset;
+        let halt_set = i.pwron_reset | self.stop_delayed | self.halt_delayed;
         let halt_reset =
-            ((!self.not_ready_1 && self.not_ready_2) || self.pending_delayed) && !any_reset;
+            ((!self.not_ready_1 & self.not_ready_2) | self.pending_delayed) & !any_reset;
         if halt_reset {
             self.halt = false;
         } else if halt_set {
@@ -203,7 +203,7 @@ impl NetSequencer {
         } else {
             // The latch holds.
         }
-        if i.wake || any_reset {
+        if i.wake | any_reset {
             self.stop = false;
         } else if self.stop_delayed {
             self.stop = true;
@@ -214,9 +214,9 @@ impl NetSequencer {
         // IME: EI sets it, DI clears it, RETI sets it, the entry clears
         // it.
         // @hw die: ZJJE (srlatch), ZBPP, ZWUU, ZRSY (srlatch), ZNDA ZGNA
-        let ime_set = data && ((op3 && s.di_or_ei) || (c.reti_m3 && self.no_nmi_1));
+        let ime_set = data & ((op3 & s.di_or_ei) | (c.reti_m3 & self.no_nmi_1));
         let ime_reset =
-            (data && ((!op3 && s.di_or_ei) || (self.no_nmi_1 && self.int_entry))) || i.sys_reset;
+            (data & ((!op3 & s.di_or_ei) | (self.no_nmi_1 & self.int_entry))) | i.sys_reset;
         if ime_reset {
             self.ime_state = false;
         } else if ime_set {
@@ -226,7 +226,7 @@ impl NetSequencer {
         }
         if self.nmi_entering {
             self.no_nmi = false;
-        } else if i.sys_reset || c.reti_m3 {
+        } else if i.sys_reset | c.reti_m3 {
             self.no_nmi = true;
         } else {
             // The latch holds.
@@ -235,9 +235,9 @@ impl NetSequencer {
         // The entry: IME set and an interrupt requested at the end of an
         // instruction (but not during DI).
         // @hw die: ZAIJ, ZAOC, ZZOM, ZKOG (srlatch), ZOWA, ZFEX, XYGB
-        let not_di = op3 || !s.di_or_ei;
-        let int_start = self.ime && data && i.int_take && boundary && not_di;
-        if s.int_entry_m6 || i.sys_reset {
+        let not_di = op3 | !s.di_or_ei;
+        let int_start = self.ime & data & i.int_take & boundary & not_di;
+        if s.int_entry_m6 | i.sys_reset {
             self.entering = false;
         } else if int_start {
             self.entering = true;
@@ -251,8 +251,8 @@ impl NetSequencer {
         if !i.clk {
             self.nmi_low_2 = self.nmi_low_1;
         }
-        let nmi_rise = self.nmi_low_2 && i.nmi;
-        let nmi_clear = (self.nmi_entry && s.int_entry_m6) || i.sys_reset;
+        let nmi_rise = self.nmi_low_2 & i.nmi;
+        let nmi_clear = (self.nmi_entry & s.int_entry_m6) | i.sys_reset;
         if nmi_clear {
             self.nmi_req = false;
             self.nmi_entering = false;
@@ -260,7 +260,7 @@ impl NetSequencer {
             if nmi_rise {
                 self.nmi_req = true;
             }
-            if boundary && self.no_nmi_1 && self.nmi_req {
+            if boundary & self.no_nmi_1 & self.nmi_req {
                 self.nmi_entering = true;
             }
         }

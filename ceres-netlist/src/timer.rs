@@ -82,13 +82,13 @@ impl NetTimer {
             2 => 3,
             _ => 5,
         };
-        tac & TAC_ENABLE_B != 0 && count & (1 << bit) != 0
+        (tac & TAC_ENABLE_B != 0) & (count & (1 << bit) != 0)
     }
 
     /// TIMA's load: during the M-cycle after an overflow, and while the CPU
     /// writes it outside G and H.
     const fn load(&self, write_tima: bool, t4: bool) -> bool {
-        self.int_timer || (write_tima && !t4)
+        self.int_timer | (write_tima & !t4)
     }
 
     /// TIMA follows its load value while it loads, and otherwise counts when
@@ -98,7 +98,7 @@ impl NetTimer {
         if load {
             self.tima = if write_tima { data } else { self.tma };
             self.bit7_before = false;
-        } else if self.timer_clock && !clock {
+        } else if self.timer_clock & !clock {
             self.tima = self.tima.wrapping_add(1);
         } else {
             // TIMA keeps its value.
@@ -115,29 +115,31 @@ impl NetTimer {
             return;
         }
         let (reg, data) = match access {
-            Access::Write(reg, data) if (Phase::E..=Phase::G).contains(&phase) => (Some(reg), data),
+            Access::Write(reg, data) if matches!(phase, Phase::E | Phase::F | Phase::G) => {
+                (Some(reg), data)
+            }
             _ => (None, 0),
         };
         let t4 = phase >= Phase::G;
-        let write_tima = reg == Some(Reg::Tima);
+        let write_tima = matches!(reg, Some(Reg::Tima));
 
         // Writing DIV clears the counter for as long as the write lasts.
-        if reg == Some(Reg::Div) {
+        if matches!(reg, Some(Reg::Div)) {
             self.count = 0;
         }
 
         // TMA and TAC take the data bus when the write ends.
-        let write_tma = reg == Some(Reg::Tma);
-        let write_tac = reg == Some(Reg::Tac);
-        if self.write_tma && !write_tma {
+        let write_tma = matches!(reg, Some(Reg::Tma));
+        let write_tac = matches!(reg, Some(Reg::Tac));
+        if self.write_tma & !write_tma {
             self.tma = self.latched_data;
         }
         self.write_tma = write_tma;
-        if self.write_tac && !write_tac {
+        if self.write_tac & !write_tac {
             let new = self.latched_data & 7;
             // The enable arrives a moment before the select.
             let between = Self::clock_of(new, self.tac, self.count);
-            if self.enable_race_counts || self.timer_clock {
+            if self.enable_race_counts | self.timer_clock {
                 self.settle(write_tima, t4, data, between);
             }
             self.tac = new;
@@ -155,7 +157,7 @@ impl NetTimer {
     /// bit 7, then TIMA loads or counts (a delta cycle later).
     pub const fn edge_a(&mut self) {
         let load = self.load(false, false);
-        let overflow = self.bit7_before && self.tima & 0x80 == 0;
+        let overflow = self.bit7_before & (self.tima & 0x80 == 0);
         if !load {
             self.bit7_before = self.tima & 0x80 != 0;
         }
@@ -179,16 +181,10 @@ impl NetTimer {
     /// An M-cycle: phases B to H with the access, then the next A edge.
     /// Returns what a read reads and whether the interrupt was requested.
     pub fn m_cycle(&mut self, access: Access) -> (Option<u8>, bool) {
-        for phase in [
-            Phase::B,
-            Phase::C,
-            Phase::D,
-            Phase::E,
-            Phase::F,
-            Phase::G,
-            Phase::H,
-        ] {
+        let mut phase = Phase::B;
+        for _ in 0..7 {
             self.phase(phase, access);
+            phase = phase.next();
         }
         let read = match access {
             Access::Read(reg) => Some(self.read(reg)),
@@ -196,7 +192,7 @@ impl NetTimer {
         };
         let before = self.int_timer;
         self.edge_a();
-        (read, !before && self.int_timer)
+        (read, !before & self.int_timer)
     }
 
     /// Whether phases B to D leave the timer as it is: then the M-cycle can
@@ -205,8 +201,10 @@ impl NetTimer {
     #[must_use]
     pub fn quiet_until_e(&self, access: Access) -> bool {
         let mut net = *self;
-        for phase in [Phase::B, Phase::C, Phase::D] {
+        let mut phase = Phase::B;
+        for _ in 0..3 {
             net.phase(phase, access);
+            phase = phase.next();
         }
         net == *self
     }

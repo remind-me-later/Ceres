@@ -148,10 +148,10 @@ impl NetClocks {
         let before = self.phase();
         // The oscillator's output, held high while it is stopped.
         // @hw die: CK1_CK2 (pad_xtal), ANOS AVET ARYS, ATAL
-        let clk = inputs.ck1 || !inputs.osc_ena;
+        let clk = inputs.ck1 | !inputs.osc_ena;
         // AFER takes `sys_reset` as it was at the edge that starts A.
         // @hw die: AFER (dffr_cc), clocked by BOGA
-        let starts_a = clk != self.clk && matches!(before.next(), Phase::A);
+        let starts_a = (clk != self.clk) & matches!(before.next(), Phase::A);
         let sys_reset_at_edge = self.sys_reset;
         self.clk = clk;
 
@@ -173,7 +173,7 @@ impl NetClocks {
 
         // @hw die: TUBO (nor_latch), UPYF UCOB, UNUT TABA
         let reset = !inputs.reset_pin_n;
-        if inputs.clk_ena || reset || !inputs.osc_ena {
+        if inputs.clk_ena | reset | !inputs.osc_ena {
             self.waiting = !inputs.clk_ena;
         }
         // @hw die: ASOL (nor_latch), AFAR ALYP
@@ -196,7 +196,7 @@ impl NetClocks {
     /// The power-on wait is over: the divider's last bit is set while the
     /// chip waits, or a test pin skips the wait.
     const fn osc_stable(waiting: bool, inputs: ClockInputs) -> bool {
-        (inputs.t1 ^ inputs.t2) || (waiting && inputs.div_16hz)
+        (inputs.t1 ^ inputs.t2) | (waiting & inputs.div_16hz)
     }
 
     /// The clocks and resets the other blocks take, with `inputs`.
@@ -211,22 +211,22 @@ impl NetClocks {
             matches!(phase, Phase::E | Phase::F | Phase::G),
         );
         // @hw die: BELE BYJU BALY BOGA
-        let clk_1mhz = a || !inputs.osc_ena;
+        let clk_1mhz = a | !inputs.osc_ena;
         // @hw die: BELU BYRY BUDE BEVA
-        let data_phase = inputs.clk_ena && e_on;
+        let data_phase = inputs.clk_ena & e_on;
         ClockOutputs {
             clk_1mhz,
             // @hw die: BAPY BERU BUFA BYLY
-            clk_t4: inputs.clk_ena && g_or_h,
+            clk_t4: inputs.clk_ena & g_or_h,
             data_phase,
             // @hw die: BUVU BYXO BEDO
-            exec_phase: inputs.clk_ena && !clk_1mhz,
+            exec_phase: inputs.clk_ena & !clk_1mhz,
             // @hw die: BATE BASU BUKE
-            pch_phase: if g_or_h || a { !inputs.clk_ena } else { true },
+            pch_phase: if g_or_h | a { !inputs.clk_ena } else { true },
             // @hw die: AFAS AREV APOV
-            cpu_wr_sync: inputs.write && e_to_g,
+            cpu_wr_sync: inputs.write & e_to_g,
             // @hw die: AGUT AWOD ABUZ
-            cpu_ext_cs_en: (inputs.t1 && !inputs.t2) || (inputs.mreq && c_on),
+            cpu_ext_cs_en: (inputs.t1 & !inputs.t2) | (inputs.mreq & c_on),
             // @hw die: PHI (pad_out)
             phi: !data_phase,
             osc_stable: Self::osc_stable(self.waiting, inputs),
@@ -240,6 +240,6 @@ impl NetClocks {
     /// the /RESET pin's.
     #[must_use]
     pub const fn reset2(&self) -> bool {
-        self.cpu_sys_reset || self.sys_reset
+        self.cpu_sys_reset | self.sys_reset
     }
 }

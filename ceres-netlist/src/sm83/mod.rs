@@ -39,10 +39,7 @@ pub use {
     sequencer::{NetSequencer, Sampled},
 };
 
-use {
-    alu::AluInputs, idu::idu, registers::RegisterInputs, sequencer::SequencerInputs,
-    std::sync::LazyLock,
-};
+use {alu::AluInputs, idu::idu, registers::RegisterInputs, sequencer::SequencerInputs};
 
 /// What the core takes in during a phase.
 #[derive(Clone, Copy, Default)]
@@ -99,27 +96,8 @@ pub struct CoreOutputs {
     pub db: u8,
 }
 
-/// The decoder's steps for every opcode, M-cycle, prefix and entry.
-static STEPS: LazyLock<Vec<Steps>> = LazyLock::new(|| {
-    (0..=0x1FFF_u16)
-        .map(|n| {
-            let [op, high] = n.to_le_bytes();
-            decode(op, high & 7, high & 8 != 0, high & 0x10 != 0, true)
-        })
-        .collect()
-});
-
-fn steps(op: u8, m: u8, cb: bool, int: bool, exec: bool) -> Steps {
-    if exec {
-        STEPS
-            [usize::from(op) | usize::from(m) << 8 | usize::from(cb) << 11 | usize::from(int) << 12]
-    } else {
-        Steps::default()
-    }
-}
-
 /// The core between phases.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub struct NetCore {
     pub seq: NetSequencer,
     pub regs: NetRegisters,
@@ -133,6 +111,12 @@ pub struct NetCore {
     pub exec_phase: bool,
     pub fetch: bool,
     pub sampled: Sampled,
+    /// The decoder's steps, and its inputs they are for (`key`: the
+    /// opcode, the M-cycle, the prefix, the entry, `exec_phase`): they
+    /// change only at the M-cycle's edges, so the core decodes about once
+    /// an M-cycle.
+    pub decoded_key: u16,
+    pub decoded: Steps,
 }
 
 impl NetCore {
@@ -158,15 +142,17 @@ impl NetCore {
             not_ready: true,
             nmi: false,
         },
+        decoded_key: 0,
+        decoded: decode(0, 0, false, false, false),
     };
 
     /// A phase: the edges that start it (`clk` rising, `exec_phase`
     /// falling), then the phase settled.
     pub fn phase(&mut self, i: &CoreInputs) -> CoreOutputs {
-        if i.clk && !self.clk {
+        if i.clk & !self.clk {
             self.seq.clock(self.sampled);
         }
-        if !i.exec_phase && self.exec_phase {
+        if !i.exec_phase & self.exec_phase {
             self.seq.exec_falls();
         }
         self.settle(i)
@@ -181,10 +167,22 @@ impl NetCore {
         loop {
             let was = *self;
             let out = self.evaluate(i, kept);
-            if *self == was {
+            if self.settled(&was) {
                 return out;
             }
         }
+    }
+
+    /// Nothing changed in a pass (the decoded steps follow from their key).
+    fn settled(&self, was: &Self) -> bool {
+        (self.seq == was.seq)
+            & (self.regs == was.regs)
+            & (self.alu == was.alu)
+            & (self.ints == was.ints)
+            & (self.db == was.db)
+            & (self.fetch == was.fetch)
+            & (self.sampled == was.sampled)
+            & (self.decoded_key == was.decoded_key)
     }
 
     /// One pass over the latches and wires.
@@ -195,14 +193,21 @@ impl NetCore {
     fn evaluate(&mut self, i: &CoreInputs, kept: u8) -> CoreOutputs {
         let (exec, data, write) = (i.exec_phase, i.data_phase, i.write_phase);
         let table_cb = self.seq.table_cb();
-        let s = steps(
+        let (op, m, int) = (
             self.seq.opcode,
             self.seq.mcyc,
-            table_cb,
             self.seq.in_intr(i.sys_reset),
-            exec,
         );
-        let op = self.seq.opcode;
+        let key = u16::from(op)
+            | u16::from(m) << 8
+            | u16::from(table_cb) << 11
+            | u16::from(int) << 12
+            | u16::from(exec) << 13;
+        if key != self.decoded_key {
+            self.decoded = decode(op, m, table_cb, int, exec);
+            self.decoded_key = key;
+        }
+        let s = self.decoded;
         let c = control(
             &s,
             ControlInputs {
@@ -218,7 +223,7 @@ impl NetCore {
         );
         // The opcode shows when the fetch ends.
         // @hw die: REG_IR
-        if self.fetch && !c.fetch {
+        if self.fetch & !c.fetch {
             self.seq.opcode = self.seq.ir_next;
         }
         self.fetch = c.fetch;
@@ -256,7 +261,7 @@ impl NetCore {
         // @hw die: DBUS_BRIDGE (b2b_wand_inj_a), DBUS_NAND, DBUS_NOT,
         // REG_BUS_PCH_A (a); ZLYZ (oa211)
         let oe = !i.oe_n;
-        let rd = (c.fetch || c.mread) && data && oe;
+        let rd = (c.fetch | c.mread) & data & oe;
         let all8 = |on: bool| if on { 0xFF_u8 } else { 0 };
         let pulled = (all8(oe) & !i.d)
             | (all8(c.alu_to_db_en) & !alu.res)
@@ -306,14 +311,14 @@ impl NetCore {
             },
         );
         // @hw die: WUDZ WEEN WERF, WAGR
-        let mcyc7 = self.seq.idle(i.sys_reset) || self.alu.cond_fail;
+        let mcyc7 = self.seq.idle(i.sys_reset) | self.alu.cond_fail;
         self.sampled = Sampled {
             next_mcyc: c.next_mcyc | if mcyc7 { 7 } else { 0 },
             mread: c.mread,
             halt_step: s.halt,
             stop: c.stop,
             int_pending: selected.int_pending,
-            not_ready: !i.clk_ready || i.sys_reset,
+            not_ready: !i.clk_ready | i.sys_reset,
             nmi: false,
         };
 
@@ -323,7 +328,7 @@ impl NetCore {
         CoreOutputs {
             addr,
             ctl_mreq: c.mreq,
-            mreq: (!i.shadow_access || i.shadow_override) && !i.internal_access && c.mreq,
+            mreq: (!i.shadow_access | i.shadow_override) & !i.internal_access & c.mreq,
             rd,
             wr: c.mwrite,
             m1: c.fetch,
