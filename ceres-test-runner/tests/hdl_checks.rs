@@ -1,7 +1,7 @@
 //! The check ROMs of `hdl/check` that verify what they read and report as
 //! Mooneye's tests do (`hdl/check/report.inc`): the PPU's registers, VRAM,
-//! OAM, the bus side, the timer, IF, IE and the unused I/O addresses read
-//! back. They run on the readable model and on a
+//! OAM, the bus side, the timer, IF, IE, the unused I/O addresses and the
+//! APU read back. They run on the readable model and on a
 //! Game Boy as well; built by `make -C hdl`.
 
 use {
@@ -48,4 +48,10 @@ fn bus() {
 #[ignore = "needs the check ROMs: make -C hdl"]
 fn io_regs() {
     assert_eq!(run("io_regs.gb"), TestResult::Passed);
+}
+
+#[test]
+#[ignore = "needs the check ROMs: make -C hdl"]
+fn sound() {
+    assert_eq!(run("sound.gb"), TestResult::Passed);
 }

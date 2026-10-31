@@ -554,20 +554,28 @@ the edge, before the CPU drives the data bus, so a write of NR12 first
 opens the envelope's latch on the precharged FF and toggles the volume's
 first stage; and the read strobe reaches it before the address, so a read
 of wave RAM ends before the address moves and the bit lines keep the byte
-read. Over the 271 traces the APU matches the model in every flip-flop,
-latch and RAM cell, but almost all of it is `check/apu.asm`'s: the other
-ROMs leave the APU powered off, and none lets a length run out.
+read. Over the 273 traces the APU matches the model in every flip-flop,
+latch and RAM cell. Almost all of it is `check/apu.asm`'s and
+`check/sound.asm`'s, the other ROMs leave the APU powered off; the second
+lets every channel's length run out, overflows channel 1's sweep and
+updates it, takes envelopes to 15 and 0, plays every duty and wave level,
+shifts channel 4's short LFSR and powers the APU off and on (and on its
+own, 23.7 million phases, it finds a duty of channel 1 changed in the
+transcription).
 
-`check/ppu_regs.asm`, `check/vram_oam.asm`, `check/bus.asm` and
-`check/io_regs.asm` read back the PPU's registers, VRAM, OAM, the bus side
-and the rest of the I/O, and check what they read: every register's bits
+`check/ppu_regs.asm`, `check/vram_oam.asm`, `check/bus.asm`,
+`check/io_regs.asm` and `check/sound.asm` read back the PPU's registers,
+VRAM, OAM, the bus side, the rest of the I/O and the APU, and check what
+they read: every register's bits
 with the LCD on and off, FF46 during and after OAM DMA, every byte of VRAM
 and OAM, VRAM and OAM locked out in modes 2 and 3; serial bytes sent with
 the internal clock (SB, SC and IF after), P1's select bits, FF50, the
 cartridge's header, every byte of HRAM and work RAM, and the echo of work
 RAM; IE, IF, TMA, TIMA and TAC with their unused bits, TIMA counting, DIV
 after a write, and the I/O addresses nothing decodes (FF in all bits, as
-Mooneye's `unused_hwio-GS` has them). They report as
+Mooneye's `unused_hwio-GS` has them); the APU's registers with their unused
+and write-only bits, NR52 with the APU off and on, and NR52's channel bits
+as lengths run out and the sweep overflows. They report as
 `check/report.inc` says (Mooneye's registers and `LD B,B`, "Passed" or
 "Failed" on the serial port, a white or black screen), so they run on a
 Game Boy as well; they pass on dmg-sim, the model and ceres

@@ -65,9 +65,10 @@ mooneye external/test-roms/mooneye-test-suite/acceptance/intr_timing.gb 1.1
 mooneye external/test-roms/mooneye-test-suite/acceptance/oam_dma_timing.gb 1.1
 
 # hdl/check's ROMs that check what they read (check/report.inc): the PPU's
-# registers, VRAM, OAM, the bus side, the timer, IF, IE and the unused I/O
-# addresses read back; make builds them.
+# registers, VRAM, OAM, the bus side, the timer, IF, IE, the unused I/O
+# addresses and the APU read back; make builds them.
 mooneye hdl/build/ppu_regs.gb 0.3
 mooneye hdl/build/vram_oam.gb 1.0
 mooneye hdl/build/bus.gb 0.8
 mooneye hdl/build/io_regs.gb 0.4
+mooneye hdl/build/sound.gb 0.6

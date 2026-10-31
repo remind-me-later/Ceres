@@ -531,6 +531,22 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
                 net.ch3.ram != before.ch3.ram,
             ),
             (
+                "apu: a channel's length expires",
+                (!before.ch1.expired.q && net.ch1.expired.q)
+                    || (!before.ch3.expired.q && net.ch3.expired.q)
+                    || (!before.ch4.expired.q && net.ch4.expired.q),
+            ),
+            (
+                "apu: an envelope reaches its limit",
+                (!before.ch1.at_limit.q && net.ch1.at_limit.q)
+                    || (!before.ch2.at_limit.q && net.ch2.at_limit.q)
+                    || (!before.ch4.at_limit.q && net.ch4.at_limit.q),
+            ),
+            (
+                "apu: channel 4 shifts its short LFSR",
+                net.ch4.noise & 8 != 0 && before.ch4.lfsr.q != net.ch4.lfsr.q,
+            ),
+            (
                 "apu: channel 4 restarts",
                 !before.ch4.restart.q && net.ch4.restart.q,
             ),
