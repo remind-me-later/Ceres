@@ -1,0 +1,10 @@
+# The VHDL language server's project (vhdl_ls, as editors run it from the
+# repository's root): the readable model, its board and its checks, in one
+# library, as hdl/Makefile has nvc compile them into `work`. vhdl_ls does
+# not take `work` as a name (it means the file's own library, which `use
+# work.` clauses keep meaning), so the library is `model` here. vhdl_ls
+# brings `ieee` and `std` itself.
+standard = "2008"
+
+[libraries]
+model.files = ["hdl/rtl/*.vhd", "hdl/board/*.vhd", "hdl/check/*.vhd"]
