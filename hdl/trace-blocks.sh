@@ -19,7 +19,7 @@
 #
 # replays every trace in build/blocks through ceres-netlist's NetTimer,
 # NetIf, NetDma, NetLcd, NetScan, NetOamLatches, NetClocks, NetRender,
-# NetBus, NetCore (the CPU core) and NetChip (its tests/replay.rs) and
+# NetBus, NetCore (the CPU core), NetApu and NetChip (its tests/replay.rs) and
 # reports the phases where one parts from the model (REPLAY_ONLY=a,b: only
 # the traces whose names contain a or b).
 

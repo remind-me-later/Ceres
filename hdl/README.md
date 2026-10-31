@@ -540,6 +540,24 @@ enables: 2.11 billion phases, 10 million opcodes fetched, 31 thousand
 after the CB prefix, 30355 interrupt entries (182 of them choosing
 between requests), 2913 HALTs, 6194 failed conditions.
 
+The APU (`apu_control.vhd` and the four channels) replays as `NetApu`
+(ceres-netlist's `apu`), delta cycle by delta cycle as render does: its
+clocks are dividers of the chip's clock and counters whose bits clock the
+next stage, so the order in which the simulator settles them decides what
+ticks. Each flip-flop keeps its own pending change, 1 ns after its clock.
+The traces' last 45 fields hold the control's flip-flops and NR50 and
+NR51, and each channel's registers, counters, envelope, length, channel
+1's sweep, channel 3's bit lines and wave RAM, channel 4's prescaler and
+LFSR; the mixer, which the model computes in volts, is left out. Two
+times decide what the traces show: a write's strobe reaches the APU with
+the edge, before the CPU drives the data bus, so a write of NR12 first
+opens the envelope's latch on the precharged FF and toggles the volume's
+first stage; and the read strobe reaches it before the address, so a read
+of wave RAM ends before the address moves and the bit lines keep the byte
+read. Over the 271 traces the APU matches the model in every flip-flop,
+latch and RAM cell, but almost all of it is `check/apu.asm`'s: the other
+ROMs leave the APU powered off, and none lets a length run out.
+
 `check/ppu_regs.asm`, `check/vram_oam.asm`, `check/bus.asm` and
 `check/io_regs.asm` read back the PPU's registers, VRAM, OAM, the bus side
 and the rest of the I/O, and check what they read: every register's bits

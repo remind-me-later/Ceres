@@ -33,7 +33,8 @@
     clippy::len_zero,
     clippy::manual_map,
     clippy::option_if_let_else,
-    reason = "Aeneas (Lean) takes this crate: it models loops over ranges, indexing and match, not iterators, closures, ranges' contains or Option's helpers"
+    clippy::verbose_bit_mask,
+    reason = "Aeneas (Lean) takes this crate: it models loops over ranges, indexing and match, not iterators, closures, ranges' contains, Option's helpers or trailing_zeros"
 )]
 
 /// `PartialEq` and `Eq` for a struct, as one flat AND of its fields'
@@ -62,6 +63,7 @@ macro_rules! flat_eq {
     };
 }
 
+pub mod apu;
 pub mod bus;
 pub mod chip;
 pub mod clocks;

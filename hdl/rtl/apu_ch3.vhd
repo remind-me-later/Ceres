@@ -16,9 +16,18 @@
 
 library ieee;
 use ieee.std_logic_1164.all;
+
+-- Wave RAM's 16 bytes (a package, so that the testbench can trace them).
+package apu_wave is
+	type wave_ram_t is array (0 to 15) of std_ulogic_vector(7 downto 0);
+end package;
+
+library ieee;
+use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.clocking.all;
+use work.apu_wave.all;
 
 entity apu_ch3 is
 	port (
@@ -46,8 +55,6 @@ entity apu_ch3 is
 end entity;
 
 architecture rtl of apu_ch3 is
-	type ram_t is array (0 to 15) of std_ulogic_vector(7 downto 0);
-
 	signal write_nr30, write_nr31, write_nr32, write_nr33, write_nr34 : std_ulogic;
 	signal write_nr34_late, wave_area                                 : std_ulogic;
 
@@ -84,7 +91,7 @@ architecture rtl of apu_ch3 is
 	signal length_reset : std_ulogic;
 
 	-- Wave RAM
-	signal ram          : ram_t := (others => (others => '0'));
+	signal ram          : wave_ram_t := (others => (others => '0'));
 	signal ram_addr     : std_ulogic_vector(3 downto 0);
 	signal busa, bano   : std_ulogic := '0';
 	signal fetch        : std_ulogic := '0';  -- AZUS: wave_data_latch

@@ -89,8 +89,25 @@
 -- data bus, and the bits of the chip's data bus that were a strong 0 in
 -- the phase, for however short (only those pull the core's bus down: not
 -- the keeper's weak 0, nor an X where drivers fight, which the data bus's
--- field shows as 0). Values in hexadecimal, bits as 0 or 1. With
--- BLOCKS_FROM_POWER_ON, from the power-on.
+-- field shows as 0); then the APU: its control's flip-flops and latches
+-- (power, test, test_bit5, baza, ajer, calo, atep, cemo, cery, atyk, avok,
+-- jeso, bara, caru, bylu), NR50 and NR51; channel 1's flip-flops and
+-- latches (length_on, trigger, start, triggered, restart, restarted,
+-- running, frozen, active, reload, wave, expired, hz64, tick, at_limit,
+-- env_stopped, sweep_step, shifting, shift_done), NR10, the duty, NR12,
+-- the frequency, its counter, the duty's step, the length, the envelope's
+-- period, the volume, the sweep's count, its shifts, the shifted frequency
+-- and the sum's augend and addend; channel 2's (as channel 1's, without
+-- the sweep's), the duty, NR22, the frequency, the counter, the step, the
+-- length, the period and the volume; channel 3's (dac_on, length_on,
+-- trigger, start, triggered, restart, restarted, running, frozen,
+-- playing, active, reload, wrapped, expired, busa, bano, fetch, azet), the
+-- level, the frequency, the counter, the position, the length, the bit
+-- lines, the sample's byte and wave RAM; channel 4's (as channel 2's, with
+-- divided and joto for wave and reload), NR42, NR43, the divider, the
+-- prescaler, the LFSR, the length, the period and the volume. BLOCKS needs
+-- the channels (WITH_CHANNELS). Values in hexadecimal, bits as 0 or 1.
+-- With BLOCKS_FROM_POWER_ON, from the power-on.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -104,6 +121,7 @@ use work.high_ram_types.all;
 use work.sm83_controls.all;
 use work.revisions.all;
 use work.sprite_slots.all;
+use work.apu_wave.all;
 
 entity gameboy_tb is
 	generic (
@@ -417,6 +435,7 @@ begin
 		end loop;
 	end process;
 
+	blocks_traces : if WITH_CHANNELS generate
 	blocks_trace : process
 		alias phase       is << signal .gameboy_tb.u_gameboy.chip.u_chip.phase : phase_t >>;
 		alias data_phase  is << signal .gameboy_tb.u_gameboy.chip.u_chip.data_phase : std_ulogic >>;
@@ -663,6 +682,130 @@ begin
 		alias q_pcl             is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.pcl : std_ulogic_vector(7 downto 0) >>;
 		alias q_pending         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_interrupts.pending : std_ulogic_vector(7 downto 0) >>;
 		alias q_db              is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.db : std_logic_vector(7 downto 0) >>;
+		alias a_power        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.power : std_ulogic >>;
+		alias a_test_i       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.test_i : std_ulogic >>;
+		alias a_test_bit5    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.test_bit5 : std_ulogic >>;
+		alias a_baza         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.baza : std_ulogic >>;
+		alias a_ajer_i       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.ajer_i : std_ulogic >>;
+		alias a_calo         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.calo : std_ulogic >>;
+		alias a_atep         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.atep : std_ulogic >>;
+		alias a_cemo         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.cemo : std_ulogic >>;
+		alias a_cery         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.cery : std_ulogic >>;
+		alias a_atyk         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.atyk : std_ulogic >>;
+		alias a_avok         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.avok : std_ulogic >>;
+		alias a_jeso         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.jeso : std_ulogic >>;
+		alias a_bara         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.bara : std_ulogic >>;
+		alias a_caru         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.caru : std_ulogic >>;
+		alias a_bylu         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.bylu : std_ulogic >>;
+		alias a_nr50         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.nr50 : std_ulogic_vector(7 downto 0) >>;
+		alias a_nr51         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_apu_control.nr51 : std_ulogic_vector(7 downto 0) >>;
+		alias c1_length_on   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.length_on : std_ulogic >>;
+		alias c1_trigger     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.trigger : std_ulogic >>;
+		alias c1_start       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.start : std_ulogic >>;
+		alias c1_triggered   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.triggered : std_ulogic >>;
+		alias c1_restart     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.restart : std_ulogic >>;
+		alias c1_restarted   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.restarted : std_ulogic >>;
+		alias c1_running     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.running : std_ulogic >>;
+		alias c1_frozen      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.frozen : std_ulogic >>;
+		alias c1_active_i    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.active_i : std_ulogic >>;
+		alias c1_reload      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.reload : std_ulogic >>;
+		alias c1_wave        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.wave : std_ulogic >>;
+		alias c1_expired     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.expired : std_ulogic >>;
+		alias c1_hz64        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.hz64 : std_ulogic >>;
+		alias c1_tick        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.tick : std_ulogic >>;
+		alias c1_at_limit    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.at_limit : std_ulogic >>;
+		alias c1_env_stopped is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.env_stopped : std_ulogic >>;
+		alias c1_sweep_step  is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.sweep_step : std_ulogic >>;
+		alias c1_shifting    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.shifting : std_ulogic >>;
+		alias c1_shift_done  is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.shift_done : std_ulogic >>;
+		alias c1_sweep       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.sweep : std_ulogic_vector(6 downto 0) >>;
+		alias c1_duty        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.duty : std_ulogic_vector(1 downto 0) >>;
+		alias c1_envelope    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.envelope : std_ulogic_vector(7 downto 0) >>;
+		alias c1_acc         is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.acc : std_ulogic_vector(10 downto 0) >>;
+		alias c1_counter     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.counter : unsigned(10 downto 0) >>;
+		alias c1_step        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.step : unsigned(2 downto 0) >>;
+		alias c1_length      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.length : unsigned(5 downto 0) >>;
+		alias c1_period      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.period : unsigned(2 downto 0) >>;
+		alias c1_volume      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.volume : unsigned(3 downto 0) >>;
+		alias c1_sweep_count is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.sweep_count : unsigned(2 downto 0) >>;
+		alias c1_shifts      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.shifts : unsigned(2 downto 0) >>;
+		alias c1_shifted     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.shifted : std_ulogic_vector(10 downto 0) >>;
+		alias c1_augend      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.augend : std_ulogic_vector(10 downto 0) >>;
+		alias c1_addend      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch1.addend : std_ulogic_vector(10 downto 0) >>;
+		alias c2_length_on   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.length_on : std_ulogic >>;
+		alias c2_trigger     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.trigger : std_ulogic >>;
+		alias c2_start       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.start : std_ulogic >>;
+		alias c2_triggered   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.triggered : std_ulogic >>;
+		alias c2_restart     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.restart : std_ulogic >>;
+		alias c2_restarted   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.restarted : std_ulogic >>;
+		alias c2_running     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.running : std_ulogic >>;
+		alias c2_frozen      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.frozen : std_ulogic >>;
+		alias c2_active_i    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.active_i : std_ulogic >>;
+		alias c2_reload      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.reload : std_ulogic >>;
+		alias c2_wave        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.wave : std_ulogic >>;
+		alias c2_expired     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.expired : std_ulogic >>;
+		alias c2_hz64        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.hz64 : std_ulogic >>;
+		alias c2_tick        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.tick : std_ulogic >>;
+		alias c2_at_limit    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.at_limit : std_ulogic >>;
+		alias c2_env_stopped is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.env_stopped : std_ulogic >>;
+		alias c2_duty        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.duty : std_ulogic_vector(1 downto 0) >>;
+		alias c2_envelope    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.envelope : std_ulogic_vector(7 downto 0) >>;
+		alias c2_frequency   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.frequency : std_ulogic_vector(10 downto 0) >>;
+		alias c2_counter     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.counter : unsigned(10 downto 0) >>;
+		alias c2_step        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.step : unsigned(2 downto 0) >>;
+		alias c2_length      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.length : unsigned(5 downto 0) >>;
+		alias c2_period      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.period : unsigned(2 downto 0) >>;
+		alias c2_volume      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch2.volume : unsigned(3 downto 0) >>;
+		alias c3_dac_on_i    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.dac_on_i : std_ulogic >>;
+		alias c3_length_on   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.length_on : std_ulogic >>;
+		alias c3_trigger     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.trigger : std_ulogic >>;
+		alias c3_start       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.start : std_ulogic >>;
+		alias c3_triggered   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.triggered : std_ulogic >>;
+		alias c3_restart     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.restart : std_ulogic >>;
+		alias c3_restarted   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.restarted : std_ulogic >>;
+		alias c3_running     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.running : std_ulogic >>;
+		alias c3_frozen      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.frozen : std_ulogic >>;
+		alias c3_playing     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.playing : std_ulogic >>;
+		alias c3_active_i    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.active_i : std_ulogic >>;
+		alias c3_reload      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.reload : std_ulogic >>;
+		alias c3_wrapped     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.wrapped : std_ulogic >>;
+		alias c3_expired     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.expired : std_ulogic >>;
+		alias c3_busa        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.busa : std_ulogic >>;
+		alias c3_bano        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.bano : std_ulogic >>;
+		alias c3_fetch       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.fetch : std_ulogic >>;
+		alias c3_azet        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.azet : std_ulogic >>;
+		alias c3_level       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.level : std_ulogic_vector(1 downto 0) >>;
+		alias c3_frequency   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.frequency : std_ulogic_vector(10 downto 0) >>;
+		alias c3_counter     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.counter : unsigned(10 downto 0) >>;
+		alias c3_position    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.position : unsigned(4 downto 0) >>;
+		alias c3_length      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.length : unsigned(7 downto 0) >>;
+		alias c3_bit_lines   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.bit_lines : std_ulogic_vector(7 downto 0) >>;
+		alias c3_sample_byte is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.sample_byte : std_ulogic_vector(7 downto 0) >>;
+		alias c3_ram         is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch3.ram : wave_ram_t >>;
+		alias c4_length_on   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.length_on : std_ulogic >>;
+		alias c4_trigger     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.trigger : std_ulogic >>;
+		alias c4_start       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.start : std_ulogic >>;
+		alias c4_triggered   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.triggered : std_ulogic >>;
+		alias c4_restart     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.restart : std_ulogic >>;
+		alias c4_restarted   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.restarted : std_ulogic >>;
+		alias c4_running     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.running : std_ulogic >>;
+		alias c4_frozen      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.frozen : std_ulogic >>;
+		alias c4_active_i    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.active_i : std_ulogic >>;
+		alias c4_divided     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.divided : std_ulogic >>;
+		alias c4_joto        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.joto : std_ulogic >>;
+		alias c4_expired     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.expired : std_ulogic >>;
+		alias c4_hz64        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.hz64 : std_ulogic >>;
+		alias c4_tick        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.tick : std_ulogic >>;
+		alias c4_at_limit    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.at_limit : std_ulogic >>;
+		alias c4_env_stopped is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.env_stopped : std_ulogic >>;
+		alias c4_envelope    is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.envelope : std_ulogic_vector(7 downto 0) >>;
+		alias c4_noise       is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.noise : std_ulogic_vector(7 downto 0) >>;
+		alias c4_divider     is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.divider : unsigned(2 downto 0) >>;
+		alias c4_prescaler   is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.prescaler : unsigned(13 downto 0) >>;
+		alias c4_lfsr        is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.lfsr : std_ulogic_vector(15 downto 1) >>;
+		alias c4_length      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.length : unsigned(5 downto 0) >>;
+		alias c4_period      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.period : unsigned(2 downto 0) >>;
+		alias c4_volume      is << signal .gameboy_tb.u_gameboy.chip.u_chip.channels.u_apu_ch4.volume : unsigned(3 downto 0) >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := BLOCKS_FROM_POWER_ON;
@@ -784,6 +927,20 @@ begin
 					& ' ' & hx(q_b & q_c) & ' ' & hx(q_d & q_e) & ' ' & hx(q_h & q_l) & ' ' & hx(q_w & q_z)
 					& ' ' & hx(q_sph & q_spl) & ' ' & hx(q_pch & q_pcl)
 					& ' ' & hx(q_pending) & ' ' & hx(q_db) & ' ' & hx(data_low));
+				-- The APU.
+				write(l, ' ' & b01(a_power) & b01(a_test_i) & b01(a_test_bit5) & b01(a_baza) & b01(a_ajer_i) & b01(a_calo) & b01(a_atep) & b01(a_cemo) & b01(a_cery) & b01(a_atyk) & b01(a_avok) & b01(a_jeso) & b01(a_bara) & b01(a_caru) & b01(a_bylu)
+					& ' ' & hx(a_nr50) & ' ' & hx(a_nr51));
+				write(l, ' ' & b01(c1_length_on) & b01(c1_trigger) & b01(c1_start) & b01(c1_triggered) & b01(c1_restart) & b01(c1_restarted) & b01(c1_running) & b01(c1_frozen) & b01(c1_active_i) & b01(c1_reload) & b01(c1_wave) & b01(c1_expired) & b01(c1_hz64) & b01(c1_tick) & b01(c1_at_limit) & b01(c1_env_stopped) & b01(c1_sweep_step) & b01(c1_shifting) & b01(c1_shift_done)
+					& ' ' & hx(c1_sweep) & ' ' & hx(c1_duty) & ' ' & hx(c1_envelope) & ' ' & hx(c1_acc) & ' ' & hx(std_ulogic_vector(c1_counter)) & ' ' & hx(std_ulogic_vector(c1_step)) & ' ' & hx(std_ulogic_vector(c1_length)) & ' ' & hx(std_ulogic_vector(c1_period)) & ' ' & hx(std_ulogic_vector(c1_volume)) & ' ' & hx(std_ulogic_vector(c1_sweep_count)) & ' ' & hx(std_ulogic_vector(c1_shifts)) & ' ' & hx(c1_shifted) & ' ' & hx(c1_augend) & ' ' & hx(c1_addend));
+				write(l, ' ' & b01(c2_length_on) & b01(c2_trigger) & b01(c2_start) & b01(c2_triggered) & b01(c2_restart) & b01(c2_restarted) & b01(c2_running) & b01(c2_frozen) & b01(c2_active_i) & b01(c2_reload) & b01(c2_wave) & b01(c2_expired) & b01(c2_hz64) & b01(c2_tick) & b01(c2_at_limit) & b01(c2_env_stopped)
+					& ' ' & hx(c2_duty) & ' ' & hx(c2_envelope) & ' ' & hx(c2_frequency) & ' ' & hx(std_ulogic_vector(c2_counter)) & ' ' & hx(std_ulogic_vector(c2_step)) & ' ' & hx(std_ulogic_vector(c2_length)) & ' ' & hx(std_ulogic_vector(c2_period)) & ' ' & hx(std_ulogic_vector(c2_volume)));
+				write(l, ' ' & b01(c3_dac_on_i) & b01(c3_length_on) & b01(c3_trigger) & b01(c3_start) & b01(c3_triggered) & b01(c3_restart) & b01(c3_restarted) & b01(c3_running) & b01(c3_frozen) & b01(c3_playing) & b01(c3_active_i) & b01(c3_reload) & b01(c3_wrapped) & b01(c3_expired) & b01(c3_busa) & b01(c3_bano) & b01(c3_fetch) & b01(c3_azet)
+					& ' ' & hx(c3_level) & ' ' & hx(c3_frequency) & ' ' & hx(std_ulogic_vector(c3_counter)) & ' ' & hx(std_ulogic_vector(c3_position)) & ' ' & hx(std_ulogic_vector(c3_length)) & ' ' & hx(c3_bit_lines) & ' ' & hx(c3_sample_byte) & ' ');
+				for i in 0 to 15 loop
+					write(l, hx(c3_ram(i)));
+				end loop;
+				write(l, ' ' & b01(c4_length_on) & b01(c4_trigger) & b01(c4_start) & b01(c4_triggered) & b01(c4_restart) & b01(c4_restarted) & b01(c4_running) & b01(c4_frozen) & b01(c4_active_i) & b01(c4_divided) & b01(c4_joto) & b01(c4_expired) & b01(c4_hz64) & b01(c4_tick) & b01(c4_at_limit) & b01(c4_env_stopped)
+					& ' ' & hx(c4_envelope) & ' ' & hx(c4_noise) & ' ' & hx(std_ulogic_vector(c4_divider)) & ' ' & hx(std_ulogic_vector(c4_prescaler)) & ' ' & hx(c4_lfsr) & ' ' & hx(std_ulogic_vector(c4_length)) & ' ' & hx(std_ulogic_vector(c4_period)) & ' ' & hx(std_ulogic_vector(c4_volume)));
 				writeline(f, l);
 			end if;
 			ended := phase;
@@ -794,6 +951,13 @@ begin
 			end loop;
 		end loop;
 	end process;
+	else generate
+		blocks_trace : process
+		begin
+			assert BLOCKS = "" report "BLOCKS traces the APU's channels: WITH_CHANNELS must be true" severity failure;
+			wait;
+		end process;
+	end generate;
 
 	cut_traces : if REVISION = DMG_B generate
 		-- What the blocks show each other, seen when the accesses are (in the
