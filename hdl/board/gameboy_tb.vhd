@@ -79,8 +79,18 @@
 -- the joypad's P1, read latch, debounce history and wake-up latch, its
 -- input pins, and the serial port's SB, transfer, internal clock, half,
 -- output, SCK and SIN, and count; whether the external bus's address
--- latches were open in the phase, for however short. Values in
--- hexadecimal, bits as 0 or 1. With BLOCKS_FROM_POWER_ON, from the power-on.
+-- latches were open in the phase, for however short; then the CPU core:
+-- its sequencer's latches and flip-flops (halt, stop, halt_delayed,
+-- stop_delayed, pending_delayed, not_ready_1, not_ready_2, ime_state, ime,
+-- no_nmi, no_nmi_1, entering, int_entry, sel_reg_w, cb_next, cb_flag), the
+-- ALU's cond_fail, z7_master and z7_delayed, the opcode, IR's next value
+-- and the M-cycle, the registers (AF with the flags as they show, BC, DE,
+-- HL, WZ, SP, PC), the requests the interrupt logic latched, the core's
+-- data bus, and the bits of the chip's data bus that were a strong 0 in
+-- the phase, for however short (only those pull the core's bus down: not
+-- the keeper's weak 0, nor an X where drivers fight, which the data bus's
+-- field shows as 0). Values in hexadecimal, bits as 0 or 1. With
+-- BLOCKS_FROM_POWER_ON, from the power-on.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -612,6 +622,47 @@ begin
 		alias y_sck         is << signal .gameboy_tb.u_gameboy.chip.u_chip.sck : std_logic >>;
 		alias y_addr_latch  is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_external_bus.addr_latch : std_ulogic >>;
 		alias y_sin         is << signal .gameboy_tb.u_gameboy.chip.u_chip.sin : std_logic >>;
+		alias q_halt            is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.halt_i : std_ulogic >>;
+		alias q_stop            is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.stop_i : std_ulogic >>;
+		alias q_halt_delayed    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.halt_delayed : std_ulogic >>;
+		alias q_stop_delayed    is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.stop_delayed : std_ulogic >>;
+		alias q_pending_delayed is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.pending_delayed : std_ulogic >>;
+		alias q_not_ready_1     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.not_ready_1 : std_ulogic >>;
+		alias q_not_ready_2     is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.not_ready_2 : std_ulogic >>;
+		alias q_ime_state       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.ime_state : std_ulogic >>;
+		alias q_ime             is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.ime_i : std_ulogic >>;
+		alias q_no_nmi          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.no_nmi : std_ulogic >>;
+		alias q_no_nmi_1        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.no_nmi_1 : std_ulogic >>;
+		alias q_entering        is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.entering : std_ulogic >>;
+		alias q_int_entry       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.int_entry_i : std_ulogic >>;
+		alias q_sel_reg_w       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.sel_reg_w_i : std_ulogic >>;
+		alias q_cb_next         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.cb_next : std_ulogic >>;
+		alias q_cb_flag         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.cb_flag : std_ulogic >>;
+		alias q_cond_fail       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_alu.cond_fail_i : std_ulogic >>;
+		alias q_z7_master       is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_alu.z7_master : std_ulogic >>;
+		alias q_z7_delayed      is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_alu.z7_delayed : std_ulogic >>;
+		alias q_opcode          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.opcode_i : std_ulogic_vector(7 downto 0) >>;
+		alias q_ir_next         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.ir_next : std_ulogic_vector(7 downto 0) >>;
+		alias q_mcyc            is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_sequencer.mcyc_i : std_ulogic_vector(2 downto 0) >>;
+		alias q_flag_z          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_alu.flag_z : std_ulogic >>;
+		alias q_flag_n          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_alu.flag_n : std_ulogic >>;
+		alias q_flag_h          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_alu.flag_h : std_ulogic >>;
+		alias q_flag_c          is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_alu.flag_c : std_ulogic >>;
+		alias q_a               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.a : std_ulogic_vector(7 downto 0) >>;
+		alias q_b               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.b : std_ulogic_vector(7 downto 0) >>;
+		alias q_c               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.c_reg : std_ulogic_vector(7 downto 0) >>;
+		alias q_d               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.d : std_ulogic_vector(7 downto 0) >>;
+		alias q_e               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.e : std_ulogic_vector(7 downto 0) >>;
+		alias q_h               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.h : std_ulogic_vector(7 downto 0) >>;
+		alias q_l               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.l : std_ulogic_vector(7 downto 0) >>;
+		alias q_w               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.w : std_ulogic_vector(7 downto 0) >>;
+		alias q_z               is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.z : std_ulogic_vector(7 downto 0) >>;
+		alias q_sph             is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.sph : std_ulogic_vector(7 downto 0) >>;
+		alias q_spl             is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.spl : std_ulogic_vector(7 downto 0) >>;
+		alias q_pch             is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.pch : std_ulogic_vector(7 downto 0) >>;
+		alias q_pcl             is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_registers.pcl : std_ulogic_vector(7 downto 0) >>;
+		alias q_pending         is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.u_interrupts.pending : std_ulogic_vector(7 downto 0) >>;
+		alias q_db              is << signal .gameboy_tb.u_gameboy.chip.u_chip.u_cpu.db : std_logic_vector(7 downto 0) >>;
 		file f        : text;
 		variable l    : line;
 		variable seen : boolean := BLOCKS_FROM_POWER_ON;
@@ -622,6 +673,8 @@ begin
 		-- for less than its length (the core's mreq pulses as an access
 		-- inside the chip starts).
 		variable latch_seen : std_ulogic := '0';
+		-- The chip's data bus's bits that were a strong 0 in the phase.
+		variable data_low : std_ulogic_vector(7 downto 0) := (others => '0');
 
 		function b01(b : std_ulogic) return character is
 		begin
@@ -642,8 +695,11 @@ begin
 		file_open(f, BLOCKS, write_mode);
 		ended := phase;
 		loop
-			wait on phase, int_vbl, int_stat, int_timer, int_serial, int_jp, y_addr_latch;
+			wait on phase, int_vbl, int_stat, int_timer, int_serial, int_jp, y_addr_latch, data;
 			if y_addr_latch = '1' then latch_seen := '1'; end if;
+			for i in data'range loop
+				if data(i) = '0' then data_low(i) := '1'; end if;
+			end loop;
 			if rising_edge(int_vbl) then rose(0) := '1'; end if;
 			if rising_edge(int_stat) then rose(1) := '1'; end if;
 			if rising_edge(int_timer) then rose(2) := '1'; end if;
@@ -717,11 +773,25 @@ begin
 					& ' ' & hx(y_sb) & ' ' & b01(y_transfer) & b01(y_int_clock) & b01(y_half)
 					& b01(y_ser_out) & b01(y_sck) & b01(y_sin) & ' ' & hx(std_ulogic_vector(y_ser_count))
 					& ' ' & b01(latch_seen));
+				-- The CPU core.
+				write(l, ' ' & b01(q_halt) & b01(q_stop) & b01(q_halt_delayed) & b01(q_stop_delayed)
+					& b01(q_pending_delayed) & b01(q_not_ready_1) & b01(q_not_ready_2) & b01(q_ime_state)
+					& b01(q_ime) & b01(q_no_nmi) & b01(q_no_nmi_1) & b01(q_entering) & b01(q_int_entry)
+					& b01(q_sel_reg_w) & b01(q_cb_next) & b01(q_cb_flag) & b01(q_cond_fail)
+					& b01(q_z7_master) & b01(q_z7_delayed)
+					& ' ' & hx(q_opcode) & ' ' & hx(q_ir_next) & ' ' & hx(q_mcyc)
+					& ' ' & hx(q_a & q_flag_z & q_flag_n & q_flag_h & q_flag_c & "0000")
+					& ' ' & hx(q_b & q_c) & ' ' & hx(q_d & q_e) & ' ' & hx(q_h & q_l) & ' ' & hx(q_w & q_z)
+					& ' ' & hx(q_sph & q_spl) & ' ' & hx(q_pch & q_pcl)
+					& ' ' & hx(q_pending) & ' ' & hx(q_db) & ' ' & hx(data_low));
 				writeline(f, l);
 			end if;
 			ended := phase;
 			rose  := (others => '0');
 			latch_seen := y_addr_latch;
+			for i in data'range loop
+				data_low(i) := '1' when data(i) = '0' else '0';
+			end loop;
 		end loop;
 	end process;
 

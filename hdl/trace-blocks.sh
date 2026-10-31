@@ -18,9 +18,10 @@
 #   cargo test -p ceres-netlist --release --test replay -- --ignored
 #
 # replays every trace in build/blocks through ceres-netlist's NetTimer,
-# NetIf, NetDma, NetLcd, NetScan, NetOamLatches, NetClocks, NetRender and
-# NetChip (its tests/replay.rs) and reports the phases where one parts from
-# the model (REPLAY_ONLY=a,b: only the traces whose names contain a or b).
+# NetIf, NetDma, NetLcd, NetScan, NetOamLatches, NetClocks, NetRender,
+# NetBus, NetCore (the CPU core) and NetChip (its tests/replay.rs) and
+# reports the phases where one parts from the model (REPLAY_ONLY=a,b: only
+# the traces whose names contain a or b).
 
 set -eu
 
@@ -43,8 +44,8 @@ mkdir -p "$dir"
 
 make -C "$HDL" -s model build/fastboot.bin
 
-# A run that goes wrong stops at 1 GiB (in a POSIX shell's 512-byte blocks).
-ulimit -f 2097152
+# A run that goes wrong stops at 2 GiB (in a POSIX shell's 512-byte blocks).
+ulimit -f 4194304
 limit=$(awk -v s="$secs" 'BEGIN { print int(600 + 1200 * s) }')
 (cd "$dir" && timeout "$limit" nvc --std=2008 -H 64m --work="${WORK:-$HDL/build/model/work}" -e --jit gameboy_tb \
 	-gBOOTROM="$BOOTROM" -gROM="$ROOT/$rom" -gSECS="$secs" -gBLOCKS="$out" ${TEST:+"-gTEST=$TEST"} \

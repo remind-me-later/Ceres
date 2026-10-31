@@ -511,6 +511,26 @@ data bus, acknowledges, and its request's pulses), the clock pins and the
 world outside (the joypad's lines, SIN, SCK): over the 269 traces the
 closed loop finds no difference either.
 
+The CPU core (`sm83.vhd` and its parts: the decoders, the sequencer, the
+registers, the ALU, the IDU, the interrupt logic) replays as `NetCore`
+(ceres-netlist's `sm83`), phase by phase: the edge that starts a phase
+clocks its flip-flops (the sequencer's at the rise of `clk`, IME as
+`exec_phase` falls, the opcode as the fetch ends), then its latches and
+wires settle until nothing changes. The traces' last 14 fields hold the
+sequencer's and the ALU's latches and flip-flops, the opcode, IR, the
+M-cycle, the registers, the requests the interrupt logic latched, the
+core's data bus, and the bits of the chip's data bus that were a strong 0
+in the phase, for however short: the bridge between the two buses passes
+only those, not the keeper's weak 0, nor an X where drivers fight (OAM's
+data lines and a STAT read in `oam_write_l1_a`), which the data bus's own
+field shows as 0. From the trace the core takes the clocks, the resets,
+IF, those bits and the chip's decoding of its address. Over the 270
+traces it matches the model in every latch and register, and in its
+address, request, read, write, acknowledges and HALT's and STOP's
+enables: 2.11 billion phases, 10 million opcodes fetched, 31 thousand
+after the CB prefix, 30355 interrupt entries (182 of them choosing
+between requests), 2913 HALTs, 6194 failed conditions.
+
 `check/ppu_regs.asm`, `check/vram_oam.asm` and `check/bus.asm` read
 back the PPU's registers, VRAM, OAM and the bus side, and check what they
 read: every register's bits with the LCD on and off, FF46 during and after

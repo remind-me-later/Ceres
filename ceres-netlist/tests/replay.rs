@@ -3,7 +3,8 @@
 //! in `hdl/build/blocks`, and from the power-on in its `power-on/`) through
 //! their transcriptions, `NetTimer`, `NetIf`, `NetDma`, `NetLcd`,
 //! `NetScan`, `NetOamLatches`, `NetClocks`, `NetRender` (render's traces
-//! only, in `render/`) and `NetBus` (in `bus/`), phase by phase, and reports
+//! only, in `render/`), `NetBus` (in `bus/`) and the CPU core `NetCore` (in
+//! `core/`), phase by phase, and reports
 //! where a transcription parts from the model; and the blocks wired
 //! together (`NetChip`), each taking from the others what the model wires
 //! in, where the trace has the clocks. ceres-core's proofs against ceres
@@ -22,6 +23,7 @@
 //! (with `REPLAY_ONLY=a,b`, only the traces whose names contain a or b).
 
 mod bus;
+mod core;
 mod render;
 
 use {
@@ -87,6 +89,8 @@ struct Line {
     render: Option<render::RenderLine>,
     /// The bus side (older traces lack it).
     bus: Option<bus::BusLine>,
+    /// The CPU core (older traces lack it).
+    core: Option<core::CoreLine>,
 }
 
 /// The clocks in a line of a trace: what they take in, their latches and
@@ -140,8 +144,16 @@ struct OamLine {
 }
 
 #[expect(clippy::similar_names, reason = "TIMA and TMA")]
+#[expect(clippy::cognitive_complexity, reason = "a group of fields at a time")]
 fn parse(text: &str) -> Option<Line> {
     let mut all: Vec<&str> = text.split_whitespace().collect();
+    // The core's fields follow the bus side's; IE is the 14th field.
+    let core = if all.len() == core::CORE_LINE_FIELDS {
+        let fields = all.split_off(bus::BUS_LINE_FIELDS);
+        Some(core::parse(&fields, hex8(all.get(13)?)?)?)
+    } else {
+        None
+    };
     // The bus side's fields follow OAM's and VRAM's; the data pins are
     // among those, the 6th from their end.
     let bus = if all.len() == bus::BUS_LINE_FIELDS {
@@ -237,6 +249,7 @@ fn parse(text: &str) -> Option<Line> {
         clocks,
         render,
         bus,
+        core,
     })
 }
 
@@ -1527,6 +1540,7 @@ fn netlist_replay() {
         replay_chip(name, path, &lines, &mut report);
         render::replay(name, &lines, &mut report);
         bus::replay(name, path, &lines, &mut report);
+        core::replay(name, &lines, &mut report);
     }
     // The traces from the power-on (`FROM=power-on`): the clocks only, as
     // the other blocks are held in their resets.
