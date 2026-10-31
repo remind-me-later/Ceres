@@ -39,6 +39,7 @@ use {
         oam::{NetOamLatches, OamInputs},
         oam_scan::{Clocks as ScanClocks, NetScan},
         render::{NetRender, vram_power_on},
+        sm83::CoreOutputs,
         timer::{Access, NetTimer, Reg},
     },
     std::{
@@ -1156,7 +1157,7 @@ const fn clocks_shown(
 /// What the chip takes in at the edge of line `edge` (the pins), and in the
 /// phase it starts, which the next line ends (the CPU's access, the other
 /// interrupt sources' rises, the acknowledges).
-fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
+fn chip_inputs(edge: &Line, phase: &Line, core: &CoreOutputs) -> Option<ChipInputs> {
     let pins = edge.clocks.as_ref()?.inputs;
     let bus = phase.bus.as_ref()?;
     Some(ChipInputs {
@@ -1175,7 +1176,8 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
         write_in_phase: bus.write,
         data: phase.data,
         acks: phase.acks,
-        latch_glitch: bus::latch_glitch(phase),
+        high_byte: core.high_byte,
+        ctl_mreq: core.ctl_mreq,
         p10_13: bus.p10_13,
         sin: bus.sin,
         sck: bus.sck,
@@ -1190,10 +1192,13 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
 /// height, the OAM scan runs on the line timing's clocks with what OAM's
 /// latches hold, the latches follow the scan, the DMA and render's sprite
 /// fetch, render and the sprite store run on what the others give them,
-/// and give the STAT line mode 0, and the APU runs on the clocks and the
-/// divider; only the CPU's access, the other sources, the acknowledges,
-/// OAM's RAM and odd byte and VRAM's data come from the trace, which must
-/// have render's and the APU's fields. Every read is compared with the
+/// and give the STAT line mode 0, the APU runs on the clocks and the
+/// divider, and the address pins' latches catch the core's request where
+/// it pulses as an access starts; only the CPU's access (with what drives
+/// its address's high byte and its decoder's request, from the core's
+/// replay), the other sources, the acknowledges, OAM's RAM and odd byte
+/// and VRAM's data come from the trace, which must have render's, the
+/// core's and the APU's fields. Every read is compared with the
 /// byte the core takes. LCDC's bits that the trace lacks (all but 7 and 2)
 /// are taken from the first read of it, if it comes before a write. A step
 /// is an edge and the phase it starts: the clocks are compared with the
@@ -1202,7 +1207,13 @@ fn chip_inputs(edge: &Line, phase: &Line) -> Option<ChipInputs> {
     clippy::too_many_lines,
     reason = "the start, then the comparison of each block"
 )]
-fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
+fn replay_chip(
+    name: &str,
+    trace: &Path,
+    lines: &[Line],
+    core: &[Option<CoreOutputs>],
+    report: &mut Report,
+) {
     let Some(start) = lines.iter().position(|l| l.clocks.is_some()) else {
         return;
     };
@@ -1259,6 +1270,12 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
         scan: scan.net,
         wr_before: second.wr,
         data_before: second.data,
+        addr_before: second.addr,
+        ctl_mreq_before: core
+            .get(start + 1)
+            .copied()
+            .flatten()
+            .is_some_and(|c| c.ctl_mreq),
         read_bus: None,
         render: NetRender {
             md_kept: 0xFF,
@@ -1281,7 +1298,12 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
     let mut lcdc_known = false;
     for n in start + 1..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
-        let (Some(inputs), Some(clocks)) = (chip_inputs(line, ends), line.clocks.as_ref()) else {
+        let Some(core_out) = core.get(n + 1).copied().flatten() else {
+            return;
+        };
+        let (Some(inputs), Some(clocks)) =
+            (chip_inputs(line, ends, &core_out), line.clocks.as_ref())
+        else {
             return;
         };
         let place = format!("{name}:{}", n + 1);
@@ -1584,10 +1606,10 @@ fn netlist_replay() {
         replay_lcd(name, &lines, &mut report);
         replay_scan(name, &lines, &mut report);
         replay_clocks(name, &lines, &mut report, false);
-        replay_chip(name, path, &lines, &mut report);
+        let core_outputs = core::replay(name, &lines, &mut report);
+        replay_chip(name, path, &lines, &core_outputs, &mut report);
         render::replay(name, &lines, &mut report);
         bus::replay(name, path, &lines, &mut report);
-        core::replay(name, &lines, &mut report);
         apu::replay(name, &lines, &mut report);
     }
     // The traces from the power-on (`FROM=power-on`): the clocks only, as

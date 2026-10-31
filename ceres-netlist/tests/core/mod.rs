@@ -6,8 +6,9 @@
 
 use {
     super::{Line, Report, bit, hex8},
+    ceres_netlist::latch_race::LatchRace,
     ceres_netlist::sm83::{
-        CoreInputs, CoreOutputs, Flags, NetAlu, NetCore, NetCoreInterrupts, NetRegisters,
+        CoreInputs, CoreOutputs, Flags, HighByte, NetAlu, NetCore, NetCoreInterrupts, NetRegisters,
         NetSequencer, Register,
     },
 };
@@ -268,23 +269,102 @@ fn output_differences(out: &CoreOutputs, line: &Line) -> Vec<&'static str> {
     differ
 }
 
-/// Replays the core, phase by phase, from the trace's first line.
-pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
-    let Some(first) = lines.first() else {
+/// The race of the core's request against the chip's decodings
+/// (`LatchRace`) in `line`'s phase, from the core's outputs as the phase
+/// before ended (`before`) and as this one ends (`out`), against the
+/// latches' opening the trace shows.
+fn check_race(
+    line: &Line,
+    unmapped_before: Option<bool>,
+    before: &CoreOutputs,
+    out: &CoreOutputs,
+    place: &str,
+    report: &mut Report,
+) {
+    let (Some(bus), Some(clocks)) = (line.bus.as_ref(), line.clocks.as_ref()) else {
         return;
+    };
+    let pins = clocks.inputs;
+    let race = LatchRace {
+        addr_before: before.addr,
+        addr: out.addr,
+        high_byte: out.high_byte,
+        ctl_mreq_before: before.ctl_mreq,
+        ctl_mreq: out.ctl_mreq,
+        boot_mapped: !unmapped_before.unwrap_or(bus.net.unmapped),
+        t2_only: pins.t2 && !pins.t1,
+    };
+    let ours = race.glitch().map(|a| a & 0x7FFF);
+    let theirs = super::bus::latch_glitch(line);
+    let vram = out.addr >> 13 == 0b100;
+    let starts = out.ctl_mreq && !before.ctl_mreq;
+    let seen = if ours.is_some() {
+        Some(if line.phase == 'a' {
+            "core: the address latches close as an access ends"
+        } else if vram {
+            "core: the address latches open for a moment: VRAM, through HL or SP"
+        } else if out.addr >= 0xFE00 {
+            "core: the address latches open for a moment: FE00 to FFFF"
+        } else if out.addr >> 8 == 0 {
+            "core: the address latches open for a moment: the boot ROM"
+        } else {
+            "core: the address latches open for a moment: elsewhere"
+        })
+    } else if starts && vram {
+        match out.high_byte {
+            HighByte::Register => {
+                Some("core: a VRAM access through BC, DE or PC: the pulse is dropped")
+            }
+            HighByte::W => Some("core: a VRAM access through W: no pulse"),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    if let Some(what) = seen {
+        report.saw(what);
+    }
+    if ours != theirs {
+        report.differ(
+            format!("core: the address latches' glitch, phase {}", line.phase),
+            format!("{place} ({ours:04X?}, model {theirs:04X?}; {race:04X?})"),
+        );
+    }
+}
+
+/// Replays the core, phase by phase, from the trace's first line, and
+/// checks the race of its request against the chip's decodings
+/// (`LatchRace`) with the latches' openings the trace shows. Its outputs as
+/// each line ends its phase, for the chip's replay.
+pub fn replay(name: &str, lines: &[Line], report: &mut Report) -> Vec<Option<CoreOutputs>> {
+    let mut given = vec![None; lines.len()];
+    let Some(first) = lines.first() else {
+        return given;
     };
     let (Some(start), Some(first_inputs)) = (first.core.as_ref(), inputs(first)) else {
-        return;
+        return given;
     };
     let mut net = start.net;
-    net.settle(&first_inputs);
+    let mut out_before = net.settle(&first_inputs);
+    given[0] = Some(out_before);
     for (n, line) in lines.iter().enumerate().skip(1) {
         let (Some(model), Some(i)) = (line.core.as_ref(), inputs(line)) else {
-            return;
+            return given;
         };
         let before = net;
         let out = net.phase(&i);
         report.phases += 1;
+        let unmapped_before = lines[n - 1].bus.as_ref().map(|b| b.net.unmapped);
+        check_race(
+            line,
+            unmapped_before,
+            &out_before,
+            &out,
+            &format!("{name}:{}", n + 1),
+            report,
+        );
+        out_before = out;
+        given[n] = Some(out);
         for (what, happened) in [
             (
                 "core: an interrupt's entry",
@@ -338,4 +418,5 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
             );
         }
     }
+    given
 }

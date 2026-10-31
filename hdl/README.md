@@ -497,19 +497,34 @@ fields hold the core's request, the pins, the bus side's latches and
 flip-flops, and whether the address latches were open in the phase, for
 however short: as an access inside the chip starts, the core's request
 pulses for a moment, and the latches can take the address and the data pins
-the data bus. That is the core's timing, so the replay takes the latches'
-address from the trace then. As an access ends, the latches take the high
-byte as 00 (the core changes it before its request falls); the serial
+the data bus. That is the core's timing, so the bus side's replay takes the
+latches' address from the trace then (`NetChip` works it out, below). As
+an access ends, the latches take the high byte as 00 (the core changes it
+before its request falls); the serial
 port's half clock is unknown until a write of SC; its eighth bit clears the
 transfer at once. While nothing drives the data pins the board's keeper
 holds them against the pull-ups, as on VRAM's, and the replay compares
 them, and the data latches, only while driven. Over the 269 traces it
 finds no difference: 16 million reads on the cartridge bus, 400 thousand
 writes of HRAM, 189 serial transfers. Wired into `NetChip` with the rest, they
-leave the chip's inputs the CPU core's (its address, read, write, request,
-data bus, acknowledges, and its request's pulses), the clock pins and the
-world outside (the joypad's lines, SIN, SCK): over the 269 traces the
-closed loop finds no difference either. Every read the core makes gets its
+leave the chip's inputs the CPU core's (its address and what drives its
+high byte, read, write, request, data bus, acknowledges), the clock pins
+and the world outside (the joypad's lines, SIN, SCK): over the 269 traces
+the closed loop finds no difference either. The request's pulses come from
+`latch_race`, which follows the few signals of the race through the phase
+in picoseconds, with the VHDL's delays: the core's request reaches the
+chip 22 ns after the edge, the address's high byte at 21 ns (precharged),
+22 (from W), 25 (PC, BC, DE, FF) or 26 (HL, SP), its low byte at 32; the
+chip decodes VRAM in 0.3 ns and FE00 to FFFF and the boot ROM in 10, which
+gate the request; the request outside VRAM rises after 2.4 ns and falls
+after 1.35, and the latches' enable passes no pulse shorter than 2.7. So
+an access to FE00 to FFFF opens the latches for a moment, and so does a
+VRAM access through HL or SP, while one through BC, DE or PC is too short
+and one through W has none. Against the openings the traces show, over
+the 437 traces: 16 million as accesses end, a million at the start of
+accesses to FE00 to FFFF, 64541 of VRAM accesses through HL or SP, with no
+difference, and none where 10240 VRAM accesses through BC, DE or PC and
+80306 through W have none either. Every read the core makes gets its
 byte from `NetChip`, as the AND of what drives the bus from E to H: the
 PPU, OAM DMA, the bus side, the divider and the timer (TAC's unused bits
 high), IF through its read latch, IE (the core's own), the APU (below),

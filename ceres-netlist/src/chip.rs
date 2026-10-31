@@ -5,10 +5,10 @@
 //! the line timing, the OAM scan, OAM, render, the sprite store, VRAM's
 //! bus, the bus side (the external bus, HRAM, the boot ROM's mapping, the
 //! joypad, the serial port) and the APU: everything but the CPU core. What
-//! comes in with each edge (`ChipInputs`) is the core's (its address,
-//! read, write, request, the data bus, its acknowledges, and its request's
-//! pulses, which the external bus's latches can catch), the clock pins and
-//! the world outside (the joypad's lines, SIN, SCK); the memories (VRAM, the board's work RAM and
+//! comes in with each edge (`ChipInputs`) is the core's (its address and
+//! what drives its high byte, read, write, request, the data bus, its
+//! acknowledges), the clock pins and the world outside (the joypad's
+//! lines, SIN, SCK); the memories (VRAM, the board's work RAM and
 //! cartridge, the boot ROM) are the edge's to borrow. Every read gets its
 //! byte from the blocks that drive the data bus, IE's (the core's) among
 //! them, or the precharged FF where nothing does.
@@ -24,11 +24,13 @@ use crate::{
     clocks::{ClockInputs, ClockOutputs, NetClocks},
     dma::NetDma,
     interrupts::{NetIf, TIMER},
+    latch_race::LatchRace,
     lcd_control::NetLcdControl,
     lcd_timing::NetLcd,
     oam::OamInputs,
     oam_scan::{Clocks as ScanClocks, NetScan},
     render::{NetRender, RenderInputs},
+    sm83::HighByte,
     timer::{Access, NetTimer, Reg},
 };
 
@@ -77,9 +79,12 @@ pub struct ChipInputs {
     /// clock_out take them as they are at the edge, `mreq` and `write`).
     pub mreq_in_phase: bool,
     pub write_in_phase: bool,
-    /// The address the external bus's latches took as the core's request
-    /// pulsed inside the phase (the core's timing), if they did.
-    pub latch_glitch: Option<u16>,
+    /// What drives the address's high byte, and the core's decoder's
+    /// request (`ctl_mreq`, which the chip's decodings gate into `mreq`), in
+    /// the phase: they decide whether the request pulses for a moment as an
+    /// access starts.
+    pub high_byte: HighByte,
+    pub ctl_mreq: bool,
     /// The world outside: the joypad's lines, SIN, and SCK as the other end
     /// of the link drives it.
     pub p10_13: u8,
@@ -123,6 +128,10 @@ pub struct NetChip {
     /// latches a write opens take the bus as it was first.
     pub wr_before: bool,
     pub data_before: u8,
+    /// The core's address and decoder's request in the last phase: what
+    /// the chip decodes until the new ones reach it.
+    pub addr_before: u16,
+    pub ctl_mreq_before: bool,
     /// What a read of LCDC, STAT, LY or LYC has taken so far: the core's data bus
     /// is precharged high and only pulled low while the read drives it,
     /// from E until it takes it in H.
@@ -222,6 +231,8 @@ impl NetChip {
         let read = self.step_read(phase, mode2, flags_before, inputs, bus);
         self.wr_before = self.cpu_wr;
         self.data_before = inputs.data;
+        self.addr_before = inputs.addr;
+        self.ctl_mreq_before = inputs.ctl_mreq;
         ChipEvents {
             timer_rose,
             stat_rose,
@@ -404,7 +415,9 @@ impl NetChip {
     }
 
     /// The bus side, in the phase: the external bus, HRAM, the boot ROM's
-    /// mapping, the joypad and the serial port, with the board on the pins.
+    /// mapping, the joypad and the serial port, with the board on the pins;
+    /// the address pins' latches also take what the race of the core's
+    /// request against the chip's decodings lets through.
     fn step_bus(
         &mut self,
         phase: Phase,
@@ -432,7 +445,16 @@ impl NetChip {
             p10_13: inputs.p10_13,
             sin: inputs.sin,
             sck: inputs.sck,
-            latch_glitch: inputs.latch_glitch,
+            latch_glitch: LatchRace {
+                addr_before: self.addr_before,
+                addr: inputs.addr,
+                high_byte: inputs.high_byte,
+                ctl_mreq_before: self.ctl_mreq_before,
+                ctl_mreq: inputs.ctl_mreq,
+                boot_mapped: !self.bus.unmapped,
+                t2_only: inputs.t2 & !inputs.t1,
+            }
+            .glitch(),
         };
         self.bus
             .phase(&bus_inputs, &mut memories.board, &memories.boot_rom)

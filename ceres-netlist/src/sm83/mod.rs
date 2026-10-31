@@ -76,11 +76,51 @@ pub struct CoreInputs {
     pub d: u8,
 }
 
+/// What drives the address's high byte.
+///
+/// It decides when the byte reaches the chip after the edge that changes
+/// it (`hdl/rtl/sm83.vhd`): nothing (the bus is precharged, 00), W, a
+/// register (PC, BC, DE, or FF for LDH), HL or SP, which come later; or the
+/// core lets go of it (the test mode T1 alone).
+// @hw measured: dmg-sim (the delays of its gates and wires)
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub enum HighByte {
+    #[default]
+    Precharged,
+    W,
+    Register,
+    RegisterLate,
+    Released,
+}
+
+impl HighByte {
+    /// When the high byte reaches the chip, in picoseconds after the edge.
+    #[must_use]
+    pub const fn arrives(self) -> u32 {
+        match self {
+            Self::Precharged => 21_000,
+            Self::W => 22_000,
+            Self::Register | Self::Released => 25_000,
+            Self::RegisterLate => 26_000,
+        }
+    }
+}
+
+/// When the address's low byte reaches the chip, in picoseconds after the
+/// edge.
+pub const LOW_BYTE_ARRIVES: u32 = 32_000;
+/// When the decoder's request (`ctl_mreq`) does; the gate that makes the
+/// chip's request of it adds `MREQ_GATE`.
+pub const CTL_MREQ_ARRIVES: u32 = 14_000;
+pub const MREQ_GATE: u32 = 8_000;
+
 /// What the core gives out as a phase ends.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
 #[expect(clippy::struct_excessive_bools, reason = "the control lines")]
 pub struct CoreOutputs {
     pub addr: u16,
+    /// What drives the address's high byte.
+    pub high_byte: HighByte,
     /// The decoder's request, and the request to the chip.
     pub ctl_mreq: bool,
     pub mreq: bool,
@@ -325,8 +365,21 @@ impl NetCore {
         // The request (unless the address is FE00 to FFFF, or the boot
         // ROM's), the read, the write.
         // @hw die: ZLYZ (oa211); WAFR, WDIN (oa21)
+        // @hw die: IDU_BIT (buf_a, buf_b)
+        let high_byte = if !oe {
+            HighByte::Released
+        } else if buses.addr_from_w {
+            HighByte::W
+        } else if buses.addr_late {
+            HighByte::RegisterLate
+        } else if buses.addr_driven {
+            HighByte::Register
+        } else {
+            HighByte::Precharged
+        };
         CoreOutputs {
             addr,
+            high_byte,
             ctl_mreq: c.mreq,
             mreq: (!i.shadow_access | i.shadow_override) & !i.internal_access & c.mreq,
             rd,
