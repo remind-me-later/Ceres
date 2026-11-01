@@ -210,9 +210,12 @@ pub fn replay(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
 /// The board at power-on with the trace's ROM, and the boot ROM's image.
 pub fn board(trace: &Path, report: &mut Report) -> Option<(NetBoard, Vec<u8>)> {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    // The fast boot ROM, unless the trace names another (an absolute path).
+    let boot = fs::read_to_string(trace.with_extension("boot"))
+        .map_or_else(|_| root.join("hdl/build/fastboot.bin"), |p| p.trim().into());
     let (Ok(rom_path), Ok(boot_rom)) = (
         fs::read_to_string(trace.with_extension("rom")),
-        fs::read(root.join("hdl/build/fastboot.bin")),
+        fs::read(boot),
     ) else {
         report.saw("bus: a trace without its ROM (not replayed)");
         return None;

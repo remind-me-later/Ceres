@@ -65,6 +65,27 @@ pub struct NetLcd {
 }
 
 impl NetLcd {
+    /// The line timing at power-on: all 0.
+    pub const POWER_ON: Self = Self {
+        clk: false,
+        wuvu: false,
+        vena: false,
+        wosu: false,
+        lx: 0,
+        vclk: false,
+        nype: false,
+        ly: 0,
+        line_153: false,
+        first_line: false,
+        mode1: false,
+        frame: false,
+        line_parity: false,
+        cpg_lx: false,
+        lyc: 0,
+        lyc_match: false,
+        stat_enable: 0,
+    };
+
     /// SUKO: the STAT interrupt's line, with the HBlank source `mode0`.
     #[must_use]
     pub const fn int_stat(&self, mode0: bool) -> bool {

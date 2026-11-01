@@ -572,6 +572,34 @@ them. OAM's data lines follow the data bus while the PPU leaves them, so
 render takes it with a read's byte on it, and with STAT's mode bits for
 either level of its own mode 3, and ANDs in its own VRAM data.
 
+`NetChip` also runs a ROM on its own from the power-on, with nothing from
+a trace (ceres-netlist's `run`, and its `run` example):
+
+```bash
+cargo run -p ceres-netlist --release --example run -- mooneye hdl/build/io_regs.gb 0.4
+```
+
+`NetChip::power_on` is the VHDL's initial values, settled once with no
+edge for any flip-flop (the signals start undefined, and a rise from
+undefined is no edge), and the chip runs on the board's pins
+(`ChipInputs::board`: the crystal, /RESET low for 64 periods, no button
+pressed, nothing on the link); the run ends as the testbench ends a test,
+and its time limit counts from the end of the reset, as the testbench's
+does. Traces from the power-on check it (`FROM=power-on`, and `BOOTROM=`
+for another boot ROM, which `trace-blocks.sh` keeps beside the trace): the
+replay runs the chip from its power-on state on the board's pins against
+them, and finds no difference over `check/io_regs.asm` from the fast boot
+ROM, and `poweron_stat_026` and `halt_bug` from dmg-sim's quick boot ROM.
+`ceres-netlist/tests/run.rs` runs the ROMs of `tests.txt` so, with
+dmg-sim's quick boot ROM as `run-tests.sh` does, and all 47 results are
+dmg-sim's (42 pass), in two and a half minutes on four threads: dmg-sim
+takes 13 minutes for `io_regs` alone, `NetChip` 1.5 s. Two things the
+traces from the CPU's first access never needed: the divider's and the
+timer's resets (/RESET and STOP's stopped oscillator clear the divider,
+`reset2` TMA, TAC and TIMA), and the timer's enable race, which `NetChip`
+counts as the netlist does (`timer-enable-race`: `halt_bug` then fails as
+on dmg-sim, and passes as on a Game Boy without it).
+
 The APU (`apu_control.vhd` and the four channels) replays as `NetApu`
 (ceres-netlist's `apu`), delta cycle by delta cycle as render does: its
 clocks are dividers of the chip's clock and counters whose bits clock the

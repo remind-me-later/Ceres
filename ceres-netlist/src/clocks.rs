@@ -126,6 +126,19 @@ pub struct ClockOutputs {
 }
 
 impl NetClocks {
+    /// The clocks at power-on: the phase counter's latches and the resets
+    /// low (the VHDL's initial values).
+    pub const POWER_ON: Self = Self {
+        clk: false,
+        afur: false,
+        alef: false,
+        apuk: false,
+        adyk: false,
+        waiting: false,
+        sys_reset: false,
+        cpu_sys_reset: false,
+    };
+
     /// The phase the latches name.
     // @hw die: AFUR ALEF APUK ADYK, decoded
     #[must_use]

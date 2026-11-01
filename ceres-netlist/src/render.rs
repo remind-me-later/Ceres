@@ -90,6 +90,45 @@ pub struct RenderInputs {
     pub dma_addr: u16,
 }
 
+impl RenderInputs {
+    /// What render takes at power-on: all low.
+    pub const POWER_ON: Self = Self {
+        clk: false,
+        ppu_reset: false,
+        hard_reset: false,
+        hclk: false,
+        mode1: false,
+        ly: 0,
+        lcdc: 0,
+        addr: 0,
+        wr: false,
+        data: 0,
+        data_mode3: 0,
+        line_start: false,
+        stop_scan: false,
+        ceno: false,
+        save: 0,
+        scan_line: 0,
+        wuvu: false,
+        wosu: false,
+        dma_run: false,
+        dma_index: 0,
+        scanning: false,
+        scan_index: 0,
+        dma_phi: false,
+        dma_addr_ext: false,
+        d: 0,
+        rd: false,
+        non_vram_mreq: false,
+        write: false,
+        cpu_wr_sync: false,
+        cpu_ext_cs_en: false,
+        clk_t4: false,
+        vram_to_oam: false,
+        dma_addr: 0,
+    };
+}
+
 flat_eq!(RenderInputs {
     clk,
     ppu_reset,
@@ -188,6 +227,54 @@ pub struct Wires {
     pub oam_driver: Option<(u8, u8)>,
 }
 
+impl Wires {
+    /// Render's wires at power-on: all low, nothing driving.
+    pub const POWER_ON: Self = Self {
+        stop_mode3: false,
+        dot: false,
+        segu: false,
+        clkpipe: false,
+        fetch_reset: false,
+        fetch_done: false,
+        fetch_clock: false,
+        myso: false,
+        bg_tile_clock: false,
+        wy_match: false,
+        wxy_match: false,
+        win_reset: false,
+        win_start: false,
+        wx_clk: false,
+        fine_reset: false,
+        fine_done: false,
+        restart: false,
+        fetch_start: false,
+        step_reset: false,
+        sycu: false,
+        loaded: false,
+        sprite_cycles: false,
+        sp_data: 0,
+        sprite_on: 0,
+        rendering: false,
+        enabled: false,
+        matches: 0,
+        selected: 0,
+        x_match: false,
+        line: 0,
+        oam_index: 0,
+        mode2: false,
+        render_ma: None,
+        cpu_vram: false,
+        cpu_write: false,
+        mcs_n: false,
+        mrd_n: false,
+        mwr_n: false,
+        md_pins: 0,
+        md_driven: false,
+        md: 0,
+        oam_driver: None,
+    };
+}
+
 flat_eq!(Wires {
     stop_mode3,
     dot,
@@ -266,6 +353,18 @@ pub struct NetSpriteStore {
     /// slot's while rendering; they keep their value when nothing drives
     /// them.
     pub index: u8,
+}
+
+impl NetSpriteStore {
+    /// The sprite store at power-on: empty.
+    pub const POWER_ON: Self = Self {
+        scanned: 0,
+        xs: [0; 10],
+        lines: [0; 10],
+        indexes: [0; 10],
+        fetched: 0,
+        index: 0,
+    };
 }
 
 /// The netlist's render: its registers, flip-flops and latches, and its
@@ -660,6 +759,76 @@ const fn fell(before: bool, now: bool) -> bool {
 }
 
 impl NetRender {
+    /// Render, the sprite store and OAM at power-on: the data pins' keeper
+    /// high (the pads' pull-ups), OAM's cells and latches FF, the rest 0.
+    #[must_use]
+    pub fn power_on() -> Self {
+        Self {
+            scy: 0,
+            scx: 0,
+            wy: 0,
+            wx: 0,
+            bgp: 0,
+            obp0: 0,
+            obp1: 0,
+            mode3: false,
+            voga: false,
+            px: 0,
+            px9: false,
+            fetch_count: 0,
+            lyzu: false,
+            lovy: false,
+            fetching: false,
+            nyka: false,
+            pory: false,
+            pygo: false,
+            started: false,
+            bg_tile: 0,
+            bg_low: 0,
+            bg_shift_a: 0,
+            bg_shift_b: 0,
+            sary: false,
+            wy_latch: false,
+            pyco: false,
+            nunu: false,
+            nopa: false,
+            in_window: false,
+            win_x: 0,
+            win_y: 0,
+            rydy: false,
+            sovy: false,
+            fine: 0,
+            puxa: false,
+            nyze: false,
+            paho: false,
+            discard: false,
+            ryfa: false,
+            rene: false,
+            line_started: false,
+            sobu: false,
+            suda: false,
+            sprite_step: 0,
+            busy: false,
+            tobu: false,
+            vonu: false,
+            seba: false,
+            tyfo: false,
+            sp_low_a: 0,
+            sp_low_b: 0,
+            sp_a: 0,
+            sp_b: 0,
+            sp_palette: 0,
+            sp_priority: 0,
+            store: NetSpriteStore::POWER_ON,
+            vram_ma: 0,
+            render_settled: None,
+            md_kept: 0xFF,
+            oam: NetOam::power_on(),
+            wires: Wires::POWER_ON,
+            inputs: RenderInputs::POWER_ON,
+        }
+    }
+
     /// An edge of the PPU's clock: `inputs` are what render takes in after
     /// it (the clock among them), which reach it 1 ns after the edge, the
     /// clock at once.

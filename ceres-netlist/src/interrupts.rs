@@ -72,6 +72,9 @@ pub struct NetIf {
 }
 
 impl NetIf {
+    /// IF and IE at power-on.
+    pub const POWER_ON: Self = Self { flags: 0, ie: 0 };
+
     /// The flags after one phase in which the sources `rise`, the CPU writes
     /// IF with `write`, and the core acknowledges `ack`.
     pub const fn phase(&mut self, rise: u8, write: Option<u8>, ack: u8) {

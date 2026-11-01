@@ -1195,10 +1195,6 @@ fn bus_read(line: &Line) -> bool {
 /// are taken from the first read of it, if it comes before a write. A step
 /// is an edge and the phase it starts: the clocks are compared with the
 /// edge's line, the others with the next, which ends the phase.
-#[expect(
-    clippy::too_many_lines,
-    reason = "the start, then the comparison of each block"
-)]
 fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
     let Some(start) = lines.iter().position(|l| l.clocks.is_some()) else {
         return;
@@ -1285,15 +1281,107 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
     };
     chip.render.inputs = at_start;
     chip.render.settle_wires(&memories.vram);
-    let mut lcdc_known = false;
-    for n in start + 1..lines.len() - 1 {
+    run_chip(
+        name,
+        lines,
+        start + 1,
+        chip,
+        &mut memories,
+        Start::Trace,
+        report,
+    );
+}
+
+/// A trace from the power-on (`FROM=power-on`) through `NetChip` from its
+/// power-on state, on the board's pins (`ChipInputs::board`): nothing
+/// comes from the trace, which only checks it, the board's pins too. Its
+/// first line is the model at time 0, as its initial values have it,
+/// before the crystal's first edge.
+fn run_chip_from_power_on(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
+    let (Some(time_0), Some(after)) = (lines.first(), lines.get(1)) else {
+        return;
+    };
+    let (true, Some(pins)) = (time_0.apu.is_some(), chip_inputs(time_0, after)) else {
+        return;
+    };
+    if pins != ChipInputs::board(0) {
+        report.differ(
+            "chip: the board's pins".into(),
+            format!("{name}:1 ({:?}, model {pins:?})", ChipInputs::board(0)),
+        );
+    }
+    let Some((board, boot_rom)) = bus::board(trace, report) else {
+        return;
+    };
+    let mut memories = ChipMemories {
+        vram: vram_power_on(),
+        board,
+        boot_rom,
+    };
+    run_chip(
+        name,
+        lines,
+        1,
+        NetChip::power_on(ChipInputs::board(0), &memories.vram),
+        &mut memories,
+        Start::PowerOn,
+        report,
+    );
+}
+
+/// Where `run_chip` starts the chip.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Start {
+    /// From a line of the trace, on the trace's pins; LCDC's bits that the
+    /// trace lacks are taken from the first read of it, if it comes before
+    /// a write.
+    Trace,
+    /// From the power-on, on the board's pins.
+    PowerOn,
+}
+
+/// `chip` from the start of line `first`'s phase to the trace's end, each
+/// block compared with the model at the end of every phase, and the model's
+/// taken after a difference.
+#[expect(clippy::too_many_lines, reason = "the comparison of each block")]
+fn run_chip(
+    name: &str,
+    lines: &[Line],
+    first: usize,
+    mut chip: NetChip,
+    memories: &mut ChipMemories,
+    start: Start,
+    report: &mut Report,
+) {
+    let mut lcdc_known = start == Start::PowerOn;
+    for n in first..lines.len() - 1 {
         let (line, ends) = (&lines[n], &lines[n + 1]);
-        let (Some(inputs), Some(clocks)) = (chip_inputs(line, ends), line.clocks.as_ref()) else {
+        let (Some(traced), Some(clocks)) = (chip_inputs(line, ends), line.clocks.as_ref()) else {
             return;
         };
+        let inputs = match start {
+            Start::Trace => traced,
+            Start::PowerOn => ChipInputs::board(n as u64),
+        };
+        // The trace has the pins' levels: SCK is the chip's own while its
+        // internal clock drives it.
+        let traced_by_board = ChipInputs {
+            sck: if chip.bus.internal_clock {
+                inputs.sck
+            } else {
+                traced.sck
+            },
+            ..traced
+        };
+        if inputs != traced_by_board {
+            report.differ(
+                "chip: the board's pins".into(),
+                format!("{name}:{} ({inputs:?}, model {traced:?})", n + 1),
+            );
+        }
         let place = format!("{name}:{}", n + 1);
         let before = chip;
-        let mut events = chip.edge(inputs, &mut memories);
+        let mut events = chip.edge(inputs, memories);
         report.phases += 1;
         compare_chip_core(
             &mut chip,
@@ -1656,8 +1744,8 @@ fn netlist_replay() {
         bus::replay(name, path, &lines, &mut report);
         apu::replay(name, &lines, &mut report);
     }
-    // The traces from the power-on (`FROM=power-on`): the clocks only, as
-    // the other blocks are held in their resets.
+    // The traces from the power-on (`FROM=power-on`): the clocks, and the
+    // whole chip from its power-on state where the trace has every block.
     let mut power_on: Vec<_> = fs::read_dir(dir.join("power-on"))
         .into_iter()
         .flatten()
@@ -1675,6 +1763,7 @@ fn netlist_replay() {
             .map(|(n, l)| parse(l).unwrap_or_else(|| panic!("{name}:{}: not a trace line", n + 1)))
             .collect();
         replay_clocks(name, &lines, &mut report, true);
+        run_chip_from_power_on(&format!("power-on/{name}"), path, &lines, &mut report);
     }
 
     let summary = summary(traces.len() + power_on.len(), &report).expect("a String takes any text");

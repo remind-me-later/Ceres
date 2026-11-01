@@ -152,6 +152,35 @@ pub struct NetApu {
 }
 
 impl NetApu {
+    /// The APU at power-on: the channels' frequency counters frozen (GEXU,
+    /// BUTA, GUGU, JERY start high), wave RAM's bit lines precharged, the
+    /// rest 0.
+    #[must_use]
+    pub fn power_on() -> Self {
+        Self {
+            inputs: ApuInputs::default(),
+            control: NetApuControl::default(),
+            ch1: NetSquare {
+                frozen: true,
+                ..NetSquare::default()
+            },
+            sweep: NetSweep::default(),
+            ch2: NetSquare {
+                frozen: true,
+                ..NetSquare::default()
+            },
+            ch3: NetWave {
+                frozen: true,
+                bit_lines: 0xFF,
+                ..NetWave::default()
+            },
+            ch4: NetNoise {
+                frozen: true,
+                ..NetNoise::default()
+            },
+        }
+    }
+
     /// An edge of the chip's clock: `inputs` are what the APU takes in
     /// after it, which reach it at their times.
     ///

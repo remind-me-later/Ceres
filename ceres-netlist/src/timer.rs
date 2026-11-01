@@ -74,6 +74,24 @@ pub struct NetTimer {
 }
 
 impl NetTimer {
+    /// The divider and the timer at power-on: all 0 (the VHDL's initial
+    /// values; /RESET clears them before the CPU starts), and the enable's
+    /// race counting, as in the netlist (a Game Boy does not count it).
+    // @fact timer-enable-race
+    pub const POWER_ON: Self = Self {
+        count: 0,
+        tima: 0,
+        tma: 0,
+        tac: 0,
+        int_timer: false,
+        bit7_before: false,
+        timer_clock: false,
+        write_tma: false,
+        write_tac: false,
+        latched_data: 0,
+        enable_race_counts: true,
+    };
+
     #[must_use]
     pub const fn clock_of(tac: u8, select: u8, count: u16) -> bool {
         let bit = match select & TAC_CLOCK {
@@ -151,6 +169,27 @@ impl NetTimer {
         }
 
         self.settle(write_tima, t4, data, clock);
+    }
+
+    /// The asynchronous resets, for as long as they last: `/RESET` or a
+    /// stopped oscillator clears the divider (`div_reset`), and `reset2`
+    /// clears TMA, TAC and the overflow's flip-flops and loads TIMA with 0.
+    // @hw die: TAPE UFOL (the divider); SABU..SETA SOPU SAMY SABO NYDU MOBA
+    // (dffr), MEXU MUZU MEKE (TIMA's load)
+    pub const fn hold(&mut self, div_reset: bool, reset2: bool) {
+        if div_reset {
+            self.count = 0;
+        }
+        if reset2 {
+            self.tma = 0;
+            self.tac = 0;
+            self.tima = 0;
+            self.int_timer = false;
+            self.bit7_before = false;
+        }
+        if div_reset | reset2 {
+            self.timer_clock = Self::clock_of(self.tac, self.tac, self.count);
+        }
     }
 
     /// The A edge: the counter counts and the overflow flip-flops take TIMA's

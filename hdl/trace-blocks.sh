@@ -7,13 +7,15 @@
 #
 # runs the ROM (a path relative to the repository) for SECS seconds after
 # the chip's reset (0.1 by default) on the model (board/gameboy_tb.vhd,
-# BLOCKS), from build/fastboot.bin, and writes the trace to
+# BLOCKS), from build/fastboot.bin (or the boot ROM BOOTROM names, an
+# absolute path, kept in build/blocks/<ROM>.boot), and writes the trace to
 # build/blocks/<ROM>.txt: a line at the end of every phase, from the CPU's
 # first access on, and the ROM's path in build/blocks/<ROM>.rom (for the
 # replay's cartridge). TEST ends the run at a test ROM's result, as in
 # compare-ceres.sh. FROM=power-on traces from the power-on instead (the
 # clocks' reset and wait), into build/blocks/power-on/<ROM>.txt, which the
-# replay takes for the clocks only. Then
+# replay takes for the clocks, and for the whole chip from its power-on
+# state (NetChip::power_on) on the board's pins. Then
 #
 #   cargo test -p ceres-netlist --release --test replay -- --ignored
 #
@@ -27,7 +29,7 @@ set -eu
 
 HDL=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$HDL/.." && pwd)
-BOOTROM=$HDL/build/fastboot.bin
+BOOTROM=${BOOTROM:-$HDL/build/fastboot.bin}
 
 [ $# -ge 1 ] || { echo "usage: $0 <ROM> [SECS]" >&2; exit 2; }
 rom=$1
@@ -51,6 +53,8 @@ limit=$(awk -v s="$secs" 'BEGIN { print int(600 + 1200 * s) }')
 	-gBOOTROM="$BOOTROM" -gROM="$ROOT/$rom" -gSECS="$secs" -gBLOCKS="$out" ${TEST:+"-gTEST=$TEST"} \
 	-gBLOCKS_FROM_POWER_ON=$power_on \
 	-r >model.log 2>&1)
-# The ROM, for the replay's cartridge.
+# The ROM, for the replay's cartridge, and the boot ROM if not the fast one.
 echo "$rom" >"${out%.txt}.rom"
+rm -f "${out%.txt}.boot"
+[ "$BOOTROM" = "$HDL/build/fastboot.bin" ] || echo "$BOOTROM" >"${out%.txt}.boot"
 echo "$(wc -l <"$out") phases in $out"

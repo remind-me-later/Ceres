@@ -35,6 +35,18 @@ pub struct NetDma {
 }
 
 impl NetDma {
+    /// OAM DMA at power-on: idle.
+    pub const POWER_ON: Self = Self {
+        source: 0,
+        requested: false,
+        start_1: false,
+        start_2: false,
+        enabled: false,
+        count: 0,
+        done: false,
+        run: false,
+    };
+
     /// The count that ends the transfer: bit 7 and bits 0 to 4 set (9F).
     const fn last(count: u8) -> bool {
         count & 0x9F == 0x9F

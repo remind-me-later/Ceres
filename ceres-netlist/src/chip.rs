@@ -54,7 +54,7 @@ struct Lcdc {
 
 /// The chip's pins at an edge, and the world outside in the phase it
 /// starts.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 #[expect(clippy::struct_excessive_bools, reason = "the pins' levels")]
 pub struct ChipInputs {
     /// The clock, the reset and the test pins as they are after the edge.
@@ -68,6 +68,44 @@ pub struct ChipInputs {
     pub p10_13: u8,
     pub sin: bool,
     pub sck: bool,
+}
+
+flat_eq!(ChipInputs {
+    ck1,
+    reset_pin_n,
+    t1,
+    t2,
+    test_reset,
+    p10_13,
+    sin,
+    sck,
+});
+
+impl ChipInputs {
+    /// The half periods of the crystal for which the board holds /RESET low
+    /// after the power-on (`hdl/board/gameboy.vhd`: 64 periods); it rises
+    /// with the edge that ends them.
+    pub const RESET_EDGES: u64 = 128;
+
+    /// The pins at the crystal's `edge`-th edge after the power-on (0: as
+    /// it starts), as the board drives them: the crystal toggles CK1 at
+    /// each edge, /RESET is low for `RESET_EDGES`, the test pins are low,
+    /// no button is pressed (the joypad's lines float, and the chip pulls
+    /// them up), and nothing is on the link.
+    // @hw die: the board's crystal and reset (gameboy.vhd)
+    #[must_use]
+    pub const fn board(edge: u64) -> Self {
+        Self {
+            ck1: edge % 2 == 1,
+            reset_pin_n: edge >= Self::RESET_EDGES,
+            t1: false,
+            t2: false,
+            test_reset: false,
+            p10_13: 0x0F,
+            sin: true,
+            sck: true,
+        }
+    }
 }
 
 /// What the blocks take in a phase: the pins, and the core's outputs.
@@ -194,6 +232,54 @@ pub struct ChipEvents {
 }
 
 impl NetChip {
+    /// The chip at power-on, as the VHDL's initial values have it: most
+    /// flip-flops and latches low, the keepers and precharged lines high.
+    /// The core's outputs have not reached the chip yet: only STOP's
+    /// enable (`osc_ena`) is high, as the board pulls it. Then the wires
+    /// and latches settle on that state and on the pins as they are
+    /// (`pins`, before the crystal's first edge), with no edge for any
+    /// flip-flop: the VHDL's signals start undefined, and a rise from
+    /// undefined is no edge. /RESET low sets ASOL at once.
+    #[must_use]
+    pub fn power_on(pins: ChipInputs, vram: &[u8; 0x2000]) -> Self {
+        let mut chip = Self {
+            clocks: NetClocks::POWER_ON,
+            timer: NetTimer::POWER_ON,
+            interrupts: NetIf::POWER_ON,
+            dma: NetDma::POWER_ON,
+            dma_phi: false,
+            control: NetLcdControl::POWER_ON,
+            lcd: NetLcd::POWER_ON,
+            scan: NetScan::POWER_ON,
+            render: NetRender::power_on(),
+            bus: NetBus::power_on(),
+            apu: NetApu::power_on(),
+            cpu_wr: false,
+            int_serial: false,
+            int_jp: false,
+            wr_before: false,
+            data_before: 0xFF,
+            core: NetCore::POWER_ON,
+            core_out: CoreOutputs {
+                stop_n: true,
+                db: 0xFF,
+                ..CoreOutputs::default()
+            },
+            core_low_before: 0,
+            blocks_low_before: 0,
+            blocks_high_before: 0,
+            read_bus: None,
+        };
+        let clock_inputs = chip.clock_inputs(pins);
+        chip.clocks.step(clock_inputs);
+        let clock_out = chip.clocks.outputs(clock_inputs);
+        let core_inputs = chip.core_inputs(clock_out, pins, 0, 0);
+        chip.core.settle(&core_inputs);
+        chip.apu.settle_wires();
+        chip.render.settle_wires(vram);
+        chip
+    }
+
     /// An edge of the crystal and the phase it starts.
     pub fn edge(&mut self, pins: ChipInputs, memories: &mut ChipMemories) -> ChipEvents {
         // LCDC as the edge finds it: its latches open after the edge.
@@ -221,7 +307,7 @@ impl NetChip {
         self.interrupts.ie = self.core.ints.ie;
         let mut inputs = self.phase_inputs(clock_out, pins, first);
 
-        let timer_rose = self.step_timer(phase, inputs);
+        let timer_rose = self.step_timer(phase, clock_out, inputs);
         self.step_apu(clock_out, inputs);
         self.step_dma(clock_out, inputs);
         let bus = self.step_bus(phase, clock_out, inputs, memories);
@@ -454,15 +540,18 @@ impl NetChip {
         !clock_out.data_phase
     }
 
-    /// The divider and the timer: the A edge, then the access in E to G.
-    /// Whether the interrupt rose.
-    fn step_timer(&mut self, phase: Phase, inputs: PhaseInputs) -> bool {
+    /// The divider and the timer: the A edge, then the access in E to G,
+    /// and the resets (/RESET and STOP's stopped oscillator clear the
+    /// divider). Whether the interrupt rose.
+    fn step_timer(&mut self, phase: Phase, clock_out: ClockOutputs, inputs: PhaseInputs) -> bool {
         let int_timer = self.timer.int_timer;
         let access = match Reg::at(inputs.addr) {
             Some(reg) if self.cpu_wr => Access::Write(reg, inputs.data),
             _ => Access::None,
         };
         self.timer.phase(phase, access);
+        self.timer
+            .hold(clock_out.reset | !self.core_out.stop_n, clock_out.reset2);
         self.timer.int_timer & !int_timer
     }
 

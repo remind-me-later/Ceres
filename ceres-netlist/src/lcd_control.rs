@@ -24,6 +24,9 @@ pub struct NetLcdControl {
 }
 
 impl NetLcdControl {
+    /// LCDC at power-on.
+    pub const POWER_ON: Self = Self { lcdc: 0 };
+
     /// A phase: the chip's reset clears the latches; else the CPU's write
     /// of FF40, if any, opens them.
     // @hw die: VYXE XYLO XYMO XAFO WEXU WYMO WOKY XONA (drlatch_ee), WARU

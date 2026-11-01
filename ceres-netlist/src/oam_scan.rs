@@ -56,6 +56,19 @@ pub struct NetScan {
 }
 
 impl NetScan {
+    /// The OAM scan at power-on: all 0.
+    pub const POWER_ON: Self = Self {
+        start_scan: false,
+        anel: false,
+        scanning: false,
+        ceno: false,
+        index: 0,
+        byba: false,
+        doba: false,
+        not_saving: false,
+        count: 0,
+    };
+
     /// Whether a sprite whose Y is `y` is on line `ly`: `y - ly - 1` is 8 to
     /// 15 (0 to 15 if `tall`), the sprite's lines from the bottom.
     // @hw die: ERUC ENEF FECO GYKY GOPU FUWA GOJU WUHU (full_add), WOTA GESE
