@@ -8,6 +8,7 @@
 //! take it.
 
 use crate::{
+    Phase,
     bus::NetBoard,
     chip::{ChipInputs, ChipMemories, NetChip},
     render::vram_power_on,
@@ -32,6 +33,18 @@ pub enum Test {
     /// Blargg's: "Passed" or "Failed" at the end of what it sends on the
     /// serial port.
     Blargg,
+}
+
+/// A memory access of the CPU, as the model's testbench traces it
+/// (`BUS_TRACE`): seen in phase H, the M-cycle's address and the byte on
+/// the core's data bus, read or written.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct CpuAccess {
+    /// The M-cycle, counted from the CPU's first access.
+    pub mcycle: u64,
+    pub write: bool,
+    pub addr: u16,
+    pub value: u8,
 }
 
 /// How a run ended.
@@ -60,6 +73,9 @@ pub struct Run {
     /// The edge at which a result showed, which counts once it holds for
     /// 2 µs (the testbench's wait).
     pub shown_at: Option<u64>,
+    /// The M-cycles since the CPU's first access (counted at each A, as
+    /// the phases run on through HALT), once it came.
+    pub mcycle: Option<u64>,
 }
 
 /// The edges in `ps` picoseconds.
@@ -69,11 +85,18 @@ const fn edges_in(ps: u64) -> u64 {
 
 impl Run {
     /// The chip at power-on with the cartridge's `rom` and the boot ROM
-    /// `boot_rom`.
+    /// `boot_rom`, VRAM with the board's arbitrary bytes.
     #[must_use]
     pub fn new(rom: Vec<u8>, boot_rom: Vec<u8>) -> Self {
+        Self::with_vram(rom, boot_rom, vram_power_on())
+    }
+
+    /// The chip at power-on, as `new`, with VRAM holding `vram` (the
+    /// model's board can zero it: `VRAM_ZERO`).
+    #[must_use]
+    pub fn with_vram(rom: Vec<u8>, boot_rom: Vec<u8>, vram: Box<[u8; 0x2000]>) -> Self {
         let memories = ChipMemories {
-            vram: vram_power_on(),
+            vram,
             board: NetBoard::power_on(rom),
             boot_rom,
         };
@@ -88,14 +111,17 @@ impl Run {
             sck_before: true,
             booted: false,
             shown_at: None,
+            mcycle: None,
         }
     }
 
-    /// The crystal's next edge, and the phase it starts.
-    pub fn step(&mut self) {
+    /// The crystal's next edge, and the phase it starts; the CPU's access,
+    /// if the phase is an H that has one.
+    pub fn step(&mut self) -> Option<CpuAccess> {
         self.edge += 1;
         let pins = ChipInputs::board(self.edge);
         let events = self.chip.edge(pins, &mut self.memories);
+        let phase = self.chip.clocks.phase();
         if events.core.rd & (events.core.addr == 0x0100) {
             self.booted = true;
         }
@@ -116,6 +142,21 @@ impl Run {
             }
         }
         self.sck_before = sck;
+
+        // The CPU's accesses, as the testbench's BUS_TRACE sees them.
+        if matches!(phase, Phase::A) {
+            self.mcycle = self.mcycle.map(|m| m + 1);
+        }
+        let access = events.clocks.data_phase & (events.core.rd | events.core.wr);
+        (matches!(phase, Phase::H) & access).then(|| {
+            let mcycle = *self.mcycle.get_or_insert(0);
+            CpuAccess {
+                mcycle,
+                write: events.core.wr,
+                addr: events.core.addr,
+                value: events.core.db,
+            }
+        })
     }
 
     /// The result as `test` reads it, if it shows.

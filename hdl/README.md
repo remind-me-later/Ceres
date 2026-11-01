@@ -211,6 +211,22 @@ runner (`BUS_TRACE`), `ceres.txt` from ceres's example `bus_trace`
 (`ceres-test-runner/examples/bus_trace.rs`), which runs the same boot ROM
 (`GbBuilder::with_bootrom`).
 
+The lockstep oracle compares the same accesses without the model or the
+files: `ceres-test-runner/examples/lockstep.rs` runs ceres and `NetChip`
+(ceres-netlist's transcription of the model, from its power-on, below) in
+one process, access by access, and stops at the first that differs, with
+the accesses before it and both sides' registers. VRAM powers up zeroed,
+as in ceres (the model's board's `VRAM_ZERO`; `--vram-arbitrary` keeps
+its arbitrary bytes). It takes a few seconds a ROM:
+
+```bash
+cargo run -p ceres-test-runner --release --example lockstep -- \
+	external/test-roms/gbmicrotest/line_153_ly_a.gb --bootrom build/tinyboot.bin --mcycles 280000
+```
+
+Over the sweeps above it finds what they found (results.md, "The lockstep
+oracle"), in a third to a quarter of the time.
+
 It compares the screen too: every frame the LCD completes, as the model's
 LCD pins draw it (`FRAMES`) and as ceres presents it (`bus_trace --frames`),
 in `model-frames.txt` and `ceres-frames.txt` (`frame N`, then 144 lines of

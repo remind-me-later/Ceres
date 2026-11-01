@@ -140,6 +140,28 @@ their accesses (TIMA counts from the power-on state), and:
   ceres, within the M-cycle of sampling; gbmicrotest's `lcdon_to_stat3` ROMs
   pass on both sides.
 
+### The lockstep oracle
+
+`ceres-test-runner`'s example `lockstep` (see the
+[README](README.md#comparing-ceres-with-it)) runs ceres and `NetChip` side
+by side and compares their accesses, from tinyboot, VRAM zeroed, four at a
+time:
+
+| Suite                          | ROMs | Same accesses |   Time |
+| ------------------------------ | ---: | ------------: | -----: |
+| gbmicrotest (280000 M-cycles)  |  513 |           501 | 31 min |
+| Mooneye (`SECS=2`)             |   54 |            51 | 20 min |
+| Mealybug (`SECS=0.4`)          |   32 |            32 |  3 min |
+| `tests.txt` (quickboot)        |   47 |            44 |  4 min |
+
+The gbmicrotest ROMs that differ are the power-on state (9 `poweron_*`
+ROMs: OAM, FF46, OBP0, OBP1) and the timer's enable race in `halt_bug` and
+`004-tima_boot_phase` (`timer-enable-race`, where ceres is the Game Boy);
+Mooneye's are the three of the sweep below; `tests.txt`'s are `halt_bug`,
+`poweron_oam_000` and `poweron_dma_000`. The first run also found
+`mbc1_ram_banks` different: `NetChip`'s cartridge gave FF past the end of
+its ROM, where the model's mirrors it, which no trace had shown.
+
 ### Mooneye, Mealybug and Gambatte
 
 The same sweep, from tinyboot, over Mooneye's 54 DMG tests (both suites,

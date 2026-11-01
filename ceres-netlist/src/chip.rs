@@ -227,6 +227,8 @@ pub struct ChipEvents {
     pub data_low: u8,
     /// The core's outputs as the phase ends.
     pub core: CoreOutputs,
+    /// The clocks decoded from the phase.
+    pub clocks: ClockOutputs,
     /// What the bus side gave in the phase: the pins, its interrupts.
     pub bus: BusOutputs,
 }
@@ -387,6 +389,7 @@ impl NetChip {
             driven,
             data_low,
             core,
+            clocks: clock_out,
             bus,
         }
     }
