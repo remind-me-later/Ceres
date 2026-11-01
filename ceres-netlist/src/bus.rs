@@ -186,12 +186,9 @@ impl Cartridge {
                 None
             }
         } else if (self.rom.len() > 0) & rom_selected & reads {
-            // Past the ROM's end, nothing drives the pins.
-            Some(if rom_offset < self.rom.len() {
-                self.rom[rom_offset]
-            } else {
-                0xFF
-            })
+            // Past the ROM's end, the address wraps (the model's ROM reads
+            // its image modulo its length: a smaller ROM mirrors).
+            Some(self.rom[rom_offset % self.rom.len()])
         } else {
             None
         }
