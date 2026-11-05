@@ -217,7 +217,10 @@ files: `ceres-test-runner/examples/lockstep.rs` runs ceres and `NetChip`
 one process, access by access, and stops at the first that differs, with
 the accesses before it and both sides' registers. VRAM powers up zeroed,
 as in ceres (the model's board's `VRAM_ZERO`; `--vram-arbitrary` keeps
-its arbitrary bytes). It takes a few seconds a ROM:
+its arbitrary bytes). With `--test mooneye`, `gbmicrotest` or `blargg`
+the comparison ends where the chip shows the test's result (as
+`ceres_netlist::run` reads it; for Blargg's newer ROMs, in the cartridge
+RAM). It takes a few seconds a ROM:
 
 ```bash
 cargo run -p ceres-test-runner --release --example lockstep -- \

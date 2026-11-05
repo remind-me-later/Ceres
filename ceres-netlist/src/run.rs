@@ -31,7 +31,11 @@ pub enum Test {
     /// in FF80 and the expected value in FF81.
     Gbmicrotest,
     /// Blargg's: "Passed" or "Failed" at the end of what it sends on the
-    /// serial port.
+    /// serial port, or, in the newer ROMs, the cartridge RAM: its signature
+    /// (DE B0 61) at A001, the text from A004, and at A000 the result (80
+    /// while it runs, 00 if it passed), which counts once it has been 80
+    /// (the RAM may come up with the signature's bytes before it). The
+    /// testbench reads only the serial port.
     Blargg,
 }
 
@@ -73,6 +77,8 @@ pub struct Run {
     /// The edge at which a result showed, which counts once it holds for
     /// 2 µs (the testbench's wait).
     pub shown_at: Option<u64>,
+    /// Blargg's result in the cartridge RAM has shown 80: the test runs.
+    pub blargg_running: bool,
     /// The M-cycles since the CPU's first access (counted at each A, as
     /// the phases run on through HALT), once it came.
     pub mcycle: Option<u64>,
@@ -111,6 +117,7 @@ impl Run {
             sck_before: true,
             booted: false,
             shown_at: None,
+            blargg_running: false,
             mcycle: None,
         }
     }
@@ -159,8 +166,9 @@ impl Run {
         })
     }
 
-    /// The result as `test` reads it, if it shows.
-    fn result(&mut self, test: Test) -> Option<Outcome> {
+    /// The result as `test` reads it, once it has shown for the testbench's
+    /// wait (call it after each step).
+    pub fn result(&mut self, test: Test) -> Option<Outcome> {
         let hold = edges_in(2_000_000);
         match test {
             Test::Mooneye => {
@@ -207,12 +215,31 @@ impl Run {
             }
             Test::Blargg => {
                 let sent = String::from_utf8_lossy(&self.serial).into_owned();
+                let ram = &self.memories.board.cartridge.ram;
+                let ram_text = || {
+                    let bytes = ram.get(4..0x400).unwrap_or_default();
+                    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+                    String::from_utf8_lossy(bytes.get(..end).unwrap_or_default()).into_owned()
+                };
                 if sent.ends_with("Passed") {
                     Some(Outcome::Pass(format!("serial: {sent}")))
                 } else if sent.ends_with("Failed") {
                     Some(Outcome::Fail(format!("serial: {sent}")))
-                } else {
+                } else if ram.get(1..4) != Some(&[0xDE, 0xB0, 0x61]) {
                     None
+                } else if ram.first() == Some(&0x80) {
+                    self.blargg_running = true;
+                    None
+                } else if !self.blargg_running {
+                    None
+                } else {
+                    match ram.first() {
+                        Some(0x00) => Some(Outcome::Pass(format!("RAM: {}", ram_text()))),
+                        Some(0x80) | None => None,
+                        Some(code) => {
+                            Some(Outcome::Fail(format!("RAM: {code:02X} {}", ram_text())))
+                        }
+                    }
                 }
             }
         }

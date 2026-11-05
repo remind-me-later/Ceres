@@ -21,12 +21,16 @@
 //! bytes. OAM powers up FF on the chip, 0 in ceres: a ROM that reads it
 //! before it writes it differs there.
 //!
+//! With `--test` (mooneye, gbmicrotest or blargg), the comparison also ends
+//! where the chip shows the test's result, as `ceres_netlist::run` reads it.
+//!
 //! Usage: `cargo run -p ceres-test-runner --release --example lockstep --
-//! <rom> [--bootrom FILE] [--mcycles N] [--vram-arbitrary] [--context N]`
+//! <rom> [--bootrom FILE] [--mcycles N] [--test KIND] [--vram-arbitrary]
+//! [--context N]`
 
 use anyhow::{Context as _, Result, bail};
 use ceres_core::{Gb, GbBuilder, IoAccess, MemoryAccess, Model};
-use ceres_netlist::run::{CpuAccess, Run};
+use ceres_netlist::run::{CpuAccess, Outcome, Run, Test};
 use ceres_test_runner::{DummyAudioCallback, load_test_rom};
 use std::{
     collections::VecDeque,
@@ -36,11 +40,12 @@ use std::{
 };
 
 const USAGE: &str = "\
-usage: lockstep <rom> [--bootrom FILE] [--mcycles N] [--vram-arbitrary] [--context N]
+usage: lockstep <rom> [--bootrom FILE] [--mcycles N] [--test KIND] [--vram-arbitrary] [--context N]
 
 <rom> is a path, or one under external/test-roms.
 --mcycles: M-cycles to compare from the first access (1048576, a second, by
 default).
+--test: mooneye, gbmicrotest or blargg; ends where the chip shows the result.
 --context: accesses shown before the first that differs (8 by default).";
 
 /// 8 MHz units per half M-cycle of the normal speed.
@@ -163,13 +168,21 @@ impl Ceres {
 /// `NetChip` from power-on.
 struct Chip {
     run: Run,
+    /// The test whose result ends the comparison, and the result once shown.
+    test: Option<Test>,
+    outcome: Option<Outcome>,
 }
 
 impl Chip {
-    /// The next access, if it comes before M-cycle `limit`.
+    /// The next access, if it comes before M-cycle `limit` and the test's
+    /// result.
     fn next(&mut self, limit: u64) -> Option<Access> {
-        while self.run.mcycle.unwrap_or(0) <= limit {
-            if let Some(access) = self.run.step() {
+        while self.run.mcycle.unwrap_or(0) <= limit && self.outcome.is_none() {
+            let access = self.run.step();
+            if let Some(test) = self.test {
+                self.outcome = self.run.result(test);
+            }
+            if let Some(access) = access {
                 return Some(access.into());
             }
         }
@@ -205,6 +218,7 @@ struct Options {
     rom: PathBuf,
     bootrom: PathBuf,
     mcycles: u64,
+    test: Option<Test>,
     vram_zero: bool,
     context: usize,
 }
@@ -214,12 +228,21 @@ fn options() -> Result<Options> {
     let mut rom = None;
     let mut bootrom = Path::new(env!("CARGO_MANIFEST_DIR")).join("../hdl/build/fastboot.bin");
     let mut mcycles = 1_048_576;
+    let mut test = None;
     let mut vram_zero = true;
     let mut context = 8;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bootrom" => bootrom = args.next().context(USAGE)?.into(),
             "--mcycles" => mcycles = args.next().context(USAGE)?.parse().context(USAGE)?,
+            "--test" => {
+                test = Some(match args.next().context(USAGE)?.as_str() {
+                    "mooneye" => Test::Mooneye,
+                    "gbmicrotest" => Test::Gbmicrotest,
+                    "blargg" => Test::Blargg,
+                    _ => bail!(USAGE),
+                });
+            }
             "--vram-arbitrary" => vram_zero = false,
             "--context" => context = args.next().context(USAGE)?.parse().context(USAGE)?,
             _ if arg.starts_with("--") || rom.is_some() => bail!(USAGE),
@@ -230,6 +253,7 @@ fn options() -> Result<Options> {
         rom: rom.context(USAGE)?,
         bootrom,
         mcycles,
+        test,
         vram_zero,
         context,
     })
@@ -249,6 +273,8 @@ fn main() -> Result<ExitCode> {
     };
     let mut chip = Chip {
         run: Run::with_vram(rom, bootrom, vram),
+        test: options.test,
+        outcome: None,
     };
 
     let started = Instant::now();
@@ -256,7 +282,11 @@ fn main() -> Result<ExitCode> {
     let mut compared = 0_u64;
     let limit = options.mcycles;
     loop {
-        let (ours, theirs) = (ceres.next(limit), chip.next(limit));
+        let theirs = chip.next(limit);
+        if chip.outcome.is_some() && theirs.is_none() {
+            break;
+        }
+        let ours = ceres.next(limit);
         let show = |access: Option<Access>| access.map_or_else(|| "none".into(), |a| a.to_string());
         if ours != theirs {
             println!("ceres and the chip part at access {compared}:");
@@ -288,9 +318,14 @@ fn main() -> Result<ExitCode> {
             before.pop_front();
         }
     }
+    let until = match &chip.outcome {
+        Some(Outcome::Pass(_)) => "the result (pass)".to_owned(),
+        Some(Outcome::Fail(_)) => "the result (fail)".to_owned(),
+        Some(Outcome::Timeout) | None => format!("{} M-cycles", options.mcycles),
+    };
     println!(
-        "the same: {compared} accesses, {} M-cycles ({} of ceres's dropped)",
-        options.mcycles, ceres.dropped
+        "the same: {compared} accesses, up to {until} ({} of ceres's dropped)",
+        ceres.dropped
     );
     eprintln!("in {:.1} s", started.elapsed().as_secs_f64());
     Ok(ExitCode::SUCCESS)
