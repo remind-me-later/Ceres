@@ -149,11 +149,15 @@ time:
 
 | Suite                          | ROMs | Same accesses |    Time |
 | ------------------------------ | ---: | ------------: | ------: |
-| gbmicrotest (280000 M-cycles)  |  513 |           501 |  31 min |
-| Mooneye (`SECS=2`)             |   54 |            51 |  20 min |
+| gbmicrotest (280000 M-cycles)  |  513 |           502 |  31 min |
+| Mooneye (`SECS=2`)             |   54 |            51 |  21 min |
 | Mealybug (`SECS=0.4`)          |   32 |            32 |   3 min |
-| `tests.txt` (quickboot)        |   47 |            44 |   4 min |
+| `tests.txt` (quickboot)        |   47 |            44 |   6 min |
 | Gambatte's DMG ROMs (0.29 s)   | 1747 |          1643 | 108 min |
+| Blargg's DMG ROMs              |   45 |            36 | 102 min |
+| AGE's DMG ROMs                 |   14 |            11 |   2 min |
+| Screen ROMs                    |   13 |            11 |   2 min |
+| Mooneye's other three, same-suite's two | 5 |      5 |   2 min |
 
 The gbmicrotest ROMs that differ are the power-on state (9 `poweron_*`
 ROMs: OAM, FF46, OBP0, OBP1) and the timer's enable race in `halt_bug` and
@@ -195,6 +199,38 @@ and fail since `mode-0-rises-after-lyc-flag` (a429c02a) delays mode 0's
 rise by 14 ns. The delay is inertial, so it swallows the short mode 0 as
 the pixel counter reaches 167 before the sprite at X A7 holds it, whose
 rise sets the STAT flag on a DMG. Not yet fixed in the model.
+
+The suites the sweeps had not run, with `--test` where the ROM reports
+(Blargg's 45 DMG ROMs to 61 s, their `rom_singles` to 10 s; AGE's 14 DMG
+ROMs; the 13 screen ROMs of `ceres-test-runner`: scribbltests, bully,
+little-things, dmg-acid2, strikethrough, turtle-tests, mbc3-tester; and
+wilbertpol's three Mooneye tests and same-suite's `div_write_trigger`
+ROMs), and the four suites above again with the two fixes, found one more
+place where `NetChip` parted from the model:
+
+- AGE's `oam/oam-write-dmgC`: as mode 2 starts during a CPU write of OAM,
+  OAM's address is the scan's for a few deltas, and the model writes the
+  scan's word: index 39's, then index 0's, as the scan's index is reset a
+  delta after it starts and reaches OAM a delta after mode 2 (`index_i`,
+  then the port `index`, in `rtl/oam_scan.vhd`). `NetChip` had the index
+  1 ns after mode 2, and wrote only index 39's word. The fix keeps the
+  index with the scan's other outputs (2 ns) and passes it through two
+  wires; the replay of every trace (433, and the power-on ones) finds no
+  difference.
+
+The others are known:
+
+| ROMs | What differs |
+| ---: | ------------ |
+|    6 | Blargg's `oam_bug` 2, 4, 5, 7, 8 and `dmg_sound` 10: the netlist has neither the OAM corruption bug nor wave RAM's (`oam-corruption-bug`, `wave-ram-corruption`) |
+|    5 | Blargg's `dmg_sound.gb`, `oam_bug.gb`, `mem_timing-2.gb`, bully, AGE's `vram/vram-read-dmgC`: work RAM they never wrote (ceres's power-on blocks of FF and 00, the board's arbitrary bytes) |
+|    1 | mbc3-tester: the board has no MBC3 |
+|    2 | AGE's `oam-write-dmgC` (FE01) and `oam-read-dmgC-cgbBC` (FE00): the model's OAM, which `NetChip` follows (traced and replayed past the read) |
+
+A read of work RAM can only differ where the ROM never wrote it: every
+write is compared, and only the CPU writes work RAM. AGE's two OAM ROMs
+pass on ceres, and on a DMG-CPU C (their sources' notes); the model's
+difference is not yet looked into.
 
 ### Mooneye, Mealybug and Gambatte
 
