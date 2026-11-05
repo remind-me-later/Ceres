@@ -220,7 +220,13 @@ as in ceres (the model's board's `VRAM_ZERO`; `--vram-arbitrary` keeps
 its arbitrary bytes). With `--test mooneye`, `gbmicrotest` or `blargg`
 the comparison ends where the chip shows the test's result (as
 `ceres_netlist::run` reads it; for Blargg's newer ROMs, in the cartridge
-RAM). It takes a few seconds a ROM:
+RAM). It compares the pictures too, as `compare-frames.sh` does below:
+ceres's frames as `bus_trace --frames` takes them, `NetChip`'s as the
+testbench reads the LCD's pins (`FRAMES`; on dmg-acid2 and Mealybug's
+`m3_bgp_change` and `m3_window_timing` the files are the model's, byte for
+byte). A picture that differs does not end the comparison of the accesses;
+`--ceres-frames FILE` and `--chip-frames FILE` write the frames. It takes a
+few seconds a ROM:
 
 ```bash
 cargo run -p ceres-test-runner --release --example lockstep -- \

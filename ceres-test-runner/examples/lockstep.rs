@@ -24,16 +24,32 @@
 //! With `--test` (mooneye, gbmicrotest or blargg), the comparison also ends
 //! where the chip shows the test's result, as `ceres_netlist::run` reads it.
 //!
+//! The pictures are compared as well, as `hdl/compare-frames.sh` compares
+//! the model's and ceres's: ceres's frame as STAT's mode becomes 1
+//! (`bus_trace --frames`), the chip's as the model's testbench reads its LCD
+//! pins (`lcd` in `hdl/board/gameboy_tb.vhd`, after dmg-sim's
+//! `vid_dump.sv`). Neither takes the first frame after the LCD is turned on,
+//! and the frames of one colour before the first picture are left out on
+//! each side. A picture that differs does not stop the comparison of the
+//! accesses: the report gives the first, with its first pixels, and how
+//! many differ. `--ceres-frames FILE` and `--chip-frames FILE` write each
+//! side's frames as the model's testbench does (`FRAMES`).
+//!
 //! Usage: `cargo run -p ceres-test-runner --release --example lockstep --
 //! <rom> [--bootrom FILE] [--mcycles N] [--test KIND] [--vram-arbitrary]
-//! [--context N]`
+//! [--context N] [--ceres-frames FILE] [--chip-frames FILE]`
 
 use anyhow::{Context as _, Result, bail};
-use ceres_core::{Gb, GbBuilder, IoAccess, MemoryAccess, Model};
-use ceres_netlist::run::{CpuAccess, Outcome, Run, Test};
+use ceres_core::{ColorCorrectionMode, Gb, GbBuilder, IoAccess, MemoryAccess, Model};
+use ceres_netlist::{
+    chip::NetChip,
+    run::{CpuAccess, Outcome, Run, Test},
+};
 use ceres_test_runner::{DummyAudioCallback, load_test_rom};
 use std::{
     collections::VecDeque,
+    fs::File,
+    io::{BufWriter, Write as _},
     path::{Path, PathBuf},
     process::ExitCode,
     time::Instant,
@@ -41,12 +57,14 @@ use std::{
 
 const USAGE: &str = "\
 usage: lockstep <rom> [--bootrom FILE] [--mcycles N] [--test KIND] [--vram-arbitrary] [--context N]
+       [--ceres-frames FILE] [--chip-frames FILE]
 
 <rom> is a path, or one under external/test-roms.
 --mcycles: M-cycles to compare from the first access (1048576, a second, by
 default).
 --test: mooneye, gbmicrotest or blargg; ends where the chip shows the result.
---context: accesses shown before the first that differs (8 by default).";
+--context: accesses shown before the first that differs (8 by default).
+--ceres-frames, --chip-frames: write that side's frames, as the model does.";
 
 /// 8 MHz units per half M-cycle of the normal speed.
 const UNITS_PER_HALF: u64 = 4;
@@ -82,6 +100,247 @@ impl From<CpuAccess> for Access {
     }
 }
 
+const WIDTH: usize = 160;
+const HEIGHT: usize = 144;
+
+/// A frame: the DMG's shades, 0 (white) to 3 (black), line by line.
+type Frame = Box<[u8]>;
+
+/// A pixel that differs: x, y, ceres's shade, the chip's.
+type Pixel = (usize, usize, u8, u8);
+
+fn blank() -> Frame {
+    vec![0; WIDTH * HEIGHT].into_boxed_slice()
+}
+
+/// One side's frames: written to a file if asked, and the pictures not yet
+/// compared, after the frames of one colour at the start.
+struct Frames {
+    file: Option<BufWriter<File>>,
+    taken: u64,
+    /// Before the first picture, and the frames of one colour left out.
+    before_picture: bool,
+    left_out: u64,
+    pictures: VecDeque<Frame>,
+}
+
+impl Frames {
+    fn new(path: Option<&Path>) -> Result<Self> {
+        let file = path
+            .map(|p| File::create(p).with_context(|| format!("can't write {}", p.display())))
+            .transpose()?;
+        Ok(Self {
+            file: file.map(BufWriter::new),
+            taken: 0,
+            before_picture: true,
+            left_out: 0,
+            pictures: VecDeque::new(),
+        })
+    }
+
+    fn take(&mut self, frame: Frame) -> Result<()> {
+        if let Some(file) = self.file.as_mut() {
+            writeln!(file, "frame {}", self.taken)?;
+            for line in frame.as_chunks::<WIDTH>().0 {
+                let digits: Vec<u8> = line.iter().map(|&shade| b'0' + shade).collect();
+                file.write_all(&digits)?;
+                file.write_all(b"\n")?;
+            }
+        }
+        self.taken += 1;
+        if self.before_picture && frame.iter().all(|&shade| shade == frame[0]) {
+            self.left_out += 1;
+        } else {
+            self.before_picture = false;
+            self.pictures.push_back(frame);
+        }
+        Ok(())
+    }
+
+    fn flush(&mut self) -> Result<()> {
+        if let Some(file) = self.file.as_mut() {
+            file.flush()?;
+        }
+        Ok(())
+    }
+}
+
+/// The pictures compared so far.
+#[derive(Default)]
+struct Pictures {
+    compared: u64,
+    differing: u64,
+    /// The first that differs: its number, its pixels that differ, the
+    /// first of them (x, y, ceres's shade, the chip's).
+    first: Option<(u64, usize, Vec<Pixel>)>,
+    /// The last that differs, and its pixels that differ.
+    last: Option<(u64, usize)>,
+}
+
+impl Pictures {
+    /// Compares the pictures both sides have.
+    fn compare(&mut self, ceres: &mut Frames, chip: &mut Frames) {
+        while !ceres.pictures.is_empty() && !chip.pictures.is_empty() {
+            let (Some(ours), Some(theirs)) =
+                (ceres.pictures.pop_front(), chip.pictures.pop_front())
+            else {
+                break;
+            };
+            let number = self.compared;
+            self.compared += 1;
+            let differ: Vec<Pixel> = ours
+                .iter()
+                .zip(theirs.iter())
+                .enumerate()
+                .filter(|(_, (a, b))| a != b)
+                .map(|(i, (&a, &b))| (i % WIDTH, i / WIDTH, a, b))
+                .collect();
+            if differ.is_empty() {
+                continue;
+            }
+            self.differing += 1;
+            self.last = Some((number, differ.len()));
+            if self.first.is_none() {
+                let shown = differ.iter().take(8).copied().collect();
+                self.first = Some((number, differ.len(), shown));
+            }
+        }
+    }
+
+    #[expect(clippy::print_stdout, reason = "a command")]
+    fn report(&self, ceres: &Frames, chip: &Frames) {
+        println!(
+            "frames: {} on ceres, {} on the chip; {} and {} of one colour at the start left out",
+            ceres.taken, chip.taken, ceres.left_out, chip.left_out
+        );
+        let Some((number, pixels, shown)) = &self.first else {
+            println!("the same pictures: {}", self.compared);
+            return;
+        };
+        println!("picture {number} differs in {pixels} pixels:");
+        for (x, y, ours, theirs) in shown {
+            println!("    x={x} y={y} ceres {ours} chip {theirs}");
+        }
+        if let Some((last, pixels)) = self.last {
+            println!(
+                "{} of {} pictures differ; the last, {last}, in {pixels} pixels",
+                self.differing, self.compared
+            );
+        }
+    }
+}
+
+/// The LCD's pins as the chip drives them after a phase.
+#[derive(Clone, Copy, Default)]
+#[expect(clippy::struct_excessive_bools, reason = "the pins' levels")]
+struct LcdPins {
+    cp: bool,
+    st: bool,
+    cpl: bool,
+    cpg: bool,
+    s: bool,
+    ld: u8,
+}
+
+impl LcdPins {
+    /// As `hdl/rtl/lcd_timing.vhd` and `render.vhd` drive them: while the
+    /// LCD is off, CPL follows the divider's bit 6.
+    const fn of(chip: &NetChip) -> Self {
+        let (cp, st, ld) = chip.render.pins();
+        let lcd = &chip.lcd;
+        let lcd_on = chip.control.lcdc & 0x80 != 0;
+        Self {
+            cp,
+            st,
+            cpl: if lcd_on {
+                lcd.vclk
+            } else {
+                chip.timer.count & 0x40 != 0
+            },
+            cpg: lcd.cpg_lx | lcd.vclk,
+            s: lcd.first_line,
+            ld,
+        }
+    }
+}
+
+/// The LCD as the model's testbench reads it (`lcd` in
+/// `hdl/board/gameboy_tb.vhd`): a line's pixels on the falls of CP (ST high
+/// at a fall starts the line again) and of ST, and on the rise of CPL,
+/// which latches the line; S starts the frame, which is whole when its last
+/// line is latched. A pixel is the shade LD held as its strobe changed.
+struct Lcd {
+    pins: LcdPins,
+    line: [u8; WIDTH],
+    frame: Frame,
+    x: usize,
+    /// `HEIGHT`: no frame is being taken, until S starts one.
+    y: usize,
+    enabled: bool,
+}
+
+impl Lcd {
+    fn new() -> Self {
+        Self {
+            pins: LcdPins::default(),
+            line: [0; WIDTH],
+            frame: blank(),
+            x: 0,
+            y: HEIGHT,
+            enabled: false,
+        }
+    }
+
+    const fn take_pixel(&mut self, ld: u8) {
+        if self.x < WIDTH {
+            self.line[self.x] = ld;
+            self.x += 1;
+        }
+    }
+
+    /// After a phase of `chip`: the frame, if it became whole.
+    fn phase(&mut self, chip: &NetChip) -> Option<Frame> {
+        let (was, now) = (self.pins, LcdPins::of(chip));
+        self.pins = now;
+        let mut whole = None;
+        if now.s && !was.s {
+            self.y = 0;
+        }
+        if was.cp && !now.cp {
+            self.take_pixel(was.ld);
+            if now.st {
+                self.x = 0;
+            }
+        }
+        if was.st && !now.st {
+            self.take_pixel(was.ld);
+        }
+        if now.cpl && !was.cpl {
+            self.take_pixel(was.ld);
+            if self.enabled && self.y < HEIGHT {
+                // Fewer than 160 pixels repeat, as in vid_dump.sv.
+                let row = &mut self.frame[self.y * WIDTH..][..WIDTH];
+                for (i, pixel) in row.iter_mut().enumerate() {
+                    *pixel = if self.x > 0 { self.line[i % self.x] } else { 0 };
+                }
+                self.y += 1;
+                if self.y == HEIGHT {
+                    whole = Some(self.frame.clone());
+                }
+            }
+        }
+        if was.cpl && !now.cpl {
+            // The first frame after the LCD is turned on is not shown, nor
+            // one cut off as the LCD went off.
+            if now.cpg && !self.enabled {
+                self.y = HEIGHT;
+            }
+            self.enabled = now.cpg;
+        }
+        whole
+    }
+}
+
 /// Ceres from power-on, its accesses as `bus_trace` numbers them.
 struct Ceres {
     gb: Gb<DummyAudioCallback>,
@@ -94,10 +353,16 @@ struct Ceres {
     ready: VecDeque<Access>,
     /// Accesses dropped so.
     dropped: u64,
+    /// Its frames: the LCD was on after the last step, STAT showed mode 1,
+    /// and the next frame is the first since the LCD was turned on.
+    frames: Frames,
+    lcd_on: bool,
+    in_vblank: bool,
+    unshown: bool,
 }
 
 impl Ceres {
-    fn new(rom: &[u8], bootrom: &[u8]) -> Result<Self> {
+    fn new(rom: &[u8], bootrom: &[u8], frames: Frames) -> Result<Self> {
         let mut gb = GbBuilder::new(48000, DummyAudioCallback)
             .with_model(Model::DmgB)
             .with_run_bootrom(true)
@@ -105,6 +370,7 @@ impl Ceres {
             .context("can't load the ROM")?
             .with_bootrom(bootrom.into())
             .build();
+        gb.set_color_correction_mode(ColorCorrectionMode::Disabled);
         gb.set_bus_log(true);
         Ok(Self {
             gb,
@@ -112,7 +378,36 @@ impl Ceres {
             last: None,
             ready: VecDeque::new(),
             dropped: 0,
+            frames,
+            lcd_on: false,
+            in_vblank: false,
+            unshown: true,
         })
+    }
+
+    /// The frame ceres presents as STAT's mode becomes 1, after a step
+    /// (a fraction of a line), as `bus_trace --frames` takes it.
+    fn take_frame(&mut self) -> Result<()> {
+        let on = self.gb.peek_mem(0xFF40) & 0x80 != 0;
+        if on && !self.lcd_on {
+            self.unshown = true;
+        }
+        self.lcd_on = on;
+        let vblank = self.gb.peek_mem(0xFF41) & 3 == 1;
+        if vblank && !self.in_vblank {
+            if self.unshown {
+                self.unshown = false;
+            } else {
+                let mut frame = blank();
+                let rgba = self.gb.pixel_data_rgba();
+                for (shade, px) in frame.iter_mut().zip(rgba.as_chunks::<4>().0) {
+                    *shade = (0xFF - px[0]) / 0x55;
+                }
+                self.frames.take(frame)?;
+            }
+        }
+        self.in_vblank = vblank;
+        Ok(())
     }
 
     fn take(&mut self, access: &IoAccess) {
@@ -135,20 +430,21 @@ impl Ceres {
     /// The next access, if it comes before M-cycle `limit` (the CPU can
     /// stop accessing for good: the older Mooneye tests end on the opcode
     /// ED, which locks it).
-    fn next(&mut self, limit: u64) -> Option<Access> {
+    fn next(&mut self, limit: u64) -> Result<Option<Access>> {
         while self.ready.is_empty() {
             let elapsed = self
                 .first
                 .map_or(0, |first| self.gb.clock_units().saturating_sub(first));
             if elapsed / (2 * UNITS_PER_HALF) > limit {
-                return self.last.take();
+                return Ok(self.last.take());
             }
             self.gb.step();
+            self.take_frame()?;
             for access in self.gb.take_io_log() {
                 self.take(&access);
             }
         }
-        self.ready.pop_front()
+        Ok(self.ready.pop_front())
     }
 
     fn registers(&self) -> String {
@@ -171,22 +467,28 @@ struct Chip {
     /// The test whose result ends the comparison, and the result once shown.
     test: Option<Test>,
     outcome: Option<Outcome>,
+    /// Its LCD, and the frames it shows.
+    lcd: Lcd,
+    frames: Frames,
 }
 
 impl Chip {
     /// The next access, if it comes before M-cycle `limit` and the test's
     /// result.
-    fn next(&mut self, limit: u64) -> Option<Access> {
+    fn next(&mut self, limit: u64) -> Result<Option<Access>> {
         while self.run.mcycle.unwrap_or(0) <= limit && self.outcome.is_none() {
             let access = self.run.step();
+            if let Some(frame) = self.lcd.phase(&self.run.chip) {
+                self.frames.take(frame)?;
+            }
             if let Some(test) = self.test {
                 self.outcome = self.run.result(test);
             }
             if let Some(access) = access {
-                return Some(access.into());
+                return Ok(Some(access.into()));
             }
         }
-        None
+        Ok(None)
     }
 
     fn registers(&self) -> String {
@@ -221,6 +523,8 @@ struct Options {
     test: Option<Test>,
     vram_zero: bool,
     context: usize,
+    ceres_frames: Option<PathBuf>,
+    chip_frames: Option<PathBuf>,
 }
 
 fn options() -> Result<Options> {
@@ -231,6 +535,8 @@ fn options() -> Result<Options> {
     let mut test = None;
     let mut vram_zero = true;
     let mut context = 8;
+    let mut ceres_frames = None;
+    let mut chip_frames = None;
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--bootrom" => bootrom = args.next().context(USAGE)?.into(),
@@ -245,6 +551,8 @@ fn options() -> Result<Options> {
             }
             "--vram-arbitrary" => vram_zero = false,
             "--context" => context = args.next().context(USAGE)?.parse().context(USAGE)?,
+            "--ceres-frames" => ceres_frames = Some(args.next().context(USAGE)?.into()),
+            "--chip-frames" => chip_frames = Some(args.next().context(USAGE)?.into()),
             _ if arg.starts_with("--") || rom.is_some() => bail!(USAGE),
             _ => rom = Some(PathBuf::from(arg)),
         }
@@ -256,6 +564,8 @@ fn options() -> Result<Options> {
         test,
         vram_zero,
         context,
+        ceres_frames,
+        chip_frames,
     })
 }
 
@@ -265,7 +575,11 @@ fn main() -> Result<ExitCode> {
     let rom = read_rom(&options.rom)?;
     let bootrom = std::fs::read(&options.bootrom)
         .with_context(|| format!("can't read {}", options.bootrom.display()))?;
-    let mut ceres = Ceres::new(&rom, &bootrom)?;
+    let mut ceres = Ceres::new(
+        &rom,
+        &bootrom,
+        Frames::new(options.ceres_frames.as_deref())?,
+    )?;
     let vram = if options.vram_zero {
         Box::new([0; 0x2000])
     } else {
@@ -275,18 +589,22 @@ fn main() -> Result<ExitCode> {
         run: Run::with_vram(rom, bootrom, vram),
         test: options.test,
         outcome: None,
+        lcd: Lcd::new(),
+        frames: Frames::new(options.chip_frames.as_deref())?,
     };
+    let mut pictures = Pictures::default();
 
     let started = Instant::now();
     let mut before = VecDeque::new();
     let mut compared = 0_u64;
     let limit = options.mcycles;
     loop {
-        let theirs = chip.next(limit);
+        let theirs = chip.next(limit)?;
         if chip.outcome.is_some() && theirs.is_none() {
             break;
         }
-        let ours = ceres.next(limit);
+        let ours = ceres.next(limit)?;
+        pictures.compare(&mut ceres.frames, &mut chip.frames);
         let show = |access: Option<Access>| access.map_or_else(|| "none".into(), |a| a.to_string());
         if ours != theirs {
             println!("ceres and the chip part at access {compared}:");
@@ -300,6 +618,9 @@ fn main() -> Result<ExitCode> {
             println!("registers, as each side's step left them:");
             println!("  ceres {}", ceres.registers());
             println!("  chip  {}", chip.registers());
+            pictures.report(&ceres.frames, &chip.frames);
+            ceres.frames.flush()?;
+            chip.frames.flush()?;
             eprintln!(
                 "{compared} accesses the same, in {:.1} s",
                 started.elapsed().as_secs_f64()
@@ -327,6 +648,14 @@ fn main() -> Result<ExitCode> {
         "the same: {compared} accesses, up to {until} ({} of ceres's dropped)",
         ceres.dropped
     );
+    pictures.compare(&mut ceres.frames, &mut chip.frames);
+    pictures.report(&ceres.frames, &chip.frames);
+    ceres.frames.flush()?;
+    chip.frames.flush()?;
     eprintln!("in {:.1} s", started.elapsed().as_secs_f64());
-    Ok(ExitCode::SUCCESS)
+    Ok(if pictures.differing == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    })
 }
