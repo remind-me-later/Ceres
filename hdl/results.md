@@ -147,12 +147,13 @@ their accesses (TIMA counts from the power-on state), and:
 by side and compares their accesses, from tinyboot, VRAM zeroed, four at a
 time:
 
-| Suite                          | ROMs | Same accesses |   Time |
-| ------------------------------ | ---: | ------------: | -----: |
-| gbmicrotest (280000 M-cycles)  |  513 |           501 | 31 min |
-| Mooneye (`SECS=2`)             |   54 |            51 | 20 min |
-| Mealybug (`SECS=0.4`)          |   32 |            32 |  3 min |
-| `tests.txt` (quickboot)        |   47 |            44 |  4 min |
+| Suite                          | ROMs | Same accesses |    Time |
+| ------------------------------ | ---: | ------------: | ------: |
+| gbmicrotest (280000 M-cycles)  |  513 |           501 |  31 min |
+| Mooneye (`SECS=2`)             |   54 |            51 |  20 min |
+| Mealybug (`SECS=0.4`)          |   32 |            32 |   3 min |
+| `tests.txt` (quickboot)        |   47 |            44 |   4 min |
+| Gambatte's DMG ROMs (0.29 s)   | 1747 |          1643 | 108 min |
 
 The gbmicrotest ROMs that differ are the power-on state (9 `poweron_*`
 ROMs: OAM, FF46, OBP0, OBP1) and the timer's enable race in `halt_bug` and
@@ -161,6 +162,39 @@ Mooneye's are the three of the sweep below; `tests.txt`'s are `halt_bug`,
 `poweron_oam_000` and `poweron_dma_000`. The first run also found
 `mbc1_ram_banks` different: `NetChip`'s cartridge gave FF past the end of
 its ROM, where the model's mirrors it, which no trace had shown.
+
+Gambatte's 1747 DMG ROMs (the list of the sweep below, 304087 M-cycles
+each) found two more places where `NetChip` parted from the model, each
+traced from the power-on into `build/blocks/power-on`:
+
+- `window/late_wy_1` (and its copy in `window/arg`): render took VBlank
+  (`mode1`) 1 ns after the edge, with the line timing's other outputs,
+  where the model has it 3 ns after (NYPE, then the VBlank flip-flop, both
+  clocked from hclk). As a frame starts, WY's latch saw VBlank end while
+  SARY still held the last line's match, and the window started.
+- Four `oamdma` busy-push ROMs: a read of the cartridge's bus while nothing
+  drove the pins gave the byte the board's keeper held (the CPU's last
+  write). In the model the keeper's 0 bits meet the pads' pull-ups and are
+  unknown, which reads as 1: FF, as on ceres. Where OAM's buses take such
+  pins, the model's value is unknown and the replay does not compare it;
+  the trace stops before the DMA copies them into OAM.
+
+With the two fixed, 104 differ, all known:
+
+| ROMs | What differs |
+| ---: | ------------ |
+|   95 | `oamdma`'s busy-push and busy-read ROMs (`bus-with-two-drivers`) |
+|    3 | `srambankchange` (`dma-reads-external-bus-held`) |
+|    3 | `readFE00`, `readFE45` (`dma-from-fe00-ff00`) |
+|    1 | `oam_access/postread_scx3_2` (below) |
+|    2 | `m2int_wxA6_spxA7_m0irq_2`, `10spritesPrLine_10xposA7_m0irq_2` |
+
+The last two pass on ceres and fail on the model (0, not 2, on
+`run-gambatte.sh`): they made the same accesses on both in the sweep below,
+and fail since `mode-0-rises-after-lyc-flag` (a429c02a) delays mode 0's
+rise by 14 ns. The delay is inertial, so it swallows the short mode 0 as
+the pixel counter reaches 167 before the sprite at X A7 holds it, whose
+rise sets the STAT flag on a DMG. Not yet fixed in the model.
 
 ### Mooneye, Mealybug and Gambatte
 

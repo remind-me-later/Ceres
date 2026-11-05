@@ -225,7 +225,8 @@ cargo run -p ceres-test-runner --release --example lockstep -- \
 ```
 
 Over the sweeps above it finds what they found (results.md, "The lockstep
-oracle"), in a third to a quarter of the time.
+oracle"), in a third to a fifth of the time (Gambatte's 1747 DMG ROMs, four
+at a time: 108 minutes, not 9.5 hours).
 
 It compares the screen too: every frame the LCD completes, as the model's
 LCD pins draw it (`FRAMES`) and as ceres presents it (`bus_trace --frames`),
