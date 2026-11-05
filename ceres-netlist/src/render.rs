@@ -740,6 +740,11 @@ const SCAN_AT: u32 = 2;
 /// The scan's index, which leaves it through a port a delta after mode 2:
 /// a nanosecond later here.
 const SCAN_INDEX_AT: u32 = 3;
+/// VBlank (`mode1`): a flip-flop clocked by `nype`, itself a flip-flop
+/// clocked by hclk, which changes 1 ns after the edge (`hdl/rtl/lcd_timing.vhd`).
+/// So it changes after SARY, which hclk clocks: as a frame starts, WY's
+/// latch sees SARY's new level before VBlank ends.
+const MODE1_AT: u32 = 3;
 /// The CPU's access: its address, strobes and data bus, which settles
 /// after what drives it (a register read takes the modes as they change).
 const DATA_AT: u32 = 4;
@@ -864,7 +869,7 @@ impl NetRender {
             }
             // The next nanosecond: the inputs' next arrival, or the
             // earliest change pending.
-            let arrivals = [INPUTS_AT, SCAN_AT, SCAN_INDEX_AT, DATA_AT];
+            let arrivals = [INPUTS_AT, SCAN_AT, SCAN_INDEX_AT, MODE1_AT, DATA_AT];
             let mut at = schedule.next_due();
             for k in 0..arrivals.len() {
                 if (arrivals[k] > schedule.now) & (arrivals[k] < at) {
@@ -889,6 +894,7 @@ impl NetRender {
                     rd: was.rd,
                     wr: was.wr,
                     d: was.d,
+                    mode1: was.mode1,
                     // stop_scan falls with doba, rises with byba.
                     stop_scan: was.stop_scan & inputs.stop_scan,
                     ..inputs
@@ -896,6 +902,9 @@ impl NetRender {
             }
             if at == SCAN_INDEX_AT {
                 self.inputs.scan_index = inputs.scan_index;
+            }
+            if at == MODE1_AT {
+                self.inputs.mode1 = inputs.mode1;
             }
             if at == DATA_AT {
                 self.inputs.data = inputs.data;
