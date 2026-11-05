@@ -208,6 +208,12 @@ pub struct Wires {
     pub oam_index: u8,
     /// Mode 2: the scan runs and OAM DMA does not hide OAM from it.
     pub mode2: bool,
+    /// The scan's index inside it (`index_i`), which its line start
+    /// resets a delta after it starts the scan, and as it leaves it
+    /// through its port (`index`), a delta later: OAM's address sees mode 2
+    /// a delta before the index (`hdl/rtl/oam_scan.vhd`).
+    pub index_i: u8,
+    pub scan_index: u8,
     /// The VRAM bus's (`hdl/rtl/vram_bus.vhd`) and the board's: render's
     /// address, the CPU addresses VRAM (and writes it), /MCS, /MRD, /MWR, the
     /// data pins (driven, or as the keeper holds them), and VRAM's data as
@@ -262,6 +268,8 @@ impl Wires {
         line: 0,
         oam_index: 0,
         mode2: false,
+        index_i: 0,
+        scan_index: 0,
         render_ma: None,
         cpu_vram: false,
         cpu_write: false,
@@ -308,6 +316,8 @@ flat_eq!(Wires {
     line,
     oam_index,
     mode2,
+    index_i,
+    scan_index,
     render_ma => same_address,
     cpu_vram,
     cpu_write,
@@ -737,9 +747,6 @@ const INPUTS_AT: u32 = 1;
 /// make (the line's start, `ceno`, the index, the stop's rise) reaches
 /// render 2 ns after the edge.
 const SCAN_AT: u32 = 2;
-/// The scan's index, which leaves it through a port a delta after mode 2:
-/// a nanosecond later here.
-const SCAN_INDEX_AT: u32 = 3;
 /// VBlank (`mode1`): a flip-flop clocked by `nype`, itself a flip-flop
 /// clocked by hclk, which changes 1 ns after the edge (`hdl/rtl/lcd_timing.vhd`).
 /// So it changes after SARY, which hclk clocks: as a frame starts, WY's
@@ -869,7 +876,7 @@ impl NetRender {
             }
             // The next nanosecond: the inputs' next arrival, or the
             // earliest change pending.
-            let arrivals = [INPUTS_AT, SCAN_AT, SCAN_INDEX_AT, MODE1_AT, DATA_AT];
+            let arrivals = [INPUTS_AT, SCAN_AT, MODE1_AT, DATA_AT];
             let mut at = schedule.next_due();
             for k in 0..arrivals.len() {
                 if (arrivals[k] > schedule.now) & (arrivals[k] < at) {
@@ -900,9 +907,6 @@ impl NetRender {
                     ..inputs
                 };
             }
-            if at == SCAN_INDEX_AT {
-                self.inputs.scan_index = inputs.scan_index;
-            }
             if at == MODE1_AT {
                 self.inputs.mode1 = inputs.mode1;
             }
@@ -920,6 +924,7 @@ impl NetRender {
                 self.inputs.line_start = inputs.line_start;
                 self.inputs.ceno = inputs.ceno;
                 self.inputs.scanning = inputs.scanning;
+                self.inputs.scan_index = inputs.scan_index;
                 self.inputs.stop_scan = inputs.stop_scan;
             }
             for target in 0..TARGETS {
@@ -1043,6 +1048,10 @@ impl NetRender {
 
         // @hw die: ACYL BOGE
         n.mode2 = i.scanning & !i.dma_run;
+        // The index: its count arrives with the scan's other outputs; as
+        // they start a line, it is reset a delta after `scanning` rises.
+        n.index_i = if i.line_start { 0 } else { i.scan_index };
+        n.scan_index = w.index_i;
 
         // The sprite store's.
         n.rendering = cur.mode3 & !i.ceno;
@@ -1068,7 +1077,7 @@ impl NetRender {
         } else if i.dma_run {
             i.dma_index >> 2
         } else if w.mode2 {
-            i.scan_index
+            w.scan_index
         } else {
             store.index
         };
@@ -1201,7 +1210,7 @@ impl NetRender {
             md: self.wires.md,
             mode2: self.wires.mode2,
             mode3: self.mode3,
-            scan_index: i.scan_index,
+            scan_index: self.wires.scan_index,
             render_index: self.store.index,
             wosu: i.wosu,
             wuvu: i.wuvu,
