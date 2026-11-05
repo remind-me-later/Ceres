@@ -1730,14 +1730,7 @@ fn netlist_replay() {
         .filter(|p| p.extension().is_some_and(|x| x == "txt"))
         .collect();
     traces.sort();
-    // REPLAY_ONLY=a,b replays only the traces whose names contain a or b.
-    if let Ok(only) = std::env::var("REPLAY_ONLY") {
-        traces.retain(|p| {
-            let name = p.file_stem().and_then(|s| s.to_str()).unwrap_or_default();
-            only.split(',').any(|part| name.contains(part))
-        });
-    }
-    assert!(!traces.is_empty(), "no traces in hdl/build/blocks");
+    traces.retain(|p| chosen(p));
 
     let mut report = Report::default();
     for path in &traces {
@@ -1770,6 +1763,11 @@ fn netlist_replay() {
         .filter(|p| p.extension().is_some_and(|x| x == "txt"))
         .collect();
     power_on.sort();
+    power_on.retain(|p| chosen(p));
+    assert!(
+        !traces.is_empty() || !power_on.is_empty(),
+        "no traces in hdl/build/blocks"
+    );
     for path in &power_on {
         let name = path.file_stem().and_then(|s| s.to_str()).unwrap_or("?");
         let text = fs::read_to_string(path).expect("a trace");
@@ -1789,6 +1787,19 @@ fn netlist_replay() {
         report.kinds.is_empty(),
         "the transcriptions part from the model:\n{summary}"
     );
+}
+
+/// Whether to replay the trace at `path`: REPLAY_ONLY=a,b replays only the
+/// traces whose names contain a or b.
+fn chosen(path: &Path) -> bool {
+    let Ok(only) = std::env::var("REPLAY_ONLY") else {
+        return true;
+    };
+    let name = path
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    only.split(',').any(|part| name.contains(part))
 }
 
 /// What the replay exercised and where the transcriptions differ.
