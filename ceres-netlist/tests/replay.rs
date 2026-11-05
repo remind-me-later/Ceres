@@ -1694,7 +1694,23 @@ fn compare_chip_ppu(
         );
         chip.scan = scan.net;
     }
-    render::compare_oam(&mut chip.render, ends, "chip", &place, report);
+    let buses_known = oam_buses_known(chip, &events, report);
+    render::compare_oam(&mut chip.render, ends, buses_known, "chip", &place, report);
+}
+
+/// Whether the model knows OAM's buses after the phase. Floating pins are
+/// unknown (W) in the model wherever the board's keeper holds a 0 against
+/// the pads' pull-ups, and the trace writes a byte with an unknown bit as
+/// 00. OAM's buses take the pins in an OAM DMA from the cartridge's bus, and
+/// through the data latches in a read of it.
+fn oam_buses_known(chip: &NetChip, events: &ChipEvents, report: &mut Report) -> bool {
+    let r = &chip.render.inputs;
+    let from_pins = r.dma_addr_ext || (r.rd && r.non_vram_mreq && r.clk_t4);
+    let known = !from_pins || events.bus.pins_driven || events.bus.pins.d == 0xFF;
+    if !known {
+        report.saw("chip: OAM's buses take floating pins (not compared)");
+    }
+    known
 }
 
 #[test]

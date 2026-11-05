@@ -582,7 +582,14 @@ impl NetBus {
             // The precharge, in phase A.
             Some(0xFF)
         } else if read_pins {
-            Some(self.latched_data)
+            // Floating pins read FF: where the board's keeper holds a 0
+            // against the pads' pull-ups, the model's line is unknown (W),
+            // which reads as 1.
+            Some(if self.latched_floating {
+                0xFF
+            } else {
+                self.latched_data
+            })
         } else if cpu_rd & boot_sel {
             let at = usize::from(addr & 0x0FFF);
             if at < boot_rom.len() {

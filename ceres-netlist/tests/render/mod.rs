@@ -444,7 +444,7 @@ pub fn replay(name: &str, lines: &[Line], report: &mut Report) {
             resync(&mut net, &model.net, &vram);
         }
         compare_vram(&net, model, &place, report);
-        compare_oam(&mut net, ends, "render", &place, report);
+        compare_oam(&mut net, ends, true, "render", &place, report);
         let ma = net.ma().unwrap_or(0);
         let (cp, st, ld) = net.pins();
         if net.wires.x_match != model.x_match || net.wires.line != model.sprite_line {
@@ -549,11 +549,22 @@ pub fn oam_from(line: &Line) -> Option<NetOam> {
 
 /// OAM's latches, data lines, WUJE and MAKA of `net` after a step, against
 /// the model at the end of the phase (`ends`); after a difference they take
-/// the model's.
-pub fn compare_oam(net: &mut NetRender, ends: &Line, who: &str, place: &str, report: &mut Report) {
-    let Some(theirs) = oam_state(ends) else {
+/// the model's. Without `buses_known`, the model's data lines are unknown:
+/// `net`'s stand.
+pub fn compare_oam(
+    net: &mut NetRender,
+    ends: &Line,
+    buses_known: bool,
+    who: &str,
+    place: &str,
+    report: &mut Report,
+) {
+    let Some(mut theirs) = oam_state(ends) else {
         return;
     };
+    if !buses_known {
+        (theirs.4, theirs.5) = (net.oam.bus_even, net.oam.bus_odd);
+    }
     let ours = (
         net.oam.first_even,
         net.oam.first_odd,
