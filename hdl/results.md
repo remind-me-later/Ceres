@@ -232,6 +232,77 @@ write is compared, and only the CPU writes work RAM. AGE's two OAM ROMs
 pass on ceres, and on a DMG-CPU C (their sources' notes); the model's
 difference is not yet looked into.
 
+#### Pictures
+
+The oracle compares the pictures too: ceres's as `bus_trace --frames` takes
+them, `NetChip`'s from its LCD pins as the model's testbench reads them. The
+first sweep over all the suites above (4 h 12 min) found 94 ROMs whose
+pictures differ. 61 of them took one frame more on the chip: the frame
+after the LCD is turned on. Both ceres's examples left it out always. S
+does not start that frame, and the testbench takes it only as the rest of
+a frame the LCD cut off, if it did not see the LCD off: if CPL did not fall
+meanwhile. CPL follows DIV's bit 0 while the LCD is off, and the line
+clock, low at first, once it is on, so it also falls if the LCD is turned
+on as DIV's bit 0 is high. gbmicrotest's `reset_lcd_for_test` turns the
+LCD off and on again within two M-cycles, mid-frame: the testbench does
+not see that, and takes the next frame. The examples now do the same
+(`lockstep`'s `Ceres::take_frame`, `bus_trace`'s `FrameTaker`), a step at
+a time: the step's write to LCDC is its last M-cycle, so a fall of DIV's
+bit within the step that turns the LCD on counts, and within the step
+that turns it off does not. `compare-ceres.sh` agrees with the model on
+the frames of `lcdon_to_ly1_a`, `lcdon_to_stat3_a`, `hblank_int_scx3` and
+`ppu_spritex_vs_scx`, which turns the LCD off and on faster than a frame.
+
+Two ROMs that draw the window, `ppu_win_vs_wx` and
+`m3_lcdc_win_en_change_multiple_wx`, showed two places where `NetChip`'s
+pins parted from the model's:
+
+- The testbench wakes on every event of the pins, a pulse a few deltas long
+  included: a write to LCDC's window bit cuts the dot clock, and CP with
+  it, for 3 ns (`lcdc-write-latch-delay`), which is a pixel to it.
+  `NetChip` gave the pins as an edge left them. Render now keeps their
+  changes within an edge, delta by delta (`PinLog`,
+  `NetRender::edge_with_pins`), and the oracle reads them in order.
+- The pins are wires a few deltas behind the registers that drive them
+  (BGP to the palette to LD; the shifters' bits to the sprite's priority to
+  the pixel to LD; the pipe's clock to CP), and the registers' latches open
+  on the CPU's write strobe three deltas after the clock, on the address and
+  data the bus holds then. `NetChip` had the pins at once and the latches
+  open on the edge, so a change of LD came a few deltas early, before or
+  after a fall of CP as the model's did not. `Wires` now carries the pins
+  and the strobe's delay line as the model's gates do.
+
+With these, `NetChip`'s frames are the model's (`compare-ceres.sh`'s
+`model-frames.txt`) byte for byte in the 12 ROMs where both were taken:
+gbmicrotest's `lcdon_to_stat3_a`, `sprite_0_a`, `ppu_win_vs_wx` and
+`oam_sprite_trashing`, Mealybug's `m3_lcdc_win_en_change_multiple_wx`,
+`m3_bgp_change` and `m3_window_timing`, Gambatte's two `oamdmasrc80_halt`
+ROMs below, `ppu_regs`, AGE's `m3-bg-bgp` and dmg-acid2. The replay of
+every trace finds no difference.
+
+The sweep again (4 h 37 min; the accesses as before) found 31 ROMs whose
+pictures differ, each with as many frames on both sides, all known:
+
+| ROMs | What differs |
+| ---: | ------------ |
+|   21 | gbmicrotest's `sprite_*`, `sprite4_*` and `ppu_spritex_vs_scx`: sprites drawn with OBP0 and OBP1 as they power up, which the ROMs never write (FF on ceres, 00 on the netlist; `power-on-state`) |
+|    1 | gbmicrotest's `oam_sprite_trashing` (`oam-corruption-bug`) |
+|    5 | Mealybug's `m3_bgp_change`, `m3_bgp_change_sprites`, `m3_lcdc_obj_en_change_variant` (`bgp-write-in-mode-3`), `m3_window_timing` and `m3_window_timing_wx_0` (`window-start-wx-written-every-line`): ceres matches the DMG's screenshots |
+|    2 | AGE's `m3-bg-bgp` (38 pixels) and `ppu_regs` (2 pixels, black on ceres; `bgp-write-in-mode-3`) |
+|    2 | Gambatte's `oamdmasrc80_halt_lycirq_read8000` and `_m2irq_read8000`: a picture before the result (below) |
+
+Gambatte's two ROMs run an OAM DMA from VRAM through mode 3, and the
+picture differs where the fetches meet it. The netlist puts the DMA's
+address alone on VRAM's lines (`ma <= '0' & dma_addr` in
+`rtl/vram_bus.vhd`), so the fetch reads the DMA's byte. Ceres, as
+SameBoy, puts both addresses together
+(`address |= self.d.bus.dma_src.wrapping_sub(offset) & VRAM_OFFSET_MASK` in
+`ceres-core/src/ppu/display/bus.rs`). With the DMA's address alone on
+ceres, `_lycirq_read8000`'s pictures are the chip's, and
+`_m2irq_read8000`'s differ in 49 pixels, not 33: where the DMA's address
+stands as the fetch reads differs too. No test seen so far decides it:
+both ROMs pass on both sides, and their last pictures are the same.
+
 ### Mooneye, Mealybug and Gambatte
 
 The same sweep, from tinyboot, over Mooneye's 54 DMG tests (both suites,
