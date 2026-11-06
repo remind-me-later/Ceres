@@ -221,9 +221,11 @@ impl Clock {
         self.tac & TAC_ENABLE_B != 0
     }
 
+    // A shift, not `to_le_bytes()[1]`: Aeneas (Lean) indexes the bytes of an
+    // unknown DIV through a list it cannot take apart.
     #[must_use]
     pub(crate) const fn read_div(&self) -> u8 {
-        self.div.to_le_bytes()[1]
+        (self.div >> 8) as u8
     }
 
     #[must_use]
