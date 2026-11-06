@@ -38,7 +38,7 @@ use {
         lcd_timing::NetLcd,
         oam::{NetOamLatches, OamInputs},
         oam_scan::{Clocks as ScanClocks, NetScan},
-        render::{NetRender, vram_power_on},
+        render::{NetRender, PinLog, vram_power_on},
         timer::{Access, NetTimer, Reg},
     },
     std::{
@@ -1268,6 +1268,7 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
             oam: render::oam_from(second).unwrap_or_default(),
             ..model_render.net
         },
+        render_pins: PinLog::default(),
         bus: bus::start(model_bus, second),
         apu: apu::start_from(model_apu, apu_inputs),
         cpu_wr: false,

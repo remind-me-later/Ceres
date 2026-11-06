@@ -32,7 +32,7 @@ use crate::{
     lcd_timing::NetLcd,
     oam::OamInputs,
     oam_scan::{Clocks as ScanClocks, NetScan},
-    render::{NetRender, RenderInputs},
+    render::{NetRender, PinLog, RenderInputs},
     sm83::{CoreInputs, CoreOutputs, HighByte, NetCore},
     timer::{Access, NetTimer, Reg},
 };
@@ -167,6 +167,8 @@ pub struct NetChip {
     pub lcd: NetLcd,
     pub scan: NetScan,
     pub render: NetRender,
+    /// The LCD's pins as render changed them in the last edge.
+    pub render_pins: PinLog,
     /// The bus side: the external bus, HRAM, the boot ROM's mapping, the
     /// joypad, the serial port.
     pub bus: NetBus,
@@ -254,6 +256,7 @@ impl NetChip {
             lcd: NetLcd::POWER_ON,
             scan: NetScan::POWER_ON,
             render: NetRender::power_on(),
+            render_pins: PinLog::default(),
             bus: NetBus::power_on(),
             apu: NetApu::power_on(),
             cpu_wr: false,
@@ -782,7 +785,7 @@ impl NetChip {
         vram: &mut [u8; 0x2000],
     ) {
         let line_start = self.scan.line_start() | lcdc.ppu_reset;
-        self.render.edge(
+        self.render.edge_with_pins(
             RenderInputs {
                 clk: self.clocks.clk,
                 ppu_reset: lcdc.ppu_reset,
@@ -820,6 +823,7 @@ impl NetChip {
                 scan_index: self.scan.index,
             },
             vram,
+            &mut self.render_pins,
         );
     }
 

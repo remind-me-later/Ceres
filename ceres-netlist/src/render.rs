@@ -231,6 +231,23 @@ pub struct Wires {
     pub md: u8,
     /// What drives OAM's data lines, as last scheduled.
     pub oam_driver: Option<(u8, u8)>,
+    /// The CPU's write strobe as it reaches the registers' latches: the
+    /// clocks decode it from the phase, three deltas behind render's clock
+    /// (`cpu_wr_sync` in `hdl/rtl/clocks.vhd`, `cpu_wr` in
+    /// `hdl/rtl/external_bus.vhd`). Bit 0 is a delta behind, bit 2 three.
+    pub cpu_wr: u8,
+    /// The LCD's pins and what makes LD: the planes' top pixels, which of
+    /// them shows, its colour, the palette, the shade; CP and ST.
+    pub bg_a: bool,
+    pub bg_b: bool,
+    pub obj_a: bool,
+    pub obj_b: bool,
+    pub show_sprite: bool,
+    pub pixel: u8,
+    pub palette: u8,
+    pub ld: u8,
+    pub cp: bool,
+    pub st: bool,
 }
 
 impl Wires {
@@ -280,6 +297,17 @@ impl Wires {
         md_driven: false,
         md: 0,
         oam_driver: None,
+        cpu_wr: 0,
+        bg_a: false,
+        bg_b: false,
+        obj_a: false,
+        obj_b: false,
+        show_sprite: false,
+        pixel: 0,
+        palette: 0,
+        ld: 0,
+        cp: false,
+        st: false,
     };
 }
 
@@ -328,6 +356,17 @@ flat_eq!(Wires {
     md_driven,
     md,
     oam_driver => same_drivers,
+    cpu_wr,
+    bg_a,
+    bg_b,
+    obj_a,
+    obj_b,
+    show_sprite,
+    pixel,
+    palette,
+    ld,
+    cp,
+    st,
 });
 
 /// VRAM at power-on: the board's arbitrary bytes, from its 32-bit xorshift
@@ -762,6 +801,50 @@ const PINS_AT: u32 = 2;
 /// The deltas an edge may take before it is taken to oscillate.
 const MAX_DELTAS: usize = 1000;
 
+/// The LCD's pins as render drives them ([`NetRender::pins`]): CP, ST, LD.
+pub type Pins = (bool, bool, u8);
+
+/// The changes of the LCD's pins within an edge, delta by delta.
+///
+/// A reader of the pins that wakes on their changes, as the model's
+/// testbench does, sees the pulses within an edge too: a write to LCDC's
+/// window bit cuts the dot clock for 3 ns, and CP with it
+/// (`lcdc-write-latch-delay`).
+#[derive(Clone, Copy, Default)]
+pub struct PinLog {
+    /// The pins as the edge found them.
+    pub before: Pins,
+    /// The pins after each change, the last as the edge leaves them.
+    pub changes: [Pins; Self::CAPACITY],
+    pub len: usize,
+}
+
+impl PinLog {
+    /// More changes than an edge makes: past it, the last is replaced.
+    pub const CAPACITY: usize = 16;
+
+    const fn start(&mut self, pins: Pins) {
+        self.before = pins;
+        self.len = 0;
+    }
+
+    /// The pins now, if they changed.
+    fn note(&mut self, pins: Pins) {
+        let last = if self.len == 0 {
+            self.before
+        } else {
+            self.changes[self.len - 1]
+        };
+        if pins != last {
+            if self.len == Self::CAPACITY {
+                self.len -= 1;
+            }
+            self.changes[self.len] = pins;
+            self.len += 1;
+        }
+    }
+}
+
 const fn rose(before: bool, now: bool) -> bool {
     !before & now
 }
@@ -849,6 +932,22 @@ impl NetRender {
     ///
     /// If render does not settle (a loop of its wires oscillates).
     pub fn edge(&mut self, inputs: RenderInputs, vram: &mut [u8; 0x2000]) {
+        self.edge_with_pins(inputs, vram, &mut PinLog::default());
+    }
+
+    /// [`Self::edge`], noting in `log` the LCD's pins each time they change
+    /// on the way.
+    ///
+    /// # Panics
+    ///
+    /// If render does not settle (a loop of its wires oscillates).
+    pub fn edge_with_pins(
+        &mut self,
+        inputs: RenderInputs,
+        vram: &mut [u8; 0x2000],
+        log: &mut PinLog,
+    ) {
+        log.start(self.pins());
         let mut schedule = Schedule {
             due: [NEVER; TARGETS],
             pending: [Tx::Mode3(false); TARGETS],
@@ -873,6 +972,7 @@ impl NetRender {
                 *self = next;
                 deltas += 1;
                 assert!(deltas < MAX_DELTAS, "render oscillates");
+                log.note(self.pins());
             }
             // The next nanosecond: the inputs' next arrival, or the
             // earliest change pending.
@@ -933,6 +1033,7 @@ impl NetRender {
                     self.apply(schedule.pending[target]);
                 }
             }
+            log.note(self.pins());
         }
     }
 
@@ -997,6 +1098,35 @@ impl NetRender {
         }
     }
 
+    /// The write strobe's and the LCD's pins' wires, a delta on.
+    // @hw die: TOBA SEMU RYPO CP; RUJU POME POFY RUZE ST; WOXA XULA NULY,
+    // RAJY TADE, RUTA RYFU POKA, ..., PERO PATY REMY RAVO LD0 LD1
+    const fn next_pins(cur: &Self, n: &mut Wires) {
+        let (i, w) = (&cur.inputs, &cur.wires);
+        n.cpu_wr = (w.cpu_wr << 1 | i.cpu_wr_sync as u8) & 7;
+        let lcdc = i.lcdc;
+        n.bg_a = (cur.bg_shift_a & 0x80 != 0) & (lcdc & 1 != 0);
+        n.bg_b = (cur.bg_shift_b & 0x80 != 0) & (lcdc & 1 != 0);
+        n.obj_a = (cur.sp_a & 0x80 != 0) & (lcdc & 2 != 0);
+        n.obj_b = (cur.sp_b & 0x80 != 0) & (lcdc & 2 != 0);
+        n.show_sprite = (w.obj_a | w.obj_b) & !((cur.sp_priority & 0x80 != 0) & (w.bg_a | w.bg_b));
+        n.pixel = if w.show_sprite {
+            (w.obj_a as u8) << 1 | w.obj_b as u8
+        } else {
+            (w.bg_b as u8) << 1 | w.bg_a as u8
+        };
+        n.palette = if !w.show_sprite {
+            cur.bgp
+        } else if cur.sp_palette & 0x80 != 0 {
+            cur.obp1
+        } else {
+            cur.obp0
+        };
+        n.ld = w.palette >> (2 * w.pixel) & 3;
+        n.cp = (cur.px9 & w.clkpipe) | w.fine_done;
+        n.st = !cur.line_started;
+    }
+
     /// The wires a delta cycle on: each concurrent statement from what it
     /// is made of now.
     #[must_use]
@@ -1045,6 +1175,7 @@ impl NetRender {
             w.md
         };
         n.sprite_on = if w.loaded { !(cur.sp_a | cur.sp_b) } else { 0 };
+        Self::next_pins(cur, n);
 
         // @hw die: ACYL BOGE
         n.mode2 = i.scanning & !i.dma_run;
@@ -1265,7 +1396,9 @@ impl NetRender {
 
         next.wires = self.next_wires(vram);
 
-        // The registers: latches, open while the CPU writes them.
+        // The registers: latches, open while the CPU writes them. The strobe
+        // opens them a few deltas after the clock, on the address and data
+        // bus the phase finds; those settle later.
         // @hw die: GAVE..FUNY, DATY..BAKE, NESO..NAFU, MYPA..NUKU, PAVO..MENA,
         // XUFU..XANA, MOXY..LUXO
         if i.hard_reset {
@@ -1273,7 +1406,7 @@ impl NetRender {
             next.scx = 0;
             next.wy = 0;
             next.wx = 0;
-        } else if i.wr {
+        } else if w.cpu_wr & 4 != 0 {
             match i.addr {
                 0xFF42 => next.scy = i.data,
                 0xFF43 => next.scx = i.data,
@@ -1284,7 +1417,7 @@ impl NetRender {
         } else {
             // The latches hold.
         }
-        if i.wr {
+        if w.cpu_wr & 4 != 0 {
             match i.addr {
                 0xFF47 => next.bgp = i.data,
                 0xFF48 => next.obp0 = i.data,
@@ -1768,29 +1901,8 @@ impl NetRender {
 
     /// The LCD's pins: CP (the pixel clock), ST (not the line's start), LD
     /// (the pixel's shade).
-    // @hw die: TOBA SEMU RYPO CP; RUJU POME POFY RUZE ST; WOXA XULA NULY,
-    // RAJY TADE, RUTA RYFU POKA, ..., PERO PATY REMY RAVO LD0 LD1
     #[must_use]
-    pub const fn pins(&self) -> (bool, bool, u8) {
-        let lcdc = self.inputs.lcdc;
-        let bg_a = (self.bg_shift_a & 0x80 != 0) & (lcdc & 1 != 0);
-        let bg_b = (self.bg_shift_b & 0x80 != 0) & (lcdc & 1 != 0);
-        let obj_a = (self.sp_a & 0x80 != 0) & (lcdc & 2 != 0);
-        let obj_b = (self.sp_b & 0x80 != 0) & (lcdc & 2 != 0);
-        let show_sprite = (obj_a | obj_b) & !((self.sp_priority & 0x80 != 0) & (bg_a | bg_b));
-        let pixel = if show_sprite {
-            (obj_a as u8) << 1 | obj_b as u8
-        } else {
-            (bg_b as u8) << 1 | bg_a as u8
-        };
-        let palette = if !show_sprite {
-            self.bgp
-        } else if self.sp_palette & 0x80 != 0 {
-            self.obp1
-        } else {
-            self.obp0
-        };
-        let cp = (self.px9 & self.wires.clkpipe) | self.wires.fine_done;
-        (cp, !self.line_started, palette >> (2 * pixel) & 3)
+    pub const fn pins(&self) -> Pins {
+        (self.wires.cp, self.wires.st, self.wires.ld)
     }
 }
