@@ -140,7 +140,7 @@ begin
 		alias ch2_out       is << signal .chip_tb.u_chip.ch2_out : std_ulogic_vector(3 downto 0) >>;
 		alias ch3_out       is << signal .chip_tb.u_chip.ch3_out : std_ulogic_vector(3 downto 0) >>;
 		alias ch4_out       is << signal .chip_tb.u_chip.ch4_out : std_ulogic_vector(3 downto 0) >>;
-		alias ma            is << signal .chip_tb.u_chip.vram_addr : std_logic_vector(12 downto 0) >>;
+		alias ma            is << signal .chip_tb.u_chip.vram_addr : std_logic_vector(13 downto 0) >>;  -- bit 13 the CGB's bank
 		alias md            is << signal .chip_tb.u_chip.vram_data : std_logic_vector(7 downto 0) >>;
 	begin
 		run : process
@@ -424,7 +424,7 @@ begin
 				dmg.check("oam_latch_a", image(<< signal .chip_tb.u_chip.u_oam.first_odd : std_ulogic_vector(7 downto 0) >>));
 				dmg.check("oam_latch_y", image(oam_even));
 				dmg.check("oam_latch_x", image(oam_odd));
-				dmg.check("ma", image(std_ulogic_vector(ma)));
+				dmg.check("ma", image(std_ulogic_vector(ma(12 downto 0))));
 				dmg.check("md", image(std_ulogic_vector(md)));
 				dmg.check("ma_pins", image(ma_pins));
 				dmg.check("md_pins", image(std_ulogic_vector(md_pins)));
