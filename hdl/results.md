@@ -228,7 +228,7 @@ place where `NetChip` parted from the model:
   1 ns after mode 2, and wrote only index 39's word. The fix keeps the
   index with the scan's other outputs (2 ns) and passes it through two
   wires; the replay of every trace (433, and the power-on ones) finds no
-  difference.
+  difference. (dmg-sim writes neither word; see below.)
 
 The others are known:
 
@@ -237,12 +237,36 @@ The others are known:
 |    6 | Blargg's `oam_bug` 2, 4, 5, 7, 8 and `dmg_sound` 10: the netlist has neither the OAM corruption bug nor wave RAM's (`oam-corruption-bug`, `wave-ram-corruption`) |
 |    5 | Blargg's `dmg_sound.gb`, `oam_bug.gb`, `mem_timing-2.gb`, bully, AGE's `vram/vram-read-dmgC`: work RAM they never wrote (ceres's power-on blocks of FF and 00, the board's arbitrary bytes) |
 |    1 | mbc3-tester: the board has no MBC3 |
-|    2 | AGE's `oam-write-dmgC` (FE01) and `oam-read-dmgC-cgbBC` (FE00): the model's OAM, which `NetChip` follows (traced and replayed past the read) |
+|    2 | AGE's `oam-write-dmgC` (FE00) and `oam-read-dmgC-cgbBC` (FE00): the netlist, against a DMG-CPU C (below) |
 
 A read of work RAM can only differ where the ROM never wrote it: every
-write is compared, and only the CPU writes work RAM. AGE's two OAM ROMs
-pass on ceres, and on a DMG-CPU C (their sources' notes); the model's
-difference is not yet looked into.
+write is compared, and only the CPU writes work RAM.
+
+AGE's two OAM ROMs pass on ceres, and on a DMG-CPU C (their sources'
+notes). Run on dmg-sim from fastboot, as the model is, with a probe of
+work RAM's writes (where the ROMs keep their results):
+
+- `oam-read-dmgC-cgbBC`: its 86th result (C055, the second read of the
+  test with SCX 1 and delay 2, at the edge of line 0's mode 0) is FF on
+  dmg-sim as on the model, 00 on ceres and on a DMG-CPU C, so the model
+  follows the netlist.
+- `oam-write-dmgC`: the third row of results with SCX 0 (C018 to C023),
+  which AGE marks as depending on when the LCD was last turned off on a
+  DMG-CPU C, and not so on its CGBs, is 00 81 81 81 ... on dmg-sim, and
+  was 81 81 81 81 ... on the model; ceres, as the DMG-CPU C, has 81 00
+  81 00 00 00 00 00 81 81 81 81. The phases recorded in dmg-sim
+  (`make check`) part first as line 1's scan reads word 0. As mode 2
+  starts during the CPU's write of FE02, the scan's address reaches OAM
+  0.3 ns before the write strobe falls, and dmg-sim's RAM, whose column
+  and row lines follow the address through large drivers, selects no
+  word in that time: FE00 keeps 00. The model wrote the CPU's byte into
+  the scan's words 39 and 0 for the deltas between its address and its
+  strobe. Now (fact `oam-write-cut-by-mode-2`, rule
+  `oam-write-selects-a-moment-late`) OAM's RAM selects a word 100 ps
+  after its address, and a write reaches a word only once it is
+  selected; gbmicrotest's `oam_write_l1_c`, whose write lands in the 1 ns
+  between the scan and mode 3, still does. The model matches every phase
+  of the ROM's recording, and the 15 recordings of OAM, DMA and sprites.
 
 #### Pictures
 

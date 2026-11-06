@@ -82,6 +82,15 @@ races = ["sprite-at-167-mode-0-pulse"]
 facts = ["sprite-at-167-mode-0-pulse"]
 evidence = "The comment at x_match_held in rtl/render.vhd: Gambatte's m2int_wxA6_spxA7_m0irq_2 and 10spritesPrLine_10xposA7_m0irq_2, 2 on the DMG-08, 0 on the model while the match came a delta after the compare and mode 0's delay swallowed the pulse (since mode-0-rises-after-lyc-flag); the width measured in dmg-sim (2026-11-06). The CGB-C reads 2 too."
 
+[oam-write-selects-a-moment-late]
+title = "OAM's RAM selects a word a moment after its address, and a write reaches a word only once it is selected"
+models = ["dmg"]
+kind = "delay"
+status = "applied"
+races = ["oam-write-word-at-mode-2-start"]
+facts = ["oam-write-cut-by-mode-2"]
+evidence = "The comment at selected_word in rtl/oam.vhd: AGE's oam-write-dmgC from fastboot, whose FE00 the model read as 81 and dmg-sim as 00, from the scan's start during the CPU's write of FE02 on line 1 (2026-11-06). No hardware test pins it."
+
 [stat-mode-2-falls-after-mode-3]
 title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"
 models = ["dmg"]

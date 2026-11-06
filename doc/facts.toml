@@ -202,6 +202,15 @@ race = "width"
 tests = ["gbmicrotest/oam_write_l1_c.gb"]
 note = "OAM is free for 1 ns between the scan's end and mode 3 (mode3_i in hdl/rtl/render.vhd), and the CPU's data reaches its lines 1 ns after the drivers turn (oam.vhd). With no gap the write is lost; with drivers of 3 ns it writes FF."
 
+[oam-write-cut-by-mode-2]
+title = "A CPU write to OAM that mode 2's start cuts does not reach the scan's word"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+race = "width"
+tests = ["age-test-roms/oam/oam-write-dmgC.gb"]
+note = "On dmg-sim the write strobe falls 0.3 ns after the scan's address reaches OAM, before the RAM's column lines select its word; the model wrote the CPU's byte into the scan's words 39 and 0 for a few deltas. AGE's ROM reads FE00 as 00 then on dmg-sim, 81 on a DMG-CPU C, where its row of results depends on when the LCD was last turned off."
+
 [lcdc-write-latch-delay]
 title = "A write to LCDC reaches the PPU a moment after the CPU's strobe"
 models = ["dmg", "cgb"]

@@ -977,17 +977,24 @@ impl NetRender {
         let mut deltas = 0;
         let mut mode0_held = false;
         loop {
-            // The deltas of this nanosecond, until nothing changes.
+            // The deltas of this nanosecond, until nothing changes; then
+            // the word OAM's RAM selects follows the address, a moment later,
+            // and the deltas run again.
             loop {
-                let next = self.delta(&prev, &mut schedule, vram);
-                prev = *self;
-                if next == *self {
+                loop {
+                    let next = self.delta(&prev, &mut schedule, vram);
+                    prev = *self;
+                    if next == *self {
+                        break;
+                    }
+                    *self = next;
+                    deltas += 1;
+                    assert!(deltas < MAX_DELTAS, "render oscillates");
+                    log.note(self.pins());
+                }
+                if !self.oam.select_word() {
                     break;
                 }
-                *self = next;
-                deltas += 1;
-                assert!(deltas < MAX_DELTAS, "render oscillates");
-                log.note(self.pins());
             }
             // Mode 0 as this nanosecond leaves it: a pulse a delta wide has
             // no width, and render.vhd's delay swallows it.

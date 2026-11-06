@@ -69,6 +69,7 @@ architecture rtl of oam is
 	signal write           : std_ulogic;
 	signal addr_i          : std_ulogic_vector(7 downto 0);
 	signal word            : integer range 0 to 127;
+	signal selected_word   : integer range 0 to 127 := 0;  -- word, a moment late
 	signal bus_even        : std_ulogic_vector(7 downto 0) := (others => '0');
 	signal bus_odd         : std_ulogic_vector(7 downto 0) := (others => '0');
 	signal cpu_read_oam    : std_ulogic;
@@ -99,6 +100,17 @@ begin
 	          to_x01(render_index) & "11";
 	oam_addr <= addr_i;
 	word     <= to_integer(to_01(unsigned(addr_i(7 downto 1))));
+	-- The RAM's column and row lines follow the address through large
+	-- drivers, a moment late, and a write reaches a word only once they
+	-- select it (dmg-sim's RAM writes none while its decode moves). As mode
+	-- 2 starts during a CPU write, the write strobe falls 0.3 ns after the
+	-- scan's address reaches OAM on dmg-sim, before its word is selected,
+	-- and the scan's word keeps its byte (AGE's oam-write-dmgC: FE00 reads
+	-- 00 there). Here the strobes fall deltas after the address changes;
+	-- the moment is shorter than any other delay.
+	-- @fact oam-write-cut-by-mode-2
+	-- @rule oam-write-selects-a-moment-late
+	selected_word <= word after 100 ps;
 
 	-- DMA writes a byte while dma_phi and maka, clk_t4 half a period later,
 	-- are both low.
@@ -178,7 +190,7 @@ begin
 		else
 			if write_even = '1' then
 				bit_lines_even <= bus_even;
-				if word < 80 then
+				if selected_word = word and word < 80 then
 					ram_even(word) <= bus_even;
 				end if;
 			elsif word_line = '1' and word < 80 then
@@ -186,7 +198,7 @@ begin
 			end if;
 			if write_odd = '1' then
 				bit_lines_odd <= bus_odd;
-				if word < 80 then
+				if selected_word = word and word < 80 then
 					ram_odd(word) <= bus_odd;
 				end if;
 			elsif word_line = '1' and word < 80 then

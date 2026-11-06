@@ -132,8 +132,9 @@ pub struct OamWires {
 /// Its RAM (the even bytes, Y and tile, and the odd ones, X and
 /// attributes, of 80 words), its data lines and bit lines, its two stages
 /// of latches, and the DMA's write timing. As mode 2 starts during a CPU
-/// write, the address changes deltas before the write ends, and the model
-/// writes the scan's word: the deltas matter.
+/// write, the address changes deltas before the write ends; a write
+/// reaches a word only once the RAM selects it, a moment after the address
+/// (`selected_word`), so the scan's word keeps its byte.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NetOam {
     pub ram_even: [u8; 80],
@@ -152,6 +153,11 @@ pub struct NetOam {
     pub wuje: bool,
     /// MAKA: `clk_t4` half a period later.
     pub maka: bool,
+    /// The word the RAM's lines select: the address's (`wires.word`) a
+    /// moment late, once the deltas of a nanosecond settle (`selected_word` of
+    /// `hdl/rtl/oam.vhd`, 100 ps behind). A write reaches no word while it
+    /// differs.
+    pub selected_word: u8,
     pub wires: OamWires,
 }
 
@@ -182,6 +188,7 @@ impl NetOam {
             second_odd: 0xFF,
             wuje: false,
             maka: false,
+            selected_word: 0,
             wires: OamWires::default(),
         }
     }
@@ -240,6 +247,16 @@ impl NetOam {
             deltas += 1;
             assert!(deltas < MAX_DELTAS, "OAM's wires oscillate");
         }
+        self.selected_word = self.wires.word;
+    }
+
+    /// The word the RAM selects catches up with the address, a moment after
+    /// it changed: whether it moved.
+    // @rule oam-write-selects-a-moment-late
+    pub const fn select_word(&mut self) -> bool {
+        let moved = self.selected_word != self.wires.word;
+        self.selected_word = self.wires.word;
+        moved
     }
 
     /// What drives the data lines now, which they follow 1 ns later; `None`
@@ -280,13 +297,14 @@ impl NetOam {
             // The latch holds.
         }
         let word = usize::from(w.word);
+        let selected = cur.selected_word == w.word;
         if w.precharge {
             next.bit_lines_even = 0xFF;
             next.bit_lines_odd = 0xFF;
         } else {
             if w.write_even {
                 next.bit_lines_even = cur.bus_even;
-                if let Some(cell) = next.ram_even.get_mut(word) {
+                if let (true, Some(cell)) = (selected, next.ram_even.get_mut(word)) {
                     *cell = cur.bus_even;
                 }
             } else if let (true, Some(&cell)) = (w.word_line, cur.ram_even.get(word)) {
@@ -296,7 +314,7 @@ impl NetOam {
             }
             if w.write_odd {
                 next.bit_lines_odd = cur.bus_odd;
-                if let Some(cell) = next.ram_odd.get_mut(word) {
+                if let (true, Some(cell)) = (selected, next.ram_odd.get_mut(word)) {
                     *cell = cur.bus_odd;
                 }
             } else if let (true, Some(&cell)) = (w.word_line, cur.ram_odd.get(word)) {

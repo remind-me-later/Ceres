@@ -83,6 +83,14 @@ delays = ["render.x_match_held"]
 facts = ["sprite-at-167-mode-0-pulse"]
 evidence = "The comment at x_match_held in rtl/render.vhd: Gambatte's m2int_wxA6_spxA7_m0irq_2 and 10spritesPrLine_10xposA7_m0irq_2, with the width measured in dmg-sim."
 
+[oam-write-word-at-mode-2-start]
+title = "A CPU write to OAM as mode 2 starts: the write strobe falls as the scan's address arrives"
+models = ["dmg", "cgb"]
+race = "width"
+delays = ["oam.selected_word"]
+facts = ["oam-write-cut-by-mode-2"]
+evidence = "The comment at selected_word in rtl/oam.vhd: dmg-sim's strobe falls 0.3 ns after the scan's address reaches OAM and its word keeps its byte (AGE's oam-write-dmgC)."
+
 [stat-mode-2-into-mode-3]
 title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"
 models = ["dmg"]
