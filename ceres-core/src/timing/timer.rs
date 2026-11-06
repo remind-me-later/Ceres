@@ -117,8 +117,10 @@ impl Default for Clock {
 }
 
 impl Clock {
-    pub(crate) fn tima(&self) -> u8 {
-        if (1..=4).contains(&self.tima_reload_pending) {
+    pub(crate) const fn tima(&self) -> u8 {
+        // A range pattern, not `RangeInclusive::contains`: Aeneas (Lean)
+        // models the one, not the other.
+        if matches!(self.tima_reload_pending, 1..=4) {
             0
         } else {
             self.tima
@@ -177,7 +179,10 @@ impl Clock {
             }
 
             let div = self.div.wrapping_add(1);
-            if div.trailing_zeros() >= 2 {
+            // A mask, not `trailing_zeros`, which Aeneas does not model.
+            #[expect(clippy::verbose_bit_mask, reason = "Aeneas models no trailing_zeros")]
+            let m_cycle_ends = div & 3 == 0;
+            if m_cycle_ends {
                 host.apu_delayed_envelope_tick(self);
                 self.set_div(host, div);
                 host.apu_m_cycle(self);
@@ -357,10 +362,11 @@ impl Clock {
 
         // The APU's frame sequencer follows the falling edge of an APU_DIV
         // bit; a rising edge arms the envelopes.
-        let old = self
-            .apu_late_bit
-            .take()
-            .unwrap_or_else(|| self.div.wrapping_sub(self.apu_delay) & apu_bit != 0);
+        // A match, not `unwrap_or_else`: Aeneas models no closures.
+        let old = match self.apu_late_bit.take() {
+            Some(late) => late,
+            None => self.div.wrapping_sub(self.apu_delay) & apu_bit != 0,
+        };
         let new = val.wrapping_sub(self.apu_delay) & apu_bit != 0;
         if old && !new {
             host.apu_frame_sequencer_step(self);
