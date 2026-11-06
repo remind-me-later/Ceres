@@ -127,7 +127,7 @@ impl NetTimer {
     /// One phase, with the CPU's access: for A, the edge that starts it
     /// (`edge_a`), as the CPU accesses the timer only in E to G.
     #[expect(clippy::similar_names, reason = "TMA's and TAC's write strobes")]
-    pub fn phase(&mut self, phase: Phase, access: Access) {
+    pub const fn phase(&mut self, phase: Phase, access: Access) {
         if matches!(phase, Phase::A) {
             self.edge_a();
             return;
@@ -138,7 +138,9 @@ impl NetTimer {
             }
             _ => (None, 0),
         };
-        let t4 = phase >= Phase::G;
+        // The phases, not their order: Aeneas compares a derived order through
+        // `isize` discriminants, whose width its Lean model leaves open.
+        let t4 = matches!(phase, Phase::G | Phase::H);
         let write_tima = matches!(reg, Some(Reg::Tima));
 
         // Writing DIV clears the counter for as long as the write lasts.

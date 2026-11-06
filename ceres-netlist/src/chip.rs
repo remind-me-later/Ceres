@@ -558,7 +558,12 @@ impl NetChip {
     /// The divider and the timer: the A edge, then the access in E to G,
     /// and the resets (/RESET and STOP's stopped oscillator clear the
     /// divider). Whether the interrupt rose.
-    fn step_timer(&mut self, phase: Phase, clock_out: ClockOutputs, inputs: PhaseInputs) -> bool {
+    const fn step_timer(
+        &mut self,
+        phase: Phase,
+        clock_out: ClockOutputs,
+        inputs: PhaseInputs,
+    ) -> bool {
         let int_timer = self.timer.int_timer;
         let access = match Reg::at(inputs.addr) {
             Some(reg) if self.cpu_wr => Access::Write(reg, inputs.data),
