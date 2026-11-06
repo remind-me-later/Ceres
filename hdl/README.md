@@ -222,9 +222,12 @@ the comparison ends where the chip shows the test's result (as
 `ceres_netlist::run` reads it; for Blargg's newer ROMs, in the cartridge
 RAM). It compares the pictures too, as `compare-frames.sh` does below:
 ceres's frames as `bus_trace --frames` takes them, `NetChip`'s as the
-testbench reads the LCD's pins (`FRAMES`; on dmg-acid2 and Mealybug's
-`m3_bgp_change` and `m3_window_timing` the files are the model's, byte for
-byte). A picture that differs does not end the comparison of the accesses;
+testbench reads the LCD's pins (`FRAMES`), change by change, those within
+a phase too (`NetRender`'s `PinLog`): on the 12 ROMs checked, among them
+dmg-acid2, Mealybug's `m3_bgp_change`, `m3_window_timing` and
+`m3_lcdc_win_en_change_multiple_wx`, and AGE's `m3-bg-bgp`, the files are
+the model's, byte for byte. A picture that differs does not end the
+comparison of the accesses;
 `--ceres-frames FILE` and `--chip-frames FILE` write the frames. It takes a
 few seconds a ROM:
 
@@ -241,15 +244,21 @@ It compares the screen too: every frame the LCD completes, as the model's
 LCD pins draw it (`FRAMES`) and as ceres presents it (`bus_trace --frames`),
 in `model-frames.txt` and `ceres-frames.txt` (`frame N`, then 144 lines of
 160 digits, 0 white to 3 black). Neither writes the first frame after the
-LCD is turned on, which the LCD does not show (its first line is not a whole
-one on the pins), and `compare-frames.sh` leaves out the all-white frames
-before the first picture. The report gives the first picture that differs,
-how many pixels differ in it and the first of them, and how many pictures
-differ, the last among them. A ROM that draws on its own needs
-no `TEST`, only `SECS` long enough, and `BOOT=quick`: fastboot leaves VRAM
-as the board's chip powers up, with arbitrary bytes that the ROM may show,
-where quickboot zeroes it as the real boot ROM does (`NOFRAMES=1` skips the
-screen; `BOOT=real` runs the real DMG boot ROM, for ROMs that need its state):
+LCD is turned on, which the LCD does not show (S does not start it, and its
+first line is not a whole one on the pins), unless it ends a frame the LCD
+cut off and the testbench did not see the LCD off: if CPL, which follows
+DIV's bit 0 while the LCD is off, did not fall meanwhile, nor as the LCD
+was turned on, DIV's bit 0 high, to the line clock, low at first
+(gbmicrotest's `reset_lcd_for_test` turns it off and on again within two
+M-cycles, and the frame after it is written). `compare-frames.sh` leaves
+out the all-white frames before the first picture. The report gives the
+first picture that differs, how many pixels differ in it and the first of
+them, and how many pictures differ, the last among them. A ROM that draws
+on its own needs no `TEST`, only `SECS` long enough, and `BOOT=quick`:
+fastboot leaves VRAM as the board's chip powers up, with arbitrary bytes
+that the ROM may show, where quickboot zeroes it as the real boot ROM does
+(`NOFRAMES=1` skips the screen; `BOOT=real` runs the real DMG boot ROM, for
+ROMs that need its state):
 
 ```bash
 BOOT=quick ./compare-ceres.sh external/test-roms/dmg-acid2/dmg-acid2.gb 0.6

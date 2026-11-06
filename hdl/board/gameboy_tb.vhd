@@ -1317,7 +1317,11 @@ begin
 				-- The first frame after the LCD is turned on is not shown
 				-- (nor does ceres's example write it): S does not start it,
 				-- and its first line is not a whole one. A frame cut off
-				-- when the LCD went off is not taken either.
+				-- when the LCD went off is not taken either. An LCD off
+				-- between two falls of CPL goes unseen: the frame it cut
+				-- off takes the next frame's lines, and is taken. (Turning
+				-- the LCD on makes CPL fall too, from div(6) high to vclk.
+				-- Ceres's examples do the same.)
 				if cpg = '1' and not enabled then
 					y := 144;
 				end if;

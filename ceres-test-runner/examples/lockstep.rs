@@ -268,7 +268,8 @@ impl LcdPins {
 /// `hdl/board/gameboy_tb.vhd`): a line's pixels on the falls of CP (ST high
 /// at a fall starts the line again) and of ST, and on the rise of CPL,
 /// which latches the line; S starts the frame, which is whole when its last
-/// line is latched. A pixel is the shade LD held as its strobe changed.
+/// line is latched. A pixel is the shade LD held as its strobe changed. Like
+/// the testbench, it sees the pins' pulses within a phase.
 struct Lcd {
     pins: LcdPins,
     line: [u8; WIDTH],
@@ -298,9 +299,27 @@ impl Lcd {
         }
     }
 
-    /// After a phase of `chip`: the frame, if it became whole.
+    /// After a phase of `chip`: the frame, if it became whole. Render's
+    /// pins first, as they changed within the phase, then the line timing's.
     fn phase(&mut self, chip: &NetChip) -> Option<Frame> {
-        let (was, now) = (self.pins, LcdPins::of(chip));
+        let log = &chip.render_pins;
+        let mut whole = None;
+        for &(cp, st, ld) in &log.changes[..log.len] {
+            whole = whole.or_else(|| {
+                self.change(LcdPins {
+                    cp,
+                    st,
+                    ld,
+                    ..self.pins
+                })
+            });
+        }
+        whole.or_else(|| self.change(LcdPins::of(chip)))
+    }
+
+    /// The pins as they change: the frame, if it became whole.
+    fn change(&mut self, now: LcdPins) -> Option<Frame> {
+        let was = self.pins;
         self.pins = now;
         let mut whole = None;
         if now.s && !was.s {
@@ -342,6 +361,7 @@ impl Lcd {
 }
 
 /// Ceres from power-on, its accesses as `bus_trace` numbers them.
+#[expect(clippy::struct_excessive_bools, reason = "the frame taker's levels")]
 struct Ceres {
     gb: Gb<DummyAudioCallback>,
     /// `clock_units` of the first access.
@@ -354,11 +374,22 @@ struct Ceres {
     /// Accesses dropped so.
     dropped: u64,
     /// Its frames: the LCD was on after the last step, STAT showed mode 1,
-    /// and the next frame is the first since the LCD was turned on.
+    /// a frame is under way (S started it), and the next frame is not
+    /// shown. S does not start the first frame after the LCD is turned on,
+    /// so the testbench takes it only as the rest of a frame the LCD cut
+    /// off, if it did not see the LCD off: if CPL did not fall meanwhile.
+    /// CPL follows the divider's bit 6 (DIV's bit 0) while the LCD is off,
+    /// and the line clock, low at first, once it is on: it falls too if the
+    /// LCD is turned on as DIV's bit 0 is high. An LCD off for a moment
+    /// within a frame (gbmicrotest's `lcd_off_unsafe` right before `lcd_on`)
+    /// goes unseen, and the next frame is shown.
     frames: Frames,
     lcd_on: bool,
     in_vblank: bool,
+    in_frame: bool,
     unshown: bool,
+    div_bit0: bool,
+    seen_off: bool,
 }
 
 impl Ceres {
@@ -381,7 +412,10 @@ impl Ceres {
             frames,
             lcd_on: false,
             in_vblank: false,
+            in_frame: false,
             unshown: true,
+            div_bit0: false,
+            seen_off: true,
         })
     }
 
@@ -389,12 +423,27 @@ impl Ceres {
     /// (a fraction of a line), as `bus_trace --frames` takes it.
     fn take_frame(&mut self) -> Result<()> {
         let on = self.gb.peek_mem(0xFF40) & 0x80 != 0;
+        let div_bit0 = self.gb.peek_mem(0xFF04) & 1 != 0;
+        let vblank = self.gb.peek_mem(0xFF41) & 3 == 1;
+        if on && self.in_vblank && !vblank {
+            self.in_frame = true;
+        }
+        // The step's write to LCDC is its last M-cycle: a fall of the bit
+        // within the step that turns the LCD off comes before it, and within
+        // the step that turns it on, before it or, the bit high at the
+        // write, as CPL leaves it.
+        if !on && self.lcd_on {
+            self.seen_off = false;
+        } else if !on && self.div_bit0 && !div_bit0 {
+            self.seen_off = true;
+        }
         if on && !self.lcd_on {
-            self.unshown = true;
+            self.unshown = !self.in_frame || self.seen_off || self.div_bit0 || div_bit0;
         }
         self.lcd_on = on;
-        let vblank = self.gb.peek_mem(0xFF41) & 3 == 1;
+        self.div_bit0 = div_bit0;
         if vblank && !self.in_vblank {
+            self.in_frame = false;
             if self.unshown {
                 self.unshown = false;
             } else {

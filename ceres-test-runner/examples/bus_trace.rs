@@ -20,8 +20,14 @@
 //! does: `frame N`, then 144 lines of 160 digits, the shades 0 (white) to 3
 //! (black). A frame is taken when STAT shows mode 1, which is when ceres
 //! presents it (a few dots after LY reaches 144). The first frame after the
-//! LCD is turned on is left out: the LCD does not show it, and the model does
-//! not write it.
+//! LCD is turned on is left out, as the model's testbench leaves it out: S
+//! does not start it, so the testbench takes it only as the rest of a frame
+//! the LCD cut off, if it did not see the LCD off, that is if CPL did not
+//! fall meanwhile. CPL follows the divider's bit 6 (DIV's bit 0) while the
+//! LCD is off, and the line clock, low at first, once it is on: it falls too
+//! if the LCD is turned on as DIV's bit 0 is high. An LCD off for a moment
+//! within a frame (gbmicrotest's `lcd_off_unsafe` right before `lcd_on`)
+//! goes unseen, and the next frame is written.
 //!
 //! `--pixels FILE` also writes what the pixel pipeline did, a line each:
 //! `<line> P <x> <t>` for a pixel pushed to the LCD (column x) and
@@ -96,6 +102,7 @@ const STAT_MODE_B: u8 = 0x03;
 const STAT_MODE_VBLANK: u8 = 1;
 const LCDC: u16 = 0xFF40;
 const LCDC_ON_B: u8 = 0x80;
+const DIV: u16 = 0xFF04;
 
 /// Reads `path` as given, else under the test ROMs directory.
 fn read_rom(path: &Path) -> Result<Vec<u8>> {
@@ -245,6 +252,71 @@ fn power_on(rom: &Path, bootrom: Option<&Path>, model: Model) -> Result<Gb<Dummy
     Ok(gb)
 }
 
+/// When to take a frame, a step at a time: see the module's doc.
+#[expect(clippy::struct_excessive_bools, reason = "the levels it follows")]
+struct FrameTaker {
+    /// The LCD was on after the last step, STAT showed mode 1, a frame is
+    /// under way (S started it), and the next frame is not taken.
+    lcd_on: bool,
+    in_vblank: bool,
+    in_frame: bool,
+    unshown: bool,
+    /// DIV's bit 0 after the last step, and whether it fell since the LCD
+    /// went off.
+    div_bit0: bool,
+    seen_off: bool,
+}
+
+impl Default for FrameTaker {
+    fn default() -> Self {
+        Self {
+            lcd_on: false,
+            in_vblank: false,
+            in_frame: false,
+            unshown: true,
+            div_bit0: false,
+            seen_off: true,
+        }
+    }
+}
+
+impl FrameTaker {
+    /// Whether to take the frame `gb` presents, after a step. A step is a
+    /// fraction of a line: the frame is still the one presented when the
+    /// mode became 1. (LY is not enough: it becomes 144 a few dots before,
+    /// and a step can end between.)
+    fn after_step(&mut self, gb: &Gb<DummyAudioCallback>) -> bool {
+        let on = gb.peek_mem(LCDC) & LCDC_ON_B != 0;
+        let div_bit0 = gb.peek_mem(DIV) & 1 != 0;
+        let vblank = gb.peek_mem(STAT) & STAT_MODE_B == STAT_MODE_VBLANK;
+        if on && self.in_vblank && !vblank {
+            self.in_frame = true;
+        }
+        // The step's write to LCDC is its last M-cycle: a fall of the bit
+        // within the step that turns the LCD off comes before it, and within
+        // the step that turns it on, before it or, the bit high at the
+        // write, as CPL leaves it.
+        if !on && self.lcd_on {
+            self.seen_off = false;
+        } else if !on && self.div_bit0 && !div_bit0 {
+            self.seen_off = true;
+        }
+        if on && !self.lcd_on {
+            self.unshown = !self.in_frame || self.seen_off || self.div_bit0 || div_bit0;
+        }
+        self.lcd_on = on;
+        self.div_bit0 = div_bit0;
+        let mut take = false;
+        if vblank && !self.in_vblank {
+            self.in_frame = false;
+            take = !self.unshown;
+            self.unshown = false;
+        }
+        self.in_vblank = vblank;
+        take
+    }
+}
+
 fn trace<W: Write>(
     mut gb: Gb<DummyAudioCallback>,
     halves: u64,
@@ -263,9 +335,7 @@ fn trace<W: Write>(
     let mut last: Option<(u64, IoAccess)> = None;
     let mut dropped = 0_u64;
     let mut frame = 0_u64;
-    let mut in_vblank = false;
-    let mut lcd_on = false;
-    let mut unshown = true;
+    let mut taker = FrameTaker::default();
     // The last state written to `cuts`.
     let mut last_cut: Option<CutSample> = None;
     'run: loop {
@@ -293,25 +363,11 @@ fn trace<W: Write>(
                 }
             }
         }
-        if let Some(frames) = frames.as_mut() {
-            // A step is a fraction of a line: the frame is still the one
-            // presented when the mode became 1. (LY is not enough: it
-            // becomes 144 a few dots before, and a step can end between.)
-            let on = gb.peek_mem(LCDC) & LCDC_ON_B != 0;
-            if on && !lcd_on {
-                unshown = true;
-            }
-            lcd_on = on;
-            let vblank = gb.peek_mem(STAT) & STAT_MODE_B == STAT_MODE_VBLANK;
-            if vblank && !in_vblank {
-                if unshown {
-                    unshown = false;
-                } else {
-                    write_frame(frames, frame, gb.pixel_data_rgba(), cgb)?;
-                    frame += 1;
-                }
-            }
-            in_vblank = vblank;
+        if let Some(frames) = frames.as_mut()
+            && taker.after_step(&gb)
+        {
+            write_frame(frames, frame, gb.pixel_data_rgba(), cgb)?;
+            frame += 1;
         }
         for access in gb.take_io_log() {
             let first = *first.get_or_insert(access.clock_units);
