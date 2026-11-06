@@ -117,6 +117,9 @@ struct LcdLine {
     mode0: bool,
     mode2: bool,
     mode3: bool,
+    /// Mode 0 rose in the phase and fell again before its end: a sprite at
+    /// X 167 stops mode 3 4 ns after it ends (older traces lack it).
+    mode0_pulse: bool,
     /// The byte a read takes, in the middle of phase H (older traces lack it).
     read: Option<u8>,
     /// The OAM scan (older traces lack it).
@@ -296,6 +299,7 @@ fn parse_lcd(fields: &[&str]) -> Option<LcdLine> {
         mode0: bit(inputs, 2)?,
         mode2: bit(inputs, 3)?,
         mode3: bit(inputs, 4)?,
+        mode0_pulse: bit(inputs, 5).unwrap_or(false),
         read: match *rest {
             [] => None,
             [byte, ..] => Some(hex8(byte)?),
@@ -877,8 +881,13 @@ fn replay_lcd(name: &str, lines: &[Line], report: &mut Report) {
         if lcd.ppu_reset {
             net.reset();
         }
-        for now in [net.int_stat(before.mode0), net.int_stat(lcd.mode0)] {
-            // The second: mode 0, which rises after the edge's flip-flops.
+        for now in [
+            net.int_stat(before.mode0),
+            net.int_stat(before.mode0 || lcd.mode0_pulse),
+            net.int_stat(lcd.mode0),
+        ] {
+            // The last two: mode 0, which rises after the edge's flip-flops,
+            // for a moment only if a sprite at X 167 stops mode 3 again.
             rose |= now && !level;
             level = now;
         }
@@ -1263,6 +1272,7 @@ fn replay_chip(name: &str, trace: &Path, lines: &[Line], report: &mut Report) {
         blocks_low_before: 0,
         blocks_high_before: 0,
         read_bus: None,
+        if_latch: second.read_value,
         render: NetRender {
             md_kept: 0xFF,
             oam: render::oam_from(second).unwrap_or_default(),

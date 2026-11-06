@@ -193,12 +193,24 @@ With the two fixed, 104 differ, all known:
 |    1 | `oam_access/postread_scx3_2` (below) |
 |    2 | `m2int_wxA6_spxA7_m0irq_2`, `10spritesPrLine_10xposA7_m0irq_2` |
 
-The last two pass on ceres and fail on the model (0, not 2, on
-`run-gambatte.sh`): they made the same accesses on both in the sweep below,
-and fail since `mode-0-rises-after-lyc-flag` (a429c02a) delays mode 0's
-rise by 14 ns. The delay is inertial, so it swallows the short mode 0 as
-the pixel counter reaches 167 before the sprite at X A7 holds it, whose
-rise sets the STAT flag on a DMG. Not yet fixed in the model.
+The last two passed on ceres and failed on the model (0, not 2, on
+`run-gambatte.sh`) since `mode-0-rises-after-lyc-flag` (a429c02a) delayed
+mode 0's rise by 14 ns. As the pixel counter reaches 167, the sprite at X
+A7 holds mode 3 again: on dmg-sim the counter's compare (XANO) ends mode 3
+and the sprite's match (FEPO) stops it 3.9 to 4.7 ns later, so mode 0
+(TARU) pulses 3.7 to 4.4 ns, and STAT's line rises 1.5 ns into it, which
+sets IF. In the model the match came a delta after the compare, and the
+inertial delay swallowed the delta-wide pulse. Now (fact and rule
+`sprite-at-167-mode-0-pulse`) the match's rise reaches mode 3's stop 4 ns
+late, and a pulse of mode 0 shorter than its delay is delayed whole, so
+it keeps its width; the one a delta wide as the LCD is turned off in
+VBlank still vanishes (`lcd-off-in-vblank-mode-0-source`). Both ROMs pass
+on the model, as do `lycdisable_ff45_3` and the 12
+`frame*_m0irq_count_scx*` ROMs. `NetChip` follows: render notes a mode 0
+held through a nanosecond of an edge that ends without it, and its rise
+raises STAT's line; the block traces record such a pulse, for the line
+timing's replay. Both ROMs then make the same accesses and pictures on
+ceres and `NetChip`.
 
 The suites the sweeps had not run, with `--test` where the ROM reports
 (Blargg's 45 DMG ROMs to 61 s, their `rom_singles` to 10 s; AGE's 14 DMG

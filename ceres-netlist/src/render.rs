@@ -203,6 +203,10 @@ pub struct Wires {
     pub matches: u16,
     pub selected: u16,
     pub x_match: bool,
+    /// The match as it stops mode 3 (`x_match_held` of
+    /// `hdl/rtl/render.vhd`): its rise 4 ns late, as FEPO's on the die, its
+    /// fall at once.
+    pub x_match_held: bool,
     pub line: u8,
     /// OAM's address, bits 7 to 2 (`oam_addr` of `hdl/rtl/oam.vhd`).
     pub oam_index: u8,
@@ -282,6 +286,7 @@ impl Wires {
         matches: 0,
         selected: 0,
         x_match: false,
+        x_match_held: false,
         line: 0,
         oam_index: 0,
         mode2: false,
@@ -341,6 +346,7 @@ flat_eq!(Wires {
     matches,
     selected,
     x_match,
+    x_match_held,
     line,
     oam_index,
     mode2,
@@ -506,6 +512,10 @@ pub struct NetRender {
     pub wires: Wires,
     /// The inputs as the last delta cycle had them.
     pub inputs: RenderInputs,
+    /// Mode 0 held for a nanosecond or more within the last edge, and fell
+    /// before its end: a sprite at X 167 stops mode 3 4 ns after the pixel
+    /// counter reaches it (not compared: an edge sets it).
+    pub mode0_pulse: bool,
 }
 
 flat_eq!(NetRender {
@@ -571,6 +581,7 @@ flat_eq!(NetRender {
     oam,
     wires,
     inputs,
+    mode0_pulse,
 });
 
 /// A flip-flop's change, `tco` after its clock's edge.
@@ -616,6 +627,7 @@ enum Tx {
     RenderSettled(Option<u16>),
     OamBus(u8, u8),
     Maka(bool),
+    XMatchHeld(bool),
     SpShift {
         mask: u8,
         a: u8,
@@ -672,12 +684,13 @@ impl Tx {
             Self::RenderSettled(_) => 35,
             Self::OamBus(..) => 36,
             Self::Maka(_) => 37,
+            Self::XMatchHeld(_) => 38,
         }
     }
 }
 
 /// How many flip-flops (`Tx::target`) a change can be pending for.
-const TARGETS: usize = 38;
+const TARGETS: usize = 39;
 
 /// No change is pending for a target.
 const NEVER: u32 = u32::MAX;
@@ -921,6 +934,7 @@ impl NetRender {
             oam: NetOam::power_on(),
             wires: Wires::POWER_ON,
             inputs: RenderInputs::POWER_ON,
+            mode0_pulse: false,
         }
     }
 
@@ -961,6 +975,7 @@ impl NetRender {
         self.inputs.cpu_ext_cs_en = inputs.cpu_ext_cs_en;
         self.inputs.dma_phi = inputs.dma_phi;
         let mut deltas = 0;
+        let mut mode0_held = false;
         loop {
             // The deltas of this nanosecond, until nothing changes.
             loop {
@@ -974,6 +989,9 @@ impl NetRender {
                 assert!(deltas < MAX_DELTAS, "render oscillates");
                 log.note(self.pins());
             }
+            // Mode 0 as this nanosecond leaves it: a pulse a delta wide has
+            // no width, and render.vhd's delay swallows it.
+            mode0_held |= self.mode0();
             // The next nanosecond: the inputs' next arrival, or the
             // earliest change pending.
             let arrivals = [INPUTS_AT, SCAN_AT, MODE1_AT, DATA_AT];
@@ -984,6 +1002,7 @@ impl NetRender {
                 }
             }
             if at == NEVER {
+                self.mode0_pulse = mode0_held & !self.mode0();
                 break;
             }
             schedule.now = at;
@@ -1083,6 +1102,7 @@ impl NetRender {
                 self.oam.bus_odd = odd;
             }
             Tx::Maka(v) => self.oam.maka = v,
+            Tx::XMatchHeld(v) => self.wires.x_match_held = v,
             Tx::SpShift {
                 mask,
                 a,
@@ -1140,7 +1160,7 @@ impl NetRender {
         let n = &mut wires;
         // The wires.
         // @hw die: WODU XUGU XENA, TYFA SOCY VYBO SEGU, SACU
-        n.stop_mode3 = (cur.px == 167) & !w.x_match;
+        n.stop_mode3 = (cur.px == 167) & !w.x_match_held;
         n.dot = !cur.rydy & cur.started & !w.x_match & !w.stop_mode3 & i.clk;
         n.segu = !w.dot;
         n.clkpipe = w.segu | cur.discard;
@@ -1196,6 +1216,8 @@ impl NetRender {
         // The lowest slot that matches.
         n.selected = w.matches & (!w.matches).wrapping_add(1);
         n.x_match = w.matches != 0;
+        // Its rise comes from the edge's schedule (`delta`).
+        n.x_match_held = w.x_match_held & w.x_match;
         n.line = match first_slot(w.selected) {
             Some(slot) => store.lines[slot],
             None => i.scan_line,
@@ -1285,7 +1307,8 @@ impl NetRender {
 
     /// The wires settled from the flip-flops and latches as they are,
     /// without an edge: after the state was set from outside (a replay's
-    /// resynchronisation).
+    /// resynchronisation), as at the end of a phase, where the delayed match
+    /// (`x_match_held`) has caught up.
     ///
     /// # Panics
     ///
@@ -1293,7 +1316,9 @@ impl NetRender {
     pub fn settle_wires(&mut self, vram: &[u8; 0x2000]) {
         let mut deltas = 0;
         loop {
-            let wires = self.next_wires(vram);
+            let mut wires = self.next_wires(vram);
+            // Its delay has run out, as at the end of every phase.
+            wires.x_match_held = self.wires.x_match;
             if wires == self.wires {
                 break;
             }
@@ -1424,6 +1449,17 @@ impl NetRender {
                 0xFF49 => next.obp1 = i.data,
                 _ => {}
             }
+        }
+
+        // A sprite's match reaches mode 3's stop 4 ns after it rises; its
+        // fall cancels a rise still pending.
+        // @rule sprite-at-167-mode-0-pulse
+        if !w.x_match {
+            schedule.cancel(Tx::XMatchHeld(false));
+        } else if !pw.x_match {
+            schedule.after(4, Tx::XMatchHeld(true));
+        } else {
+            // The rise is pending or done.
         }
 
         // Mode 3: set a nanosecond after the scan stops.

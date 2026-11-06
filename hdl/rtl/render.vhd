@@ -113,6 +113,7 @@ architecture rtl of render is
 	signal mode3_i, mode0_i    : std_ulogic;
 	signal voga                : std_ulogic := '0';  -- mode 3's end, a clock later
 	signal stop_mode3          : std_ulogic;
+	signal x_match_held        : std_ulogic;  -- x_match, its rise as late as FEPO's
 	signal px_i                : unsigned(7 downto 0) := (others => '0');
 	signal px9                 : std_ulogic := '0';
 	signal clkpipe             : std_ulogic;
@@ -261,17 +262,41 @@ begin
 	end process;
 	mode3 <= mode3_i;
 
-	stop_mode3 <= '1' when px_i = 167 and x_match = '0' else '0';
-	mode0_i    <= stop_mode3 and not mode1;
+	-- A sprite at X 167 (A7) holds mode 3 a little after the counter
+	-- reaches it: on dmg-sim, FEPO stops mode 3 again 4 ns (3.9 to 4.7)
+	-- after XANO's compare starts it, and mode 0 pulses that long, which
+	-- sets STAT's flag (Gambatte's m2int_wxA6_spxA7_m0irq_2 and
+	-- 10spritesPrLine_10xposA7_m0irq_2: 2 on the DMG). Here the match comes
+	-- a delta after the counter, so its rise waits on this path.
+	-- @fact sprite-at-167-mode-0-pulse
+	-- @rule sprite-at-167-mode-0-pulse
+	x_match_held <= '1' after 4 ns when x_match = '1' else '0';
+	stop_mode3   <= '1' when px_i = 167 and x_match_held = '0' else '0';
+	mode0_i      <= stop_mode3 and not mode1;
 	-- On the chip, the pixel counter's clock comes 8 ns after hclk, and mode
 	-- 0 rises 14 ns after it, when LY = LYC's flag has long changed at that
 	-- edge. Here the counter's clock comes first, so mode 0's rise waits:
 	-- a write to LYC that clears the flag at the end of mode 3 drops STAT's
 	-- interrupt line for a moment, and the rise sets IF's flag (Gambatte's
-	-- lycdisable_ff45_3, measured in dmg-sim).
+	-- lycdisable_ff45_3, measured in dmg-sim). Mode 0 falls at once, but a
+	-- pulse shorter than the delay is delayed whole and keeps its width,
+	-- as the chip's gates pass it: the one above. A pulse a delta wide,
+	-- when the LCD is turned off in VBlank, then has no width and vanishes,
+	-- as dmg-sim's gate swallows it.
 	-- @fact mode-0-rises-after-lyc-flag, @fact lcd-off-in-vblank-mode-0-source
 	-- @rule mode-0-rises-after-lyc-flag
-	mode0      <= '1' after 14 ns when mode0_i = '1' else '0';
+	mode0_delay : process (mode0_i)
+		variable rose : time := -14 ns;
+	begin
+		if mode0_i = '1' then
+			rose  := now;
+			mode0 <= '1' after 14 ns;
+		elsif now - rose < 14 ns then
+			mode0 <= transport '0' after 14 ns;
+		else
+			mode0 <= '0';
+		end if;
+	end process;
 	mode0_early <= mode0_i;
 
 	voga_ff : process (clk, line_start)

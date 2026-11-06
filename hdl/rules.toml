@@ -73,6 +73,15 @@ races = ["mode-0-after-lyc-flag"]
 facts = ["mode-0-rises-after-lyc-flag", "lcd-off-in-vblank-mode-0-source"]
 evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3, with the delay measured in dmg-sim. The CGB-C reads 0 there where the DMG-08 reads 2; the CGB model, which keeps this rule and has the CGB's own read delays, passes it (2026-10-29)."
 
+[sprite-at-167-mode-0-pulse]
+title = "A sprite's match reaches mode 3's stop 4 ns after the pixel counter's compare"
+models = ["dmg"]
+kind = "delay"
+status = "applied"
+races = ["sprite-at-167-mode-0-pulse"]
+facts = ["sprite-at-167-mode-0-pulse"]
+evidence = "The comment at x_match_held in rtl/render.vhd: Gambatte's m2int_wxA6_spxA7_m0irq_2 and 10spritesPrLine_10xposA7_m0irq_2, 2 on the DMG-08, 0 on the model while the match came a delta after the compare and mode 0's delay swallowed the pulse (since mode-0-rises-after-lyc-flag); the width measured in dmg-sim (2026-11-06). The CGB-C reads 2 too."
+
 [stat-mode-2-falls-after-mode-3]
 title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"
 models = ["dmg"]

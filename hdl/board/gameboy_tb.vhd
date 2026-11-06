@@ -816,6 +816,9 @@ begin
 		-- for less than its length (the core's mreq pulses as an access
 		-- inside the chip starts).
 		variable latch_seen : std_ulogic := '0';
+		-- Mode 0 rose in the phase, also for less than its length (a sprite
+		-- at X 167 stops mode 3 again 4 ns after it ends).
+		variable mode0_rose : std_ulogic := '0';
 		-- The chip's data bus's bits that were a strong 0 in the phase.
 		variable data_low : std_ulogic_vector(7 downto 0) := (others => '0');
 
@@ -838,8 +841,9 @@ begin
 		file_open(f, BLOCKS, write_mode);
 		ended := phase;
 		loop
-			wait on phase, int_vbl, int_stat, int_timer, int_serial, int_jp, y_addr_latch, data;
+			wait on phase, int_vbl, int_stat, int_timer, int_serial, int_jp, y_addr_latch, data, mode0;
 			if y_addr_latch = '1' then latch_seen := '1'; end if;
+			if rising_edge(mode0) then mode0_rose := '1'; end if;
 			for i in data'range loop
 				if data(i) = '0' then data_low(i) := '1'; end if;
 			end loop;
@@ -862,6 +866,7 @@ begin
 					& b01(dma_enabled) & b01(dma_done) & b01(dma_run) & ' ' & hx(std_ulogic_vector(dma_count))
 					& ' ' & b01(dma_write) & ' ' & b01(dma_phi)
 					& ' ' & b01(clk) & b01(ppu_reset) & b01(mode0) & b01(mode2) & b01(mode3)
+					& b01(mode0_rose and not mode0)
 					& ' ' & b01(wuvu) & b01(vena) & b01(wosu) & b01(vclk) & b01(nype) & b01(line_153)
 					& b01(first_line) & b01(mode1) & b01(lyc_match)
 					& ' ' & hx(std_ulogic_vector(lx)) & ' ' & hx(std_ulogic_vector(ly)) & ' ' & hx(lyc)
@@ -946,6 +951,7 @@ begin
 			ended := phase;
 			rose  := (others => '0');
 			latch_seen := y_addr_latch;
+			mode0_rose := '0';
 			for i in data'range loop
 				data_low(i) := '1' when data(i) = '0' else '0';
 			end loop;

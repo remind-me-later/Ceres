@@ -71,8 +71,17 @@ title = "Mode 0 rises 14 ns after its compare, after LY = LYC's flag has changed
 models = ["dmg", "cgb"]
 race = "width"
 delays = ["render.mode0"]
+signals = ["render.mode0_i"]
 facts = ["mode-0-rises-after-lyc-flag", "lcd-off-in-vblank-mode-0-source"]
-evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3, measured in dmg-sim."
+evidence = "The comment at mode0 in rtl/render.vhd: Gambatte's lycdisable_ff45_3, measured in dmg-sim. Its delay also takes the pulses of mode0_i: the one a delta wide as the LCD is turned off in VBlank vanishes, as on dmg-sim (lcd-off-in-vblank-mode-0-source)."
+
+[sprite-at-167-mode-0-pulse]
+title = "A sprite at X 167 stops mode 3 again 4 ns after the pixel counter's compare ends it"
+models = ["dmg", "cgb"]
+race = "width"
+delays = ["render.x_match_held"]
+facts = ["sprite-at-167-mode-0-pulse"]
+evidence = "The comment at x_match_held in rtl/render.vhd: Gambatte's m2int_wxA6_spxA7_m0irq_2 and 10spritesPrLine_10xposA7_m0irq_2, with the width measured in dmg-sim."
 
 [stat-mode-2-into-mode-3]
 title = "STAT's mode 2 bit falls 2 ns after mode 3 begins"

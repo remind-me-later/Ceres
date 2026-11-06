@@ -268,6 +268,18 @@ race = "width"
 open = ["doc/hardware-tests.md#the-lcd-turned-off-in-vblank-with-stats-mode-0-source-on"]
 needs = ["flash-cart", "dmg-b", "dmg-c"]
 
+[sprite-at-167-mode-0-pulse]
+title = "A sprite at X 167 holds mode 3 a moment after the pixel counter ends it: mode 0 pulses, and sets STAT's flag"
+models = ["dmg"]
+netlist = "same"
+hardware = "same"
+race = "width"
+tests = [
+  "gambatte/sprites/10spritesPrLine_10xposA7_m0irq_2_dmg08_cgb04c_out2.gbc",
+  "gambatte/window/m2int_wxA6_spxA7_m0irq_2_dmg08_cgb04c_out2.gbc",
+]
+note = "On dmg-sim the counter's compare (XANO) ends mode 3 and the sprite's match (FEPO) holds it again 3.9 to 4.7 ns later: mode 0 (TARU) pulses 3.7 to 4.4 ns, and STAT's line rises 1.5 ns into it (hdl/results.md, 2026-11-06)."
+
 [lcd-off-at-line-start]
 title = "The LCD turned off in the M-cycle a line begins: the line's mode 2 interrupt comes first"
 models = ["dmg"]

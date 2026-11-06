@@ -197,6 +197,10 @@ pub struct NetChip {
     /// is precharged high and only pulled low while the read drives it,
     /// from E until it takes it in H.
     pub read_bus: Option<u8>,
+    /// IF's read latch: the flags while the CPU does not read IF, held while
+    /// it does (a flag that rises in the read's last phase is still not
+    /// driven as the next begins).
+    pub if_latch: u8,
 }
 
 /// `first` if a block drives it, else `second`.
@@ -274,6 +278,7 @@ impl NetChip {
             blocks_low_before: 0,
             blocks_high_before: 0,
             read_bus: None,
+            if_latch: 0,
         };
         let clock_inputs = chip.clock_inputs(pins);
         chip.clocks.step(clock_inputs);
@@ -337,17 +342,18 @@ impl NetChip {
         // has a read's byte by now, but VRAM's and OAM's own, and STAT's
         // mode bits follow render's mode 3 as it steps.
         if inputs.read {
-            let flags = self.interrupts.flags;
-            let not_mode3 = self.drivers(phase, mode2, false, flags, inputs.addr, bus);
-            let mode3 = self.drivers(phase, mode2, true, flags, inputs.addr, bus);
+            let not_mode3 = self.drivers(mode2, false, inputs.addr, bus);
+            let mode3 = self.drivers(mode2, true, inputs.addr, bus);
             inputs.data = Self::data(clock_out, pins, first, not_mode3);
             inputs.data_mode3 = Self::data(clock_out, pins, first, mode3);
         }
         self.step_render(clock_out, lcdc, save, inputs, bus, &mut memories.vram);
-        // Then mode 0, which rises after the edge's flip-flops.
+        // Then mode 0, which rises after the edge's flip-flops: for a
+        // moment only, if a sprite at X 167 stops mode 3 again.
         let at_edge = self.lcd.int_stat(mode0_at_edge);
+        let pulse = self.render.mode0_pulse & self.lcd.int_stat(true);
         let now = self.lcd.int_stat(self.render.mode0());
-        stat_rose |= (at_edge & !level) | (now & !at_edge);
+        stat_rose |= (at_edge & !level) | (pulse & !at_edge) | (now & !at_edge);
 
         // IF: the sources' rises, the CPU's write and the acknowledges.
         let rises = if bus.int_serial & !self.int_serial {
@@ -363,13 +369,16 @@ impl NetChip {
         } else {
             None
         };
-        // A read of IF takes the flags as they were when it started.
-        let flags_before = self.interrupts.flags;
         self.interrupts.phase(rises, write_if, inputs.acks);
         self.int_serial = bus.int_serial;
         self.int_jp = bus.int_jp;
 
-        let (read, driven) = self.step_read(phase, mode2, flags_before, inputs, bus);
+        let (read, driven) = self.step_read(phase, mode2, inputs, bus);
+        // IF's read latch follows the flags until a read of IF starts, and
+        // holds what it found until it ends.
+        if !(inputs.read & (inputs.addr == 0xFF0F)) {
+            self.if_latch = self.interrupts.flags;
+        }
 
         // The core again, with what the blocks drive on the data bus and IF
         // as they leave it.
@@ -742,25 +751,18 @@ impl NetChip {
 
     /// What a read of the divider, the timer, IF or IE drives on the bus
     /// (their bits that no flip-flop drives stay precharged, 1). IF's read
-    /// latch holds the flags as the read found them in E; they only rise
-    /// during a read, so later phases' flags AND to the same byte. IE is the
-    /// core's, which pulls its own data bus down where IE is 0.
+    /// latch holds the flags as the read found them in E. IE is the core's,
+    /// which pulls its own data bus down where IE is 0.
     // @hw die: TAWU TAKU TEMU TUSE UPUG SEPU SAWA TATU (FF04); TEDA TUBY
     // SORA, SOKU..PUSO SETE..SAPU RYLA ROTE SUPE (FF05 to FF07); MATY MOPO
     // PAVY NEJY NUTY, POLA, NELA..PEGY (FF0F); IRQ_NAND2_NAND3 (FFFF)
-    const fn read_timer_if(&self, phase: Phase, flags_before: u8, addr: u16) -> Option<u8> {
+    const fn read_timer_if(&self, addr: u16) -> Option<u8> {
         match addr {
             0xFF04 => Some(self.timer.read(Reg::Div)),
             0xFF05 => Some(self.timer.read(Reg::Tima)),
             0xFF06 => Some(self.timer.read(Reg::Tma)),
             0xFF07 => Some(self.timer.read(Reg::Tac) | 0xF8),
-            0xFF0F => Some(
-                if matches!(phase, Phase::E) {
-                    flags_before
-                } else {
-                    self.interrupts.flags
-                } | 0xE0,
-            ),
+            0xFF0F => Some(self.if_latch | 0xE0),
             0xFFFF => Some(self.interrupts.ie),
             _ => None,
         }
@@ -831,15 +833,7 @@ impl NetChip {
     /// block that decodes the address, with render's mode 3 (`mode3`) for
     /// STAT. Render's registers do not change in a read, so this holds
     /// before render steps.
-    const fn drivers(
-        &self,
-        phase: Phase,
-        mode2: bool,
-        mode3: bool,
-        flags_before: u8,
-        addr: u16,
-        bus: BusOutputs,
-    ) -> Option<u8> {
+    const fn drivers(&self, mode2: bool, mode3: bool, addr: u16, bus: BusOutputs) -> Option<u8> {
         let mut shown = self.control.read(addr);
         shown = first_of(shown, self.lcd.read(addr, mode2, mode3));
         shown = first_of(shown, self.render.read(addr));
@@ -847,23 +841,21 @@ impl NetChip {
             shown = first_of(shown, Some(self.dma.source));
         }
         shown = first_of(shown, bus.data_out);
-        shown = first_of(shown, self.read_timer_if(phase, flags_before, addr));
+        shown = first_of(shown, self.read_timer_if(addr));
         first_of(shown, self.apu.read())
     }
 
     /// A read: the AND of what drives the bus from E to H, which the core
     /// takes in H, and what the blocks drive in the phase.
-    /// `flags_before` is IF as the phase found it.
     const fn step_read(
         &mut self,
         phase: Phase,
         mode2: bool,
-        flags_before: u8,
         inputs: PhaseInputs,
         bus: BusOutputs,
     ) -> (Option<u8>, Option<u8>) {
         let addr = inputs.addr;
-        let mut shown = self.drivers(phase, mode2, self.render.mode3, flags_before, addr, bus);
+        let mut shown = self.drivers(mode2, self.render.mode3, addr, bus);
         shown = first_of(shown, self.render.read_vram());
         shown = first_of(shown, self.render.oam.read(&self.render.oam_inputs()));
         // Nothing else drives the precharged bus: VRAM and OAM while the
