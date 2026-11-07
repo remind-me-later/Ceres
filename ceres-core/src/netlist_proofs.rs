@@ -23,8 +23,9 @@ use crate::{
         Interrupts,
         netlist_proofs::{self as if_proof, A, NetIf, TIMER, ceres_boundary, lowest, requests},
     },
-    timing::netlist_proofs::{
-        self as timer_proof, DmgHost, ceres_access, ceres_t_cycle, known_difference, related,
+    timing::{
+        check::{ceres_access, known_difference, related},
+        netlist_proofs::{self as timer_proof, DmgHost, ceres_t_cycle},
     },
 };
 
@@ -91,7 +92,7 @@ fn netlist_timer_and_if() {
     let ceres_timer_read = ceres_access(&mut clock, &mut host, timer_access);
     let (ceres_if_read, queue) = ceres_boundary(&host.ints, if_access);
     let ceres_taken = matches!(if_access, if_proof::Access::Entry).then_some(lowest(queue));
-    let other = requests(&rises);
+    let other = requests(rises);
     for (t, &request) in other.iter().enumerate() {
         ceres_t_cycle(&mut clock, &mut host);
         if_proof::ceres_t_cycle(&mut host.ints, if_access, t, request, queue);

@@ -1,3 +1,5 @@
+#[cfg(any(kani, feature = "check"))]
+pub(crate) mod check;
 #[cfg(kani)]
 pub(crate) mod netlist_proofs;
 

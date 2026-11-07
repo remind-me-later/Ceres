@@ -161,6 +161,14 @@ how = "hdl/check/lcd_on_lyc0.asm enters the handler after the same instruction o
 title = "A source's rise in a T-cycle of ceres reaches IF as the netlist's in the phases that T-cycle maps to"
 evidence = "proved"
 
+[timer-step-agrees]
+title = "timing::check::step_agrees holds for every argument: from every related pair of timers, an M-cycle agrees and leaves them related, but where a fact parts them"
+evidence = "proved"
+
+[if-step-agrees]
+title = "interrupts::check::step_agrees holds for every argument: from equal IF and IE, an M-cycle with any rises and the timer's interrupt agrees and leaves them equal"
+evidence = "proved"
+
 [dma-runs-is-netlist-run]
 title = "Dma::runs is the netlist's run, after the CPU's access and after the M-cycle, a restart included"
 evidence = "proved"
@@ -170,6 +178,16 @@ title = "Ceres's object search keeps the first ten sprites on the line: a step a
 evidence = "proved"
 
 # What the proofs leave out
+
+[blocks-in-sequence]
+title = "Ceres's timer and IF, which ceres runs T-cycle by T-cycle, do what they do one after the other, the timer's request in its T-cycle"
+evidence = "open"
+how = "The Lean proof (lean/Ceres/Bisim/TimerIf.lean) wires the blocks' steps one after the other; netlist_timer_and_if checks ceres's interleaved M-cycle against the netlist, not against the steps in sequence."
+
+[timer-cut-at-b]
+title = "The netlist's timer stepped from B and IF stepped from E make one M-cycle"
+evidence = "open"
+how = "netlist_timer_and_if asserts NetTimer::quiet_until_e (B to D change nothing), which makes the timer's cut at B the one at E; the Lean proof does not carry it yet."
 
 [hblank-source-off]
 title = "The HBlank source of STAT is off"

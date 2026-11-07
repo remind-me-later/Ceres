@@ -120,6 +120,9 @@ upstream.
 - `hdl` runs test ROMs on dmg-sim, the gate-level simulation of the DMG-CPU B
   netlist, as the reference for how the hardware behaves (see
   [hdl/README.md](hdl/README.md)).
+- `lean` contains Lean proofs, built on the Kani proofs, that ceres's
+  blocks are bisimilar to those transcriptions (see
+  [lean/README.md](lean/README.md)).
 
 ## Contributing
 

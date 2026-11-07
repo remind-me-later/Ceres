@@ -419,10 +419,11 @@ better oracle, and the translation had to follow every change to dmg-sim.
 
 ceres-core's proofs against the netlist (`cargo kani -p ceres-core`) rest
 on Rust transcriptions of some of the model's blocks, in the crate
-`ceres-netlist` (which ceres-core uses under Kani only, and which takes
-nothing from ceres): `NetTimer` (`timer`, of `divider.vhd` and
-`timer.vhd`), `NetIf` (`interrupts`, of `interrupts.vhd` and the request
-latch of `sm83_interrupts.vhd`), `NetDma` (`dma`, of `dma.vhd`, clocked by
+`ceres-netlist` (which ceres-core uses under Kani, and under its feature
+`check` for the Lean proofs, `lean/`; it takes nothing from ceres):
+`NetTimer` (`timer`, of `divider.vhd` and `timer.vhd`), `NetIf`
+(`interrupts`, of `interrupts.vhd` and the request latch of
+`sm83_interrupts.vhd`), `NetDma` (`dma`, of `dma.vhd`, clocked by
 `dma_phi`, which stops while the CPU is halted), `NetLcd` (`lcd_timing`,
 of `lcd_timing.vhd`'s line clock, LY, VBlank, LY = LYC, the latches of LYC
 and STAT's enables, and the STAT interrupt line, edge by edge; the first

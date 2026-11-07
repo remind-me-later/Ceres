@@ -12,6 +12,12 @@ default = ["game_genie"]
 # breakpoint opcodes and the serial output.
 debug = []
 game_genie = []
+# The steps that the Kani proofs prove and Lean builds on (`timing::check`,
+# `interrupts::check`), for Charon and Aeneas (`lean/translate.sh`).
+check = ["dep:ceres-netlist"]
+
+[dependencies]
+ceres-netlist = { path = "../ceres-netlist", optional = true }
 
 # The netlist's transcriptions, which the Kani proofs hold ceres to; other
 # builds do not need them.

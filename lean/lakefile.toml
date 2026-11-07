@@ -1,0 +1,13 @@
+name = "ceres"
+defaultTargets = ["Ceres"]
+
+# Aeneas's Lean library, at the nightly whose Charon and Aeneas
+# translate.sh names (it brings Mathlib).
+[[require]]
+name = "aeneas"
+git = "https://github.com/AeneasVerif/aeneas"
+rev = "nightly-2026.11.07-c5eb4a2"
+subDir = "backends/lean"
+
+[[lean_lib]]
+name = "Ceres"

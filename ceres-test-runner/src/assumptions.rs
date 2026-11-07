@@ -1,5 +1,8 @@
 //! What the proofs against the netlist assume, `doc/assumptions.toml`, and
-//! the `@assumes` and `@discharges` tags of ceres-core's Kani harnesses.
+//! the `@assumes` and `@discharges` tags of the proofs.
+//!
+//! The proofs are ceres-core's Kani harnesses and the Lean theorems in
+//! `lean/Ceres` (not its translation, `Gen`).
 //!
 //! Each entry is something a harness takes as given: a transcription of the
 //! readable model, a mapping of ceres's time onto the netlist's, a
@@ -111,7 +114,8 @@ pub struct Tag {
     pub line: usize,
 }
 
-/// A Kani harness: a `fn` after `#[kani::proof]`.
+/// A proof: a Kani harness (a `fn` after `#[kani::proof]`) or a Lean
+/// `theorem`.
 #[derive(Debug)]
 pub struct Harness {
     pub name: String,
@@ -119,15 +123,15 @@ pub struct Harness {
     pub line: usize,
 }
 
-/// The tags and the harnesses in ceres-core's sources.
+/// The tags and the proofs in ceres-core's sources and in the Lean proofs.
 pub fn scan(root: &Path) -> Result<(Vec<Tag>, Vec<Harness>)> {
     let (mut tags, mut harnesses) = (Vec::new(), Vec::new());
-    collect(
-        root,
-        &root.join("ceres-core").join("src"),
-        &mut tags,
-        &mut harnesses,
-    )?;
+    for dir in [
+        root.join("ceres-core").join("src"),
+        root.join("lean").join("Ceres"),
+    ] {
+        collect(root, &dir, &mut tags, &mut harnesses)?;
+    }
     Ok((tags, harnesses))
 }
 
@@ -140,12 +144,17 @@ fn collect(
     for entry in fs::read_dir(dir).with_context(|| format!("reading {}", dir.display()))? {
         let path = entry?.path();
         if path.is_dir() {
-            collect(root, &path, tags, harnesses)?;
+            // Aeneas's translation of the Rust: no proofs, no tags.
+            if path.file_name().and_then(|n| n.to_str()) != Some("Gen") {
+                collect(root, &path, tags, harnesses)?;
+            }
             continue;
         }
-        if path.extension().and_then(|e| e.to_str()) != Some("rs") {
-            continue;
-        }
+        let lean = match path.extension().and_then(|e| e.to_str()) {
+            Some("rs") => false,
+            Some("lean") => true,
+            _ => continue,
+        };
         let text =
             fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
         let file = path.strip_prefix(root).unwrap_or(&path).to_path_buf();
@@ -161,8 +170,18 @@ fn collect(
             if line.trim() == "#[kani::proof]" {
                 proof = true;
             }
-            let Some(name) = function_name(line) else {
-                continue;
+            let name = if lean {
+                // Every theorem is a proof.
+                let Some(name) = theorem_name(line) else {
+                    continue;
+                };
+                proof = true;
+                name
+            } else {
+                let Some(name) = function_name(line) else {
+                    continue;
+                };
+                name
             };
             for (claim, id, line) in mem::take(&mut pending) {
                 tags.push(Tag {
@@ -208,9 +227,19 @@ fn function_name(line: &str) -> Option<&str> {
     (end > 0 && rest[end..].starts_with(['(', '<'])).then(|| &rest[..end])
 }
 
+/// The name of the theorem a Lean line states, if it states one.
+fn theorem_name(line: &str) -> Option<&str> {
+    let mut words = line.split_whitespace();
+    let mut word = words.next()?;
+    while matches!(word, "private" | "protected") {
+        word = words.next()?;
+    }
+    (word == "theorem").then(|| words.next()).flatten()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{function_name, tag_ids};
+    use super::{function_name, tag_ids, theorem_name};
 
     #[test]
     fn functions_are_found() {
@@ -224,6 +253,20 @@ mod tests {
         );
         assert_eq!(function_name("// fn not_this() {"), None);
         assert_eq!(function_name("let f = |x| x; // no fn here"), None);
+    }
+
+    #[test]
+    fn theorems_are_found() {
+        assert_eq!(
+            theorem_name("theorem agree_wire {Sa : Type}"),
+            Some("agree_wire")
+        );
+        assert_eq!(
+            theorem_name("private theorem helper (h : p) : q := by"),
+            Some("helper")
+        );
+        assert_eq!(theorem_name("-- theorem not_this"), None);
+        assert_eq!(theorem_name("/-- A theorem about it. -/"), None);
     }
 
     #[test]
