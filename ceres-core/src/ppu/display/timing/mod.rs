@@ -81,6 +81,8 @@ pub(super) const LINE_RESET_H: i32 = LINE_END_H + 2;
 pub(super) const VBLANK_H: i32 = LINE_END_H + 4;
 /// LY=LYC is sampled once per M-cycle, at this phase.
 const LY_MATCH_PHASE: i32 = 4;
+/// Where the pixel pipeline's line end puts the clock.
+const RESYNC_H: i32 = LINE_H - 19;
 /// The half dots from an LCDC write that turns the LCD off to the sources of
 /// the interrupt seeing it.
 // @fact lcd-off-at-line-start
@@ -478,8 +480,7 @@ impl Ppu {
 
     /// Resyncs the clock with the pixel pipeline at a line end.
     pub(super) const fn timing_line_end(&mut self, line: u8) {
-        self.d.timing.line = line;
-        self.d.timing.h = LINE_H - 19;
+        self.d.timing.resync(line);
     }
 
     /// Where the unit's clock is.
@@ -519,6 +520,13 @@ impl LcdTiming {
         self.hblank_pending = false;
         self.ly_match = self.lyc == 0;
         self.update_line()
+    }
+
+    /// The pixel pipeline's line end: the clock is at `line`'s half dot
+    /// `RESYNC_H`.
+    const fn resync(&mut self, line: u8) {
+        self.line = line;
+        self.h = RESYNC_H;
     }
 
     /// The LCD was turned off (after `LCD_OFF_LATE` half dots): LY=LYC keeps

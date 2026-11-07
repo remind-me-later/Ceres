@@ -39,14 +39,16 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
 - `Ceres/Bisim/Dma.lean`: the OAM DMA's step, wired beside the two (it
   takes only its own access, `Steps.weaken_in`), ceres's side being their
   M-cycle and then the DMA's run of it (`timer_if_dma_agree`).
-- `Ceres/Bisim/Lcd.lean`: the line timing's step (STAT, LY, LYC and the
-  STAT line), wired in front of the timer and IF, its rises put in IF's
-  input, and the DMA after them: from related states, every M-cycle gives
-  the same reads of STAT, LY, LYC, the timer, IF and FF46, the same
-  interrupt taken and the same OAM write (`blocks_agree`). It covers the LCD
-  on, its clock where ceres's accesses fall, and HBlank's source off; the
-  LCD turned off and on are Kani's own harnesses (`netlist_lcd_off`,
-  `netlist_lcd_on`, `netlist_lcd_line0`).
+- `Ceres/Bisim/Lcd.lean`: the line timing's step (STAT, LY, LYC, LCDC's
+  enable and the STAT line), wired in front of the timer and IF, its rises
+  put in IF's input, and the DMA after them: from related states, every
+  M-cycle gives the same reads of STAT, LY, LYC, the timer, IF and FF46,
+  the same interrupt taken and the same OAM write (`blocks_agree`). It
+  covers the LCD on, off, turned off and on, and line 0 after it is turned
+  on, with ceres's clock ahead until the pixel pipeline resyncs it; it
+  leaves out HBlank's source, and turning the LCD on with LYC 0, its
+  enable on and the flag clear (Kani's `netlist_lcd_on` pins that case
+  down).
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).

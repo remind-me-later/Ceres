@@ -61,6 +61,12 @@ evidence = "replayed"
 how = "netlist_replay over 169 gbmicrotest LCD ROMs (50.8 million phases), and the sprite, OAM and late_sizechange ROMs: no difference."
 rests_on = ["readable-model-is-dmg-sim"]
 
+[transcription-lcd-control]
+title = "NetLcdControl is lcd_control.vhd's LCDC latches, whose bit 7 holds the line timing in reset, as NetChip applies it (the clock's flip-flops held, LYC, the enables and the flag kept)"
+evidence = "replayed"
+how = "netlist_replay's replay of the whole chip (NetChip, in which LCDC holds the line timing and the scan in reset) over the model's traces that have render's, the core's and the APU's fields."
+rests_on = ["readable-model-is-dmg-sim"]
+
 [transcription-scan]
 title = "NetScan is oam_scan.vhd, edge by edge, on NetLcd's clocks"
 evidence = "replayed"
@@ -105,7 +111,7 @@ how = "netlist_replay's traces of 169 gbmicrotest LCD ROMs, against ceres's LcdT
 rests_on = ["readable-model-is-dmg-sim"]
 
 [mapping-access-at-h0]
-title = "Ceres's CPU accesses to STAT, LY and LYC fall at h = 0 (mod 8), from the end of the first line after the LCD is turned on"
+title = "Ceres's CPU accesses to STAT, LY and LYC fall at h = 0 (mod 8), and at h = 2 in the first line after the LCD is turned on, until the resync: the netlist's D edge"
 evidence = "measured"
 how = "All 28 accesses to these registers in 60 gbmicrotest ROMs; in that first line, 35 at h = 2."
 
@@ -174,7 +180,7 @@ title = "memory::dma::check::step_agrees holds for every argument: from every re
 evidence = "proved"
 
 [lcd-step-agrees]
-title = "ppu::display::timing::check::step_agrees holds for every argument: from every related pair of line timings at an M-cycle's boundary, an M-cycle with an access to STAT, LY or LYC agrees and leaves them related"
+title = "ppu::display::timing::check::step_agrees holds for every argument: from every related pair of line timings at an M-cycle's boundary (the LCD on, off, or in line 0 after it was turned on), an M-cycle with an access to STAT, LY, LYC or LCDC agrees and leaves them related"
 evidence = "proved"
 
 [blocks-in-sequence]
@@ -196,10 +202,6 @@ title = "The HBlank source of STAT is off"
 evidence = "open"
 how = "render.vhd's mode 0 is not transcribed: the line timing's harnesses hold its enable off."
 
-[no-access-in-line-0-after-lcd-on]
-title = "No access to STAT, LY or LYC in the first line after the LCD is turned on"
-evidence = "open"
-how = "There ceres's accesses fall at h = 2, off the netlist's phases, until the resync; the access harness leaves the line out."
 
 [cpu-does-not-address-oam]
 title = "The CPU does not address OAM (FExx) during the OAM scan"

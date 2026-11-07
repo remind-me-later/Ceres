@@ -625,14 +625,11 @@ impl NetChip {
         inputs: PhaseInputs,
     ) -> (bool, bool, bool) {
         let mode1 = self.lcd.mode1;
-        let mut rose = false;
-        if self.lcd.clk != self.clocks.clk {
-            if at_edge.ppu_reset {
-                self.lcd.clk = self.clocks.clk;
-            } else {
-                rose = self.lcd.edge(mode0_at_edge);
-            }
-        }
+        let mut rose = if self.lcd.clk == self.clocks.clk {
+            false
+        } else {
+            self.lcd.held_edge(at_edge.ppu_reset, mode0_at_edge)
+        };
         let mut level = self.lcd.int_stat(mode0_at_edge);
         if self.cpu_wr & matches!(inputs.addr, 0xFF41 | 0xFF45) {
             // As the write's latch opens, it takes the bus as it was first.

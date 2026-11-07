@@ -70,6 +70,14 @@ structure ceres_netlist.interrupts.NetIf where
   flags : Std.U8
   ie : Std.U8
 
+/-- [ceres_netlist::lcd_control::NetLcdControl]
+    Source: 'ceres-netlist/src/lcd_control.rs', lines 21:0-21:24
+    Name pattern: [ceres_netlist::lcd_control::NetLcdControl]
+    Visibility: public -/
+@[rust_type "ceres_netlist::lcd_control::NetLcdControl"]
+structure ceres_netlist.lcd_control.NetLcdControl where
+  lcdc : Std.U8
+
 /-- [ceres_netlist::lcd_timing::NetLcd]
     Source: 'ceres-netlist/src/lcd_timing.rs', lines 36:0-36:17
     Name pattern: [ceres_netlist::lcd_timing::NetLcd]
@@ -239,7 +247,7 @@ inductive memory.dma.DmaStep where
 | Pause : Option (Std.U16 × Std.U8) → memory.dma.DmaStep
 
 /-- [ceres_core::ppu::display::timing::check::Access]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 42:0-49:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 54:0-62:1 -/
 @[discriminant isize]
 inductive ppu.display.timing.check.Access where
 | None : ppu.display.timing.check.Access
@@ -248,9 +256,16 @@ inductive ppu.display.timing.check.Access where
 | ReadLyc : ppu.display.timing.check.Access
 | WriteStat : Std.U8 → ppu.display.timing.check.Access
 | WriteLyc : Std.U8 → ppu.display.timing.check.Access
+| WriteLcdc : Std.U8 → ppu.display.timing.check.Access
+
+/-- [ceres_core::ppu::display::timing::check::Net]
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 66:0-69:1 -/
+structure ppu.display.timing.check.Net where
+  lcd : ceres_netlist.lcd_timing.NetLcd
+  control : ceres_netlist.lcd_control.NetLcdControl
 
 /-- [ceres_core::ppu::display::timing::Phases]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 98:0-118:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 100:0-120:1 -/
 structure ppu.display.timing.Phases where
   cgb : Bool
   hblank_clear : Std.I32
@@ -268,7 +283,7 @@ structure ppu.display.timing.PendingWrite where
   half_dots_left : Std.U8
 
 /-- [ceres_core::ppu::display::timing::LcdTiming]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 157:0-191:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 159:0-193:1 -/
 structure ppu.display.timing.LcdTiming where
   phases : ppu.display.timing.Phases
   on : Bool
@@ -289,7 +304,7 @@ structure ppu.display.timing.LcdTiming where
   dirty : Bool
 
 /-- [ceres_core::ppu::display::timing::Delays]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 353:0-360:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 355:0-362:1 -/
 structure ppu.display.timing.Delays where
   stat_write : Std.U8
   lyc_write : Std.U8

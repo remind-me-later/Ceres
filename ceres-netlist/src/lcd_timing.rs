@@ -170,6 +170,18 @@ impl NetLcd {
         rose
     }
 
+    /// The next edge of the PPU's clock, which only toggles it while the
+    /// LCD's reset (`held`) holds the clock's flip-flops: whether the STAT
+    /// interrupt's line rose in it.
+    pub const fn held_edge(&mut self, held: bool, mode0: bool) -> bool {
+        if held {
+            self.clk = !self.clk;
+            false
+        } else {
+            self.edge(mode0)
+        }
+    }
+
     /// What the CPU's write puts on the data bus reaches LYC's latch
     /// (FF45) or the enables' (FF41), which follow it while the strobe is
     /// up: as it opens they take the bus as it was (precharged, FF), then

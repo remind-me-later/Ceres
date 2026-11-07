@@ -20,16 +20,19 @@ Ceres runs the PPU after the timer in `Gb::advance_cycles`, but the two
 share nothing but IF, whose requests only set its bits, in the T-cycle the
 source rises in (`mapping-m-cycle-at-e`, which IF's step assumes).
 
-The step leaves out the LCD turned off and on (an LCDC write), the first
-line after it is turned on, and the HBlank source: the related states have
-the LCD on, both clocks at the same half dot, and HBlank's enable and gate
-off. Kani's other harnesses (`netlist_lcd_off`, `netlist_lcd_on`,
-`netlist_lcd_line0`) prove those half dots, from reset.
+The step takes LCDC writes too: the related states have the LCD on, both
+clocks at the same half dot; or in line 0 after it was turned on, ceres's
+clock 2 half dots ahead until the pixel pipeline resyncs it; or the LCD
+off. It leaves out the HBlank source (HBlank's enable and gate off), and
+turning the LCD on with LYC 0, its enable on and the flag clear, when
+ceres raises the STAT line an M-cycle before the netlist
+(`lcd-on-lyc0-invisible`, which Kani's `netlist_lcd_on` pins down).
 -/
 
 namespace ceres_core.lcd
 
-abbrev NetLcd := ceres_netlist.lcd_timing.NetLcd
+/-- The netlist's line timing and LCDC's latches. -/
+abbrev NetLcd := ppu.display.timing.check.Net
 abbrev CeresLcd := ppu.display.timing.LcdTiming
 
 /-- The netlist's M-cycle: the read, and the STAT line's rises by edge. -/
@@ -46,9 +49,10 @@ def LcdOut (o : Option Std.U8 × Array Bool 8#usize) (p : Option Std.U8 × Array
     Prop :=
   o.1 = p.1 ∧ interrupts.check.same_stat o.2 p.2 = ok true
 
-/-- What the step leaves out: a STAT write that enables the HBlank source. -/
-def LcdK (_ : NetLcd) (i : NetIn) : Prop :=
-  ppu.display.timing.check.outside i.lcd = ok true
+/-- What the step leaves out: a STAT write that enables the HBlank source,
+and turning the LCD on with LYC 0, its enable on and the flag clear. -/
+def LcdK (n : NetLcd) (i : NetIn) : Prop :=
+  ppu.display.timing.check.outside n i.lcd = ok true
 
 /-- What Kani proves. -/
 def KaniLcd : Prop :=
@@ -155,8 +159,9 @@ theorem blocks_steps (kl : KaniLcd) (kt : KaniTimer) (ki : KaniIf) (ks : KaniSeq
 from related states, every M-cycle gives the same reads of STAT, LY, LYC,
 the timer, IF and FF46, the same interrupt taken (the STAT line's and the
 timer's interrupts among those IF takes), the same OAM write, and the DMA's
-run and OAM blocking alike, unless it is one of the timer's known
-differences or a STAT write the step leaves out. -/
+run and OAM blocking alike, the LCD turned off and on among them, unless
+it is one of the timer's known differences or what the line timing's step
+leaves out. -/
 -- @assumes lcd-step-agrees
 -- @assumes timer-step-agrees
 -- @assumes if-step-agrees
