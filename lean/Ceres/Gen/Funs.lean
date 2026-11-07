@@ -21,6 +21,119 @@ set_option maxRecDepth 2048
 
 namespace ceres_core
 
+/-- [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::last]:
+    Source: 'ceres-netlist/src/dma.rs', lines 51:4-51:36
+    Name pattern: [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::last] -/
+@[rust_fun "ceres_netlist::dma::{ceres_netlist::dma::NetDma}::last"]
+def ceres_netlist.dma.NetDma.last (count : Std.U8) : Result Bool := do
+  let i ← lift (count &&& 159#u8)
+  ok (i = 159#u8)
+
+/-- [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::settle]:
+    Source: 'ceres-netlist/src/dma.rs', lines 57:4-57:53
+    Name pattern: [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::settle]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::dma::{ceres_netlist::dma::NetDma}::settle"]
+def ceres_netlist.dma.NetDma.settle
+  (self : ceres_netlist.dma.NetDma) (write : Option Std.U8) :
+  Result ceres_netlist.dma.NetDma
+  := do
+  let self1 ←
+    match write with
+    | none => ok self
+    | some val => ok { self with source := val }
+  let (i, b) ←
+    if self1.start_2
+    then ok (0#u8, false)
+    else ok (self1.count, self1.done)
+  let b1 := core.option.Option.is_some write
+  ok
+    {
+      self1
+        with
+        requested := (b1 || (self1.requested && (¬ self1.start_2))),
+        enabled := (self1.start_2 || (self1.enabled && (¬ b))),
+        count := i,
+        done := b
+    }
+
+/-- [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::fall]:
+    Source: 'ceres-netlist/src/dma.rs', lines 95:4-95:32
+    Name pattern: [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::fall]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::dma::{ceres_netlist::dma::NetDma}::fall"]
+def ceres_netlist.dma.NetDma.fall
+  (self : ceres_netlist.dma.NetDma) : Result ceres_netlist.dma.NetDma := do
+  let b ← ceres_netlist.dma.NetDma.last self.count
+  ok { self with start_2 := self.start_1, done := ((¬ self.start_2) && b) }
+
+/-- [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::rise]:
+    Source: 'ceres-netlist/src/dma.rs', lines 85:4-85:47
+    Name pattern: [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::rise]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::dma::{ceres_netlist::dma::NetDma}::rise"]
+def ceres_netlist.dma.NetDma.rise
+  (self : ceres_netlist.dma.NetDma) (writing : Bool) :
+  Result ceres_netlist.dma.NetDma
+  := do
+  if self.enabled && (¬ self.start_2)
+  then
+    let i ← lift (core.num.U8.wrapping_add self.count 1#u8)
+    ok
+      {
+        self
+          with
+          start_1 := (self.requested && (¬ writing)),
+          count := i,
+          run := self.enabled
+      }
+  else
+    ok
+      {
+        self
+          with
+          start_1 := (self.requested && (¬ writing)), run := self.enabled
+      }
+
+/-- [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::phase]:
+    Source: 'ceres-netlist/src/dma.rs', lines 74:4-74:66
+    Name pattern: [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::phase]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::dma::{ceres_netlist::dma::NetDma}::phase"]
+def ceres_netlist.dma.NetDma.phase
+  (self : ceres_netlist.dma.NetDma) (phase : ceres_netlist.clocks.Phase)
+  (write : Option Std.U8) :
+  Result ceres_netlist.dma.NetDma
+  := do
+  let self1 ←
+    match phase with
+    | ceres_netlist.clocks.Phase.A =>
+      let b := core.option.Option.is_some write
+      ceres_netlist.dma.NetDma.rise self b
+    | ceres_netlist.clocks.Phase.B => ok self
+    | ceres_netlist.clocks.Phase.C => ok self
+    | ceres_netlist.clocks.Phase.D => ok self
+    | ceres_netlist.clocks.Phase.E => ceres_netlist.dma.NetDma.fall self
+    | ceres_netlist.clocks.Phase.F => ok self
+    | ceres_netlist.clocks.Phase.G => ok self
+    | ceres_netlist.clocks.Phase.H => ok self
+  ceres_netlist.dma.NetDma.settle self1 write
+
+/-- [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::oam_write]:
+    Source: 'ceres-netlist/src/dma.rs', lines 104:4-104:53
+    Name pattern: [ceres_netlist::dma::{ceres_netlist::dma::NetDma}::oam_write]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::dma::{ceres_netlist::dma::NetDma}::oam_write"]
+def ceres_netlist.dma.NetDma.oam_write
+  (self : ceres_netlist.dma.NetDma) : Result (Option (Std.U16 × Std.U8)) := do
+  if self.run
+  then
+    let i ←
+      lift (core.num.U16.from_le_bytes
+        (Array.make 2#usize [ self.count, self.source ]))
+    ok (some (i, self.count))
+  else ok none
+
 /-- [ceres_netlist::interrupts::INT_MASK]
     Source: 'ceres-netlist/src/interrupts.rs', lines 18:0-18:18
     Name pattern: [ceres_netlist::interrupts::INT_MASK] -/
@@ -1604,6 +1717,439 @@ def interrupts.check.step_agrees
     let b3 ← timing.check.same_read net_taken ceres_taken
     let b4 ← interrupts.check.related net1 ints1
     ok ((b2 && b3) && b4)
+
+/-- [ceres_core::memory::dma::check::net_m_cycle]:
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 56:0-79:1 -/
+def memory.dma.check.net_m_cycle
+  (net : ceres_netlist.dma.NetDma) (access : memory.dma.check.Access) :
+  Result (((Option Std.U8) × (Option (Std.U16 × Std.U8)) × Bool × Bool) ×
+    ceres_netlist.dma.NetDma)
+  := do
+  let write ←
+    match access with
+    | memory.dma.check.Access.None => ok none
+    | memory.dma.check.Access.Read => ok none
+    | memory.dma.check.Access.Write val => ok (some val)
+  let net1 ←
+    ceres_netlist.dma.NetDma.phase net ceres_netlist.clocks.Phase.E write
+  let net2 ←
+    ceres_netlist.dma.NetDma.phase net1 ceres_netlist.clocks.Phase.F write
+  let net3 ←
+    ceres_netlist.dma.NetDma.phase net2 ceres_netlist.clocks.Phase.G write
+  let oam ← ceres_netlist.dma.NetDma.oam_write net3
+  let net4 ←
+    ceres_netlist.dma.NetDma.phase net3 ceres_netlist.clocks.Phase.H none
+  let (net5, read) ←
+    match access with
+    | memory.dma.check.Access.None => ok (net4, none)
+    | memory.dma.check.Access.Read => ok (net4, some net4.source)
+    | memory.dma.check.Access.Write _ => ok (net4, none)
+  let net6 ←
+    ceres_netlist.dma.NetDma.phase net5 ceres_netlist.clocks.Phase.A none
+  let net7 ←
+    ceres_netlist.dma.NetDma.phase net6 ceres_netlist.clocks.Phase.B none
+  let net8 ←
+    ceres_netlist.dma.NetDma.phase net7 ceres_netlist.clocks.Phase.C none
+  let net9 ←
+    ceres_netlist.dma.NetDma.phase net8 ceres_netlist.clocks.Phase.D none
+  ok ((read, oam, net.run, net9.run), net9)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{impl core::ops::function::FnOnce<(u8,), (u16, u8)> for ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}<'_0>}::call_once]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
+def
+  memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8.call_once
+  (c : memory.dma.Dma.write.closure) (tupled_args : Std.U8) :
+  Result (Std.U16 × Std.U8)
+  := do
+  let i ← lift (core.convert.num.FromU16U8.from tupled_args)
+  let i1 ← lift (c ||| i)
+  ok (i1, tupled_args)
+
+/-- Trait implementation: [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{impl core::ops::function::FnOnce<(u8,), (u16, u8)> for ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}<'_0>}]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
+@[reducible]
+def memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8 :
+  core.ops.function.FnOnce memory.dma.Dma.write.closure Std.U8 (Std.U16 ×
+  Std.U8) := {
+  call_once :=
+    memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8.call_once
+}
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::is_after_restart]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 195:4-197:5 -/
+def memory.dma.Dma.is_after_restart (self : memory.dma.Dma) : Result Bool := do
+  let b ←
+    match self.phase with
+    | memory.dma.DmaPhase.Idle => ok false
+    | memory.dma.DmaPhase.StartUp => ok false
+    | memory.dma.DmaPhase.Copy i =>
+      match i with
+      | 0#uscalar => ok true
+      | _ => ok false
+    | memory.dma.DmaPhase.Last => ok false
+  if b
+  then ok self.restarting
+  else ok false
+
+/-- [ceres_core::ppu::oam::{ceres_core::ppu::oam::Oam}::SIZE]
+    Source: 'ceres-core/src/ppu/oam.rs', lines 19:4-19:37 -/
+@[global_simps, irreducible] def ppu.oam.Oam.SIZE : Std.U8 := 160#u8
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::DmaPhase}::written]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 46:4-52:5 -/
+def memory.dma.DmaPhase.written
+  (self : memory.dma.DmaPhase) : Result (Option Std.U8) := do
+  match self with
+  | memory.dma.DmaPhase.Idle => ok none
+  | memory.dma.DmaPhase.StartUp => ok none
+  | memory.dma.DmaPhase.Copy next =>
+    if next != 0#u8
+    then ok (some next)
+    else ok none
+  | memory.dma.DmaPhase.Last => ok (some ppu.oam.Oam.SIZE)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::oam_byte]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 201:4-209:5 -/
+def memory.dma.Dma.oam_byte
+  (self : memory.dma.Dma) : Result (Option Std.U8) := do
+  let b ← memory.dma.Dma.is_after_restart self
+  if b
+  then ok (some 0#u8)
+  else
+    let o ← memory.dma.DmaPhase.written self.phase
+    match o with
+    | none => ok none
+    | some written => let i ← written - 1#u8
+                      ok (some i)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 278:4-294:5 -/
+def memory.dma.Dma.write
+  (self : memory.dma.Dma) (val : Std.U8) :
+  Result ((Option (Std.U16 × Std.U8)) × memory.dma.Dma)
+  := do
+  let last ← memory.dma.Dma.oam_byte self
+  let (dp, b) ←
+    match self.phase with
+    | memory.dma.DmaPhase.Idle => ok (memory.dma.DmaPhase.Idle, false)
+    | memory.dma.DmaPhase.StartUp => ok (memory.dma.DmaPhase.StartUp, true)
+    | memory.dma.DmaPhase.Copy i =>
+      do
+      let b1 ← match i with
+                 | 0#uscalar => ok true
+                 | _ => ok false
+      ok (self.phase, b1)
+    | memory.dma.DmaPhase.Last => ok (memory.dma.DmaPhase.Last, false)
+  let (i, i1, dp1, b1, b2) ←
+    if b
+    then
+      ok (self.cycles, self.cycles_modulo, dp, self.restarting,
+        self.ran_when_written)
+    else
+      do
+      let b3 ←
+        match dp with
+        | memory.dma.DmaPhase.Idle => ok false
+        | memory.dma.DmaPhase.StartUp => ok false
+        | memory.dma.DmaPhase.Copy _ => ok true
+        | memory.dma.DmaPhase.Last => ok false
+      let b4 ←
+        match dp with
+        | memory.dma.DmaPhase.Idle => ok false
+        | memory.dma.DmaPhase.StartUp => ok false
+        | memory.dma.DmaPhase.Copy _ => ok true
+        | memory.dma.DmaPhase.Last => ok true
+      ok (0#i32, 2#i32, memory.dma.DmaPhase.StartUp, b3, b4)
+  let i2 ← lift (core.convert.num.FromU16U8.from val)
+  let i3 ← i2 <<< 8#i32
+  let o ←
+    core.option.Option.map
+      memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8
+      last i3
+  ok (o,
+    {
+      cycles := i,
+      cycles_modulo := i1,
+      phase := dp1,
+      current_src := i3,
+      reg := val,
+      restarting := b1,
+      ran_when_written := b2
+    })
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::DmaPhase}::step]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 35:4-42:5 -/
+def memory.dma.DmaPhase.step
+  (self : memory.dma.DmaPhase) : Result memory.dma.DmaPhase := do
+  match self with
+  | memory.dma.DmaPhase.Idle => ok memory.dma.DmaPhase.Idle
+  | memory.dma.DmaPhase.StartUp => ok (memory.dma.DmaPhase.Copy 0#u8)
+  | memory.dma.DmaPhase.Copy next =>
+    let i ← next + 1#u8
+    if i < ppu.oam.Oam.SIZE
+    then ok (memory.dma.DmaPhase.Copy i)
+    else ok memory.dma.DmaPhase.Last
+  | memory.dma.DmaPhase.Last => ok memory.dma.DmaPhase.Idle
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::end_pause]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 268:4-270:5 -/
+def memory.dma.Dma.end_pause
+  (self : memory.dma.Dma) : Result memory.dma.Dma := do
+  let dp ← memory.dma.DmaPhase.step self.phase
+  ok { self with phase := dp }
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::step]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 252:4-265:5 -/
+def memory.dma.Dma.step
+  (self : memory.dma.Dma) : Result (memory.dma.DmaStep × memory.dma.Dma) := do
+  match self.phase with
+  | memory.dma.DmaPhase.Idle => ok (memory.dma.DmaStep.Pause none, self)
+  | memory.dma.DmaPhase.StartUp =>
+    if self.restarting
+    then ok (memory.dma.DmaStep.Pause (some (self.current_src, 0#u8)), self)
+    else ok (memory.dma.DmaStep.Pause none, self)
+  | memory.dma.DmaPhase.Copy dest =>
+    let dp ← memory.dma.DmaPhase.step self.phase
+    let i ← lift (core.num.U16.wrapping_add self.current_src 1#u16)
+    ok (memory.dma.DmaStep.Copy self.current_src dest,
+      { self with phase := dp, current_src := i })
+  | memory.dma.DmaPhase.Last => ok (memory.dma.DmaStep.Pause none, self)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::due_step]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 244:4-250:5 -/
+def memory.dma.Dma.due_step
+  (self : memory.dma.Dma) :
+  Result ((Option memory.dma.DmaStep) × memory.dma.Dma)
+  := do
+  if self.cycles_modulo < 4#i32
+  then ok (none, self)
+  else
+    let i ← self.cycles_modulo - 4#i32
+    let (ds, self1) ← memory.dma.Dma.step { self with cycles_modulo := i }
+    ok (some ds, self1)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::begin_run]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 235:4-238:5 -/
+def memory.dma.Dma.begin_run
+  (self : memory.dma.Dma) : Result memory.dma.Dma := do
+  let i ← self.cycles_modulo + self.cycles
+  ok { self with cycles := 0#i32, cycles_modulo := i }
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::set_cycles]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 229:4-231:5 -/
+def memory.dma.Dma.set_cycles
+  (self : memory.dma.Dma) (cycles : Std.I32) : Result memory.dma.Dma := do
+  ok { self with cycles }
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::read]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 178:4-180:5 -/
+def memory.dma.Dma.read (self : memory.dma.Dma) : Result Std.U8 := do
+  ok self.reg
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::is_active]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 132:4-134:5 -/
+def memory.dma.Dma.is_active (self : memory.dma.Dma) : Result Bool := do
+  let b ←
+    match self.phase with
+    | memory.dma.DmaPhase.Idle => ok true
+    | memory.dma.DmaPhase.StartUp => ok false
+    | memory.dma.DmaPhase.Copy _ => ok false
+    | memory.dma.DmaPhase.Last => ok false
+  ok (¬ b)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::blocks_oam]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 173:4-175:5 -/
+def memory.dma.Dma.blocks_oam (self : memory.dma.Dma) : Result Bool := do
+  let b ← memory.dma.Dma.is_active self
+  if b
+  then
+    let b1 ←
+      match self.phase with
+      | memory.dma.DmaPhase.Idle => ok false
+      | memory.dma.DmaPhase.StartUp => ok false
+      | memory.dma.DmaPhase.Copy i =>
+        match i with
+        | 0#uscalar => ok true
+        | _ => ok false
+      | memory.dma.DmaPhase.Last => ok false
+    if b1
+    then ok self.restarting
+    else ok true
+  else ok false
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::runs_in]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 153:4-160:5 -/
+def memory.dma.Dma.runs_in
+  (self : memory.dma.Dma) (phase : memory.dma.DmaPhase) : Result Bool := do
+  match phase with
+  | memory.dma.DmaPhase.Idle => ok false
+  | memory.dma.DmaPhase.StartUp => ok self.ran_when_written
+  | memory.dma.DmaPhase.Copy i =>
+    match i with
+    | 0#uscalar => ok self.restarting
+    | _ => ok true
+  | memory.dma.DmaPhase.Last => ok true
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::runs]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 164:4-166:5 -/
+def memory.dma.Dma.runs (self : memory.dma.Dma) : Result Bool := do
+  memory.dma.Dma.runs_in self self.phase
+
+/-- [ceres_core::memory::dma::check::ceres_m_cycle]:
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 100:0-138:1 -/
+def memory.dma.check.ceres_m_cycle
+  (ceres : memory.dma.check.CeresDma) (access : memory.dma.check.Access) :
+  Result (memory.dma.check.CeresOut × memory.dma.check.CeresDma)
+  := do
+  let (ceres1, read) ←
+    match access with
+    | memory.dma.check.Access.None => ok (ceres, none)
+    | memory.dma.check.Access.Read =>
+      do
+      let i ← memory.dma.Dma.read ceres.dma
+      ok (ceres, some i)
+    | memory.dma.check.Access.Write val =>
+      do
+      let (o, d) ← memory.dma.Dma.write ceres.dma val
+      ok (({ dma := d, last_copy := o } : memory.dma.check.CeresDma), none)
+  let runs_after_access ← memory.dma.Dma.runs ceres1.dma
+  let b ← memory.dma.Dma.is_active ceres1.dma
+  let (d, copy, twice) ←
+    if b
+    then
+      do
+      let d1 ← memory.dma.Dma.set_cycles ceres1.dma 4#i32
+      let d2 ← memory.dma.Dma.begin_run d1
+      let (o, d3) ← memory.dma.Dma.due_step d2
+      match o with
+      | none => ok (d3, none, false)
+      | some ds =>
+        match ds with
+        | memory.dma.DmaStep.Copy src dest =>
+          let (o1, d4) ← memory.dma.Dma.due_step d3
+          let twice1 := core.option.Option.is_some o1
+          ok (d4, some (src, dest), twice1)
+        | memory.dma.DmaStep.Pause rewrite =>
+          let d4 ← memory.dma.Dma.end_pause d3
+          ok (d4, rewrite, false)
+    else ok (ceres1.dma, none, false)
+  let b1 ← memory.dma.Dma.runs d
+  let b2 ← memory.dma.Dma.blocks_oam d
+  ok
+    ({
+       read,
+       written := ceres1.last_copy,
+       runs_after_access,
+       runs := b1,
+       blocks_oam := b2,
+       twice
+     }, { dma := d, last_copy := copy })
+
+/-- [ceres_core::memory::dma::check::same_write]:
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 141:0-147:1 -/
+def memory.dma.check.same_write
+  (a : Option (Std.U16 × Std.U8)) (b : Option (Std.U16 × Std.U8)) :
+  Result Bool
+  := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some p =>
+    match b with
+    | none => ok false
+    | some p1 =>
+      let (a_src, a_dest) := p
+      let (b_src, b_dest) := p1
+      ok ((a_src = b_src) && (a_dest = b_dest))
+
+/-- [ceres_core::memory::dma::check::same_read]:
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 150:0-156:1 -/
+def memory.dma.check.same_read
+  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some x => match b with
+              | none => ok false
+              | some y => ok (x = y)
+
+/-- [ceres_core::memory::dma::check::copying]:
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 209:0-223:1 -/
+def memory.dma.check.copying
+  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.check.CeresDma)
+  (base : Std.U16) (next_byte : Std.U8) (in_range : Bool) :
+  Result Bool
+  := do
+  let n ← next_byte - 1#u8
+  let i ← lift (core.convert.num.FromU16U8.from n)
+  let i1 ← lift (base ||| i)
+  let b ← memory.dma.check.same_write ceres.last_copy (some (i1, n))
+  let i2 ← lift (core.convert.num.FromU16U8.from next_byte)
+  let i3 ← base + i2
+  ok ((((((((((in_range && (¬ net.requested)) && (¬ net.start_1)) &&
+    (net.start_2 = (n = 0#u8))) && net.enabled) && net.run) && (¬ net.done))
+    && (net.count = n)) && b) && (ceres.dma.current_src = i3)) &&
+    (ceres.dma.cycles_modulo = 2#i32))
+
+/-- [ceres_core::memory::dma::check::related]:
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 159:0-206:1 -/
+def memory.dma.check.related
+  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.check.CeresDma) :
+  Result Bool
+  := do
+  let i ← lift (core.convert.num.FromU16U8.from ceres.dma.reg)
+  let base ← i <<< 8#i32
+  let state ←
+    match ceres.dma.phase with
+    | memory.dma.DmaPhase.Idle =>
+      do
+      let b ← memory.dma.check.same_write ceres.last_copy none
+      ok ((((((¬ net.requested) && (¬ net.start_1)) && (¬ net.start_2)) &&
+        (¬ net.enabled)) && (¬ net.run)) && b)
+    | memory.dma.DmaPhase.StartUp => ok false
+    | memory.dma.DmaPhase.Copy next =>
+      match next with
+      | 0#uscalar =>
+        if ceres.dma.restarting
+        then
+          do
+          let b ←
+            memory.dma.check.same_write ceres.last_copy (some (base, 0#u8))
+          ok (((((((net.requested && net.start_1) && (¬ net.start_2)) &&
+            net.enabled) && net.run) && b) && (ceres.dma.current_src = base))
+            && (ceres.dma.cycles_modulo = 2#i32))
+        else
+          do
+          let b ← memory.dma.check.same_write ceres.last_copy none
+          ok (((((((net.requested && net.start_1) && (¬ net.start_2)) && (¬
+            net.enabled)) && (¬ net.run)) && b) && (ceres.dma.current_src =
+            base)) && (ceres.dma.cycles_modulo = 2#i32))
+      | _ => memory.dma.check.copying net ceres base next (next < 160#u8)
+    | memory.dma.DmaPhase.Last =>
+      memory.dma.check.copying net ceres base 160#u8 true
+  ok (((ceres.dma.reg = net.source) && (ceres.dma.cycles = 0#i32)) && state)
+
+/-- [ceres_core::memory::dma::check::step_agrees]:
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 230:0-263:1 -/
+def memory.dma.check.step_agrees
+  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.check.CeresDma)
+  (access : memory.dma.check.Access) :
+  Result Bool
+  := do
+  let b ← memory.dma.check.related net ceres
+  if b
+  then
+    let ((net_read, net_write, run_before, run_after), net1) ←
+      memory.dma.check.net_m_cycle net access
+    let (out, ceres1) ← memory.dma.check.ceres_m_cycle ceres access
+    let b1 ← memory.dma.check.same_read net_read out.read
+    let b2 ← memory.dma.check.same_write net_write out.written
+    let b3 ← memory.dma.check.related net1 ceres1
+    ok ((((((b1 && b2) && (out.runs_after_access = run_before)) && (out.runs =
+      run_after)) && (out.blocks_oam = run_after)) && (¬ out.twice)) && b3)
+  else ok true
 
 /-- [ceres_core::timing::check::known_difference]:
     Source: 'ceres-core/src/timing/check.rs', lines 234:0-267:1 -/

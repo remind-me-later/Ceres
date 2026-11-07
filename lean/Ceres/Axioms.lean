@@ -1,4 +1,4 @@
-import Ceres.Bisim.TimerIf
+import Ceres.Bisim.Dma
 
 /-! The theorems rest on Lean's own axioms only: the build fails if one
 comes to need another (`sorry`, or the compiler's, through `native_decide`
@@ -9,3 +9,9 @@ info: 'ceres_core.timer_if.timer_and_if_agree' depends on axioms: [propext, Clas
 -/
 #guard_msgs in
 #print axioms ceres_core.timer_if.timer_and_if_agree
+
+/--
+info: 'ceres_core.dma.timer_if_dma_agree' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.dma.timer_if_dma_agree

@@ -30,10 +30,11 @@ abbrev NetIf := ceres_netlist.interrupts.NetIf
 abbrev CeresIf := interrupts.Interrupts
 
 /-- An M-cycle's inputs on the netlist: an access to the timer, one to IF,
-and the other sources' rises by phase. -/
+one to the OAM DMA, and the other sources' rises by phase. -/
 structure NetIn where
   timer : ceres_netlist.timer.Access
   ifAccess : ceres_netlist.interrupts.Access
+  dma : memory.dma.check.Access
   rises : Array Std.U8 8#usize
 
 /-- The same on ceres, which also takes the serial's DIV mask. -/
@@ -41,10 +42,11 @@ structure CeresIn where
   timer : ceres_netlist.timer.Access
   mask : Std.U16
   ifAccess : ceres_netlist.interrupts.Access
+  dma : memory.dma.check.Access
   rises : Array Std.U8 8#usize
 
 def SameIn (i : NetIn) (j : CeresIn) : Prop :=
-  i.timer = j.timer ∧ i.ifAccess = j.ifAccess ∧ i.rises = j.rises
+  i.timer = j.timer ∧ i.ifAccess = j.ifAccess ∧ i.dma = j.dma ∧ i.rises = j.rises
 
 /-! The timer: the read and the interrupt (the netlist's at the A edge;
 ceres's T-cycle, and whether a second came). -/
@@ -142,7 +144,7 @@ theorem timer_steps (kani : KaniTimer) :
     Steps netTimer ceresTimer SameIn TimerOut TimerK
       (fun n c => timing.check.related n c = ok true) := by
   intro n c h i j hij
-  obtain ⟨ht, -, -⟩ := hij
+  obtain ⟨ht, -, -, -⟩ := hij
   have k := kani n c i.timer j.mask
   unfold timing.check.step_agrees at k
   obtain ⟨b, hb, k⟩ := bind_eq_ok k
@@ -177,7 +179,7 @@ theorem if_steps (kani : KaniIf) :
   right
   obtain ⟨i, o⟩ := x
   obtain ⟨j, p⟩ := y
-  obtain ⟨⟨-, ha, hr⟩, -, hsi, -⟩ := hxy
+  obtain ⟨⟨-, ha, -, hr⟩, -, hsi, -⟩ := hxy
   have k := kani n c i.ifAccess i.rises o.2 p.2.1
   unfold interrupts.check.step_agrees at k
   obtain ⟨b, hb, k⟩ := bind_eq_ok k

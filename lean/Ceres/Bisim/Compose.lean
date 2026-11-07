@@ -109,6 +109,16 @@ theorem Steps.wire {Sna Snb Sca Scb In Ic Ona Onb Oca Ocb : Type}
     · simp [bisim.wire, hna, hnb]
     · simp [bisim.wire, hca, hcb]
 
+/-- A block that steps for the inputs `RI` relates steps for those a
+stronger relation does (a block wired in that does not look at another's
+output). -/
+theorem Steps.weaken_in {Sn Sc In Ic On Oc : Type}
+    {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
+    {RI RI' : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R) (w : ∀ i j, RI' i j → RI i j) :
+    Steps net cer RI' RO K R :=
+  fun n c hr i j hij => h n c hr i j (w i j hij)
+
 /-- Ceres's step replaced by `cer'`, which does what `cer` does from the
 states `R` relates, its output mapped by `f`. -/
 theorem Steps.map_cer {Sn Sc In Ic On Oc Oc' : Type}

@@ -35,6 +35,21 @@ inductive ceres_netlist.clocks.Phase where
 | G : ceres_netlist.clocks.Phase
 | H : ceres_netlist.clocks.Phase
 
+/-- [ceres_netlist::dma::NetDma]
+    Source: 'ceres-netlist/src/dma.rs', lines 19:0-19:17
+    Name pattern: [ceres_netlist::dma::NetDma]
+    Visibility: public -/
+@[rust_type "ceres_netlist::dma::NetDma"]
+structure ceres_netlist.dma.NetDma where
+  source : Std.U8
+  requested : Bool
+  start_1 : Bool
+  start_2 : Bool
+  enabled : Bool
+  count : Std.U8
+  done : Bool
+  run : Bool
+
 /-- [ceres_netlist::interrupts::Access]
     Source: 'ceres-netlist/src/interrupts.rs', lines 52:0-52:15
     Name pattern: [ceres_netlist::interrupts::Access]
@@ -142,5 +157,61 @@ structure timing.timer.TimerHost (Self : Type _) where
 structure timing.check.CheckHost where
   serial_div_mask : Std.U16
   timer_interrupts : Std.U32
+
+/-- [ceres_core::memory::dma::check::Access]
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 34:0-38:1 -/
+@[discriminant isize]
+inductive memory.dma.check.Access where
+| None : memory.dma.check.Access
+| Read : memory.dma.check.Access
+| Write : Std.U8 → memory.dma.check.Access
+
+/-- [ceres_core::memory::dma::DmaPhase]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 22:0-31:1 -/
+@[discriminant isize]
+inductive memory.dma.DmaPhase where
+| Idle : memory.dma.DmaPhase
+| StartUp : memory.dma.DmaPhase
+| Copy : Std.U8 → memory.dma.DmaPhase
+| Last : memory.dma.DmaPhase
+
+/-- [ceres_core::memory::dma::Dma]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 67:0-83:1 -/
+structure memory.dma.Dma where
+  cycles : Std.I32
+  cycles_modulo : Std.I32
+  phase : memory.dma.DmaPhase
+  current_src : Std.U16
+  reg : Std.U8
+  restarting : Bool
+  ran_when_written : Bool
+
+/-- [ceres_core::memory::dma::check::CeresDma]
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 41:0-44:1 -/
+structure memory.dma.check.CeresDma where
+  dma : memory.dma.Dma
+  last_copy : Option (Std.U16 × Std.U8)
+
+/-- [ceres_core::memory::dma::check::CeresOut]
+    Source: 'ceres-core/src/memory/dma/check.rs', lines 87:0-94:1 -/
+structure memory.dma.check.CeresOut where
+  read : Option Std.U8
+  written : Option (Std.U16 × Std.U8)
+  runs_after_access : Bool
+  runs : Bool
+  blocks_oam : Bool
+  twice : Bool
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
+@[reducible]
+def memory.dma.Dma.write.closure := Std.U16
+
+/-- [ceres_core::memory::dma::DmaStep]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 57:0-65:1 -/
+@[discriminant isize]
+inductive memory.dma.DmaStep where
+| Copy : Std.U16 → Std.U8 → memory.dma.DmaStep
+| Pause : Option (Std.U16 × Std.U8) → memory.dma.DmaStep
 
 end ceres_core

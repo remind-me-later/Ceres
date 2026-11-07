@@ -8,19 +8,21 @@ step holds forever, and wires blocks together.
 ## What is proved
 
 Each block's step is one Rust function in ceres-core, `step_agrees`
-(`ceres-core/src/timing/check.rs`, `ceres-core/src/interrupts/check.rs`):
+(`ceres-core/src/timing/check.rs`, `ceres-core/src/interrupts/check.rs`,
+`ceres-core/src/memory/dma/check.rs`):
 from a pair of states that `related` matches (ceres's and the netlist's
 transcription, `ceres-netlist`), an M-cycle with any input gives the same
 outputs on both sides and leaves the pair related, unless it is a known
 difference (a fact of `doc/facts.toml`). Both blocks' netlist M-cycles are
 cut at the start of E, where ceres's begins. Kani proves each step true for
 every argument, every field of both states free
-(`netlist_timer_bisimulation`, `netlist_if_bisimulation`), and also
+(`netlist_timer_bisimulation`, `netlist_if_bisimulation`,
+`netlist_dma_bisimulation`), and also
 `check::in_sequence` (`ceres-core/src/check.rs`,
 `ceres_timer_and_if_in_sequence`): ceres's M-cycle of the two blocks, run
 T-cycle by T-cycle as ceres runs them, is the timer's step and then IF's.
 Aeneas translates the same functions to Lean (`Ceres/Gen`), where those are
-the hypotheses (`KaniTimer`, `KaniIf`, `KaniSeq`).
+the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniSeq`).
 
 - `Ceres/Bisim/Compose.lean`: `Agree`, the greatest relation such that,
   for related inputs, both steps succeed with related outputs and states
@@ -32,6 +34,9 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniSeq`).
   carried over to ceres's interleaved M-cycle (`ceresJoint`); from related
   states, every M-cycle gives the same timer read, IF read and interrupt
   taken (`timer_and_if_agree`).
+- `Ceres/Bisim/Dma.lean`: the OAM DMA's step, wired beside the two (it
+  takes only its own access, `Steps.weaken_in`), ceres's side being their
+  M-cycle and then the DMA's run of it (`timer_if_dma_agree`).
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).
@@ -73,7 +78,10 @@ leave nothing as an axiom: the script fails if it does.
 The Rust that Aeneas takes is written as ceres-netlist's is (its crate
 documentation): booleans combine with `&` and `|`, loops are `while` over
 indices, `Option`s are taken apart with `match`; a loop that carries an
-`Option` is written out, as Aeneas finds no fixed point for it.
+`Option` is written out, as Aeneas finds no fixed point for it. Aeneas
+prints a bool's `!` as Lean's `¬`, a proposition: Lean takes it back as a
+bool under `&&` or `||`, but not alone in a tuple (several fields set in one
+branch), so write such a value without `!`.
 
 To move to a newer Aeneas: change the `rev` in `lakefile.toml`, run
 `lake update aeneas`, build Charon at that Aeneas's `charon-pin` and the

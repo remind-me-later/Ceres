@@ -169,6 +169,10 @@ evidence = "proved"
 title = "interrupts::check::step_agrees holds for every argument: from equal IF and IE, an M-cycle with any rises and the timer's interrupt agrees and leaves them equal"
 evidence = "proved"
 
+[dma-step-agrees]
+title = "memory::dma::check::step_agrees holds for every argument: from every related pair of OAM DMAs, an M-cycle agrees and leaves them related"
+evidence = "proved"
+
 [blocks-in-sequence]
 title = "Ceres's M-cycle of the timer and IF, run T-cycle by T-cycle, is the timer's step and then IF's, the timer's request in its T-cycle"
 evidence = "proved"

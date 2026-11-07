@@ -4,6 +4,8 @@
 //! `GB_write_memory`: while a transfer runs, CPU accesses that share a bus with
 //! the DMA source read (or write) whatever the DMA is currently accessing.
 
+#[cfg(any(kani, feature = "check"))]
+pub(crate) mod check;
 #[cfg(kani)]
 mod netlist_proofs;
 
@@ -276,8 +278,12 @@ impl Dma {
     pub(crate) fn write(&mut self, val: u8) -> Option<(u16, u8)> {
         let last = self.oam_byte();
         if !matches!(self.phase, DmaPhase::StartUp | DmaPhase::Copy { next: 0 }) {
-            self.restarting = !matches!(self.phase, DmaPhase::Idle | DmaPhase::Last);
-            self.ran_when_written = !matches!(self.phase, DmaPhase::Idle);
+            // Not idle or in the last step: copying. Not idle: copying or in
+            // the last step. Written so, not with `!`: Aeneas (Lean) prints a
+            // bool's `!` as a proposition's, which the fields set here, a
+            // tuple to Lean, do not take.
+            self.restarting = matches!(self.phase, DmaPhase::Copy { .. });
+            self.ran_when_written = matches!(self.phase, DmaPhase::Copy { .. } | DmaPhase::Last);
             self.cycles = 0;
             self.cycles_modulo = 2;
             self.phase = DmaPhase::StartUp;
