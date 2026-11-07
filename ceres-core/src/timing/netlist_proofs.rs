@@ -135,7 +135,11 @@ pub(crate) fn related(net: &NetTimer, clock: &Clock) -> bool {
         && clock.apu_late_bit.is_none()
         && net.timer_clock == NetTimer::clock_of(net.tac, net.tac, net.count)
         && !net.write_tma
-        && !net.write_tac;
+        && !net.write_tac
+        // The DMG that gbmicrotest was checked on: enabling the timer while
+        // its select changes does not count.
+        // @fact timer-enable-race
+        && !net.enable_race_counts;
     let overflowed = net.bit7_before && net.tima & 0x80 == 0;
     let timer = if net.int_timer {
         // The M-cycle after an overflow: TIMA loads TMA.
@@ -156,41 +160,40 @@ pub(crate) fn related(net: &NetTimer, clock: &Clock) -> bool {
     same_regs && timer
 }
 
+/// Any netlist timer: every flip-flop free, so that a proof from it holds
+/// for every state `related` matches, not only the ones it was built from.
 pub(crate) fn any_net_timer() -> NetTimer {
-    let count: u16 = kani::any();
-    let tac = kani::any::<u8>() & 7;
     NetTimer {
-        count,
+        count: kani::any(),
         tima: kani::any(),
         tma: kani::any(),
-        tac,
+        tac: kani::any(),
         int_timer: kani::any(),
         bit7_before: kani::any(),
-        timer_clock: NetTimer::clock_of(tac, tac, count),
-        write_tma: false,
-        write_tac: false,
-        latched_data: 0,
-        enable_race_counts: false,
+        timer_clock: kani::any(),
+        write_tma: kani::any(),
+        write_tac: kani::any(),
+        latched_data: kani::any(),
+        enable_race_counts: kani::any(),
     }
 }
 
-/// The ceres timer that `related` matches with `net`.
-pub(crate) fn ceres_for(net: &NetTimer) -> Clock {
-    let (tima, pending, countdown) = if net.int_timer {
-        (net.tma, 5, 0)
-    } else if net.bit7_before && net.tima & 0x80 == 0 {
-        (net.tma, 4, 3)
-    } else {
-        (net.tima, 0, 0)
-    };
+/// Any ceres timer: every field free, as for `any_net_timer`.
+pub(crate) fn any_clock() -> Clock {
     Clock {
-        div: net.count.wrapping_mul(4),
-        tac: net.tac,
-        tima,
-        tma: net.tma,
-        tima_reload_pending: pending,
-        tima_irq_countdown: countdown,
-        ..Clock::default()
+        div: kani::any(),
+        tac: kani::any(),
+        tima: kani::any(),
+        tma: kani::any(),
+        tima_reload_pending: kani::any(),
+        tima_irq_countdown: kani::any(),
+        div_cycles: kani::any(),
+        div_state: kani::any(),
+        stopped: kani::any(),
+        during_div_write: kani::any(),
+        apu_delay: kani::any(),
+        apu_late_bit: kani::any(),
+        apu_odd: kani::any(),
     }
 }
 
@@ -240,7 +243,7 @@ pub(crate) fn known_difference(net: &NetTimer, access: Access) -> bool {
 #[kani::unwind(9)]
 fn netlist_timer_bisimulation() {
     let mut net = any_net_timer();
-    let mut clock = ceres_for(&net);
+    let mut clock = any_clock();
     kani::assume(related(&net, &clock));
     let access = any_access();
     kani::assume(!known_difference(&net, access));

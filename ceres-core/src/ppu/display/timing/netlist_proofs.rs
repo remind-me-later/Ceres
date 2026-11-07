@@ -78,14 +78,14 @@ const fn vblank_at(line: u8, h: i32) -> bool {
     }
 }
 
-/// A DMG's line timing with the LCD on, at any half dot of any line, with
-/// any enables but HBlank's, any LYC and any LY = LYC flag: the states that
-/// a running LCD with no access in flight can be in.
+/// A DMG's line timing with the LCD on, at any half dot of any line: every
+/// field that `related` does not fix is free, so that a proof from it holds
+/// for every related state (the phases are the DMG's, which nothing changes).
 fn any_ceres() -> LcdTiming {
     let line: u8 = kani::any();
     let h: i32 = kani::any();
     kani::assume(line <= LAST_LINE && (0..LINE_H).contains(&h));
-    let enables = kani::any::<u8>() & STAT_ENABLES & !STAT_IF_HBLANK_B;
+    let enables: u8 = kani::any();
     let mut t = LcdTiming {
         phases: DMG_PHASES,
         on: true,
@@ -96,7 +96,7 @@ fn any_ceres() -> LcdTiming {
         line_end: h >= LINE_END_H,
         vblank: vblank_at(line, h),
         hblank: kani::any(),
-        hblank_pending: false,
+        hblank_pending: kani::any(),
         ly_match: kani::any(),
         enables,
         lyc: kani::any(),
@@ -112,7 +112,10 @@ fn any_ceres() -> LcdTiming {
 /// The netlist's flip-flops for ceres's state; the LCD's pins' flip-flops,
 /// which nothing here reads, are left free.
 fn net_for(t: &LcdTiming) -> NetLcd {
-    net_at(t, t.line, t.h)
+    NetLcd {
+        first_line: kani::any(),
+        ..net_at(t, t.line, t.h)
+    }
 }
 
 /// The netlist's flip-flops at half dot `h` of `line`, with ceres's LY,
@@ -155,7 +158,12 @@ fn related(net: &NetLcd, t: &LcdTiming) -> bool {
 /// drives the LCD's S pin, which nothing here reads.
 fn related_at(net: &NetLcd, t: &LcdTiming, line: u8, h: i32) -> bool {
     let want = net_at(t, line, h);
-    t.on && !t.dirty
+    t.line <= LAST_LINE
+        && (0..LINE_H).contains(&t.h)
+        && t.enables & !(STAT_ENABLES & !STAT_IF_HBLANK_B) == 0
+        && !t.hblank_pending
+        && t.on
+        && !t.dirty
         && t.lyc_pending.is_none()
         && t.stat_pending.is_none()
         && t.ly == ly_at(t.line, t.h)
@@ -396,6 +404,8 @@ fn any_off() -> (LcdTiming, NetLcd) {
 /// Both LCDs are off and agree on what outlives it.
 fn off_related(net: &NetLcd, t: &LcdTiming) -> bool {
     !t.on
+        && t.enables & !(STAT_ENABLES & !STAT_IF_HBLANK_B) == 0
+        && !t.hblank_pending
         && !t.line_end
         && !t.vblank
         && t.ly == 0

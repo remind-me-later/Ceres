@@ -147,7 +147,7 @@ facts = ["tima-reload-tick", "tima-reload-unseen-overflow"]
 [timer-enable-race-outcome]
 title = "Enabling the timer with TAC does not count the race's tick, as on the DMG ceres follows"
 evidence = "fact"
-how = "The proof's netlist takes enable_race_counts = false."
+how = "`related` requires enable_race_counts = false: with it true, a TAC write that enables the timer while its select changes counts (Kani's counterexample, every field free)."
 facts = ["timer-enable-race"]
 
 [lcd-on-lyc0-invisible]

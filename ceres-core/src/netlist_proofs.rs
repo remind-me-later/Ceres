@@ -24,8 +24,7 @@ use crate::{
         netlist_proofs::{self as if_proof, A, NetIf, TIMER, ceres_boundary, lowest, requests},
     },
     timing::netlist_proofs::{
-        self as timer_proof, DmgHost, ceres_access, ceres_for, ceres_t_cycle, known_difference,
-        related,
+        self as timer_proof, DmgHost, ceres_access, ceres_t_cycle, known_difference, related,
     },
 };
 
@@ -36,11 +35,12 @@ use crate::{
 // @assumes mapping-m-cycle-at-e
 // @assumes mapping-timer-a-edge
 // @assumes timer-known-differences
+// @assumes timer-enable-race-outcome
 #[kani::proof]
 #[kani::unwind(9)]
 fn netlist_timer_and_if() {
     let mut net = timer_proof::any_net_timer();
-    let mut clock = ceres_for(&net);
+    let mut clock = timer_proof::any_clock();
     kani::assume(related(&net, &clock));
     let mut net_if = NetIf {
         flags: kani::any::<u8>() & crate::interrupts::INT_MASK,
