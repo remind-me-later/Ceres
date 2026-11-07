@@ -24,6 +24,8 @@
 //! pixel pipeline resyncs at every line end; `h = 0` is where LY changes for
 //! a CPU read (gambatte's clock, which its tests are written against).
 
+#[cfg(any(kani, feature = "check"))]
+pub(crate) mod check;
 #[cfg(kani)]
 mod netlist_proofs;
 
@@ -151,7 +153,7 @@ const CGB_E_PHASES: Phases = Phases {
     clippy::struct_excessive_bools,
     reason = "Independent signals of the circuit"
 )]
-#[derive(Clone)]
+#[derive(Clone, Copy)]
 pub(super) struct LcdTiming {
     phases: Phases,
     on: bool,
@@ -383,15 +385,19 @@ const CGB_DOUBLE_SPEED_DELAYS: Delays = Delays {
 impl LcdTiming {
     /// STAT's mode as a read sees it; `pipeline` is the mode the drawing
     /// pipeline is in, which tells mode 3 from mode 0.
+    #[expect(
+        clippy::needless_bitwise_bool,
+        reason = "Aeneas (Lean) takes this (`check`): a lazy || ending in a comparison comes out as a proposition, which Lean does not take as a bool"
+    )]
     const fn read_mode(&self, pipeline: u8) -> u8 {
         let p = &self.phases;
-        let next_visible = self.line < LAST_VISIBLE_LINE || self.line == LAST_LINE;
-        let scanning = (self.h >= p.scan_start && next_visible)
-            || (self.h < p.scan_end && self.line < LINES && !self.first_line);
+        let next_visible = (self.line < LAST_VISIBLE_LINE) | (self.line == LAST_LINE);
+        let scanning = ((self.h >= p.scan_start) & next_visible)
+            | ((self.h < p.scan_end) & (self.line < LINES) & !self.first_line);
         let visible =
-            self.line < LINES && !(self.line == LAST_VISIBLE_LINE && self.h >= p.scan_start);
-        let vblank = (self.vblank && (self.line >= LINES || self.h >= p.mode1_start))
-            || (self.line == LAST_LINE && self.h >= VBLANK_H && self.h < p.mode1_end);
+            (self.line < LINES) & !((self.line == LAST_VISIBLE_LINE) & (self.h >= p.scan_start));
+        let vblank = (self.vblank & ((self.line >= LINES) | (self.h >= p.mode1_start)))
+            | ((self.line == LAST_LINE) & (self.h >= VBLANK_H) & (self.h < p.mode1_end));
         if vblank {
             1
         } else if scanning {
@@ -417,13 +423,13 @@ impl Ppu {
     }
 
     /// LY as a CPU read sees it.
-    pub(in crate::ppu) fn timing_read_ly(&self) -> u8 {
+    pub(in crate::ppu) const fn timing_read_ly(&self) -> u8 {
         self.d.timing.read_ly(self.delays())
     }
 
     /// STAT's mode and LY=LYC flag as a CPU read sees them, over `stat`
     /// (the enables and the pipeline's mode).
-    pub(in crate::ppu) fn timing_read_stat(&self, stat: u8) -> u8 {
+    pub(in crate::ppu) const fn timing_read_stat(&self, stat: u8) -> u8 {
         self.d
             .timing
             .read_stat(stat, self.delays(), self.double_speed())
@@ -530,13 +536,16 @@ impl LcdTiming {
     /// LY as a CPU read sees it. On the CGB a read in the half dot where LY
     /// changes sees the counter rippling: the bits that fall have fallen,
     /// the one that rises has not risen yet.
-    fn read_ly(&self, delays: Delays) -> u8 {
+    const fn read_ly(&self, delays: Delays) -> u8 {
         let delay = delays.ly_read;
-        let mut t = self.clone();
+        let mut t = *self;
         let mut before = t.ly;
-        for _ in 0..delay {
+        // A `while` over a count, as Aeneas takes it (`check`).
+        let mut k = 0;
+        while k < delay {
             before = t.ly;
             t.unit();
+            k += 1;
         }
         // @fact cgb-ly-read-during-increment
         if self.phases.cgb && delay > 0 && before != t.ly {
@@ -550,7 +559,7 @@ impl LcdTiming {
     /// (the enables and the pipeline's mode). The flag comes from a latch
     /// (`RUPO`) that follows the synced comparison, and on the DMG drops as
     /// soon as LY changes.
-    fn read_stat(&self, stat: u8, delays: Delays, double_speed: bool) -> u8 {
+    const fn read_stat(&self, stat: u8, delays: Delays, double_speed: bool) -> u8 {
         let enables = stat & !(STAT_MODE_B | STAT_LYC_B);
         if !self.on {
             // With the LCD off the comparison clock stops: the flag keeps
@@ -559,9 +568,15 @@ impl LcdTiming {
         }
         let holds = self.phases.cgb && (double_speed || self.phases.flag_holds);
         // One run ahead serves both views.
-        let mut t = self.clone();
+        let mut t = *self;
         let (mut lyc_flag, mut mode) = (false, 0);
-        for k in 0..=delays.flag_read.max(delays.mode_read) {
+        let last = if delays.flag_read > delays.mode_read {
+            delays.flag_read
+        } else {
+            delays.mode_read
+        };
+        let mut k = 0;
+        while k <= last {
             if k > 0 {
                 t.unit();
             }
@@ -571,6 +586,7 @@ impl LcdTiming {
             if k == delays.mode_read {
                 mode = t.read_mode(stat & STAT_MODE_B);
             }
+            k += 1;
         }
         enables | mode | if lyc_flag { STAT_LYC_B } else { 0 }
     }

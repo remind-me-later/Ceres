@@ -9,20 +9,22 @@ step holds forever, and wires blocks together.
 
 Each block's step is one Rust function in ceres-core, `step_agrees`
 (`ceres-core/src/timing/check.rs`, `ceres-core/src/interrupts/check.rs`,
-`ceres-core/src/memory/dma/check.rs`):
+`ceres-core/src/memory/dma/check.rs`,
+`ceres-core/src/ppu/display/timing/check.rs`):
 from a pair of states that `related` matches (ceres's and the netlist's
 transcription, `ceres-netlist`), an M-cycle with any input gives the same
 outputs on both sides and leaves the pair related, unless it is a known
-difference (a fact of `doc/facts.toml`). Both blocks' netlist M-cycles are
-cut at the start of E, where ceres's begins. Kani proves each step true for
-every argument, every field of both states free
+difference (a fact of `doc/facts.toml`). The netlist's M-cycles are cut
+at the start of E, where ceres's begins (the line timing's at the D edge
+before it, `h = 0` mod 8 of ceres's half dots). Kani proves each step true
+for every argument, every field of both states free
 (`netlist_timer_bisimulation`, `netlist_if_bisimulation`,
-`netlist_dma_bisimulation`), and also
+`netlist_dma_bisimulation`, `netlist_lcd_access`), and also
 `check::in_sequence` (`ceres-core/src/check.rs`,
 `ceres_timer_and_if_in_sequence`): ceres's M-cycle of the two blocks, run
 T-cycle by T-cycle as ceres runs them, is the timer's step and then IF's.
 Aeneas translates the same functions to Lean (`Ceres/Gen`), where those are
-the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniSeq`).
+the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
 
 - `Ceres/Bisim/Compose.lean`: `Agree`, the greatest relation such that,
   for related inputs, both steps succeed with related outputs and states
@@ -37,6 +39,14 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniSeq`).
 - `Ceres/Bisim/Dma.lean`: the OAM DMA's step, wired beside the two (it
   takes only its own access, `Steps.weaken_in`), ceres's side being their
   M-cycle and then the DMA's run of it (`timer_if_dma_agree`).
+- `Ceres/Bisim/Lcd.lean`: the line timing's step (STAT, LY, LYC and the
+  STAT line), wired in front of the timer and IF, its rises put in IF's
+  input, and the DMA after them: from related states, every M-cycle gives
+  the same reads of STAT, LY, LYC, the timer, IF and FF46, the same
+  interrupt taken and the same OAM write (`blocks_agree`). It covers the LCD
+  on, its clock where ceres's accesses fall, and HBlank's source off; the
+  LCD turned off and on are Kani's own harnesses (`netlist_lcd_off`,
+  `netlist_lcd_on`, `netlist_lcd_line0`).
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).
@@ -59,7 +69,8 @@ names, and downloads its built files when that release has them.
 
 `Ceres/Gen` is generated, and committed: building the proofs needs no Rust
 tools. After a change to the `check` modules, or to what they call
-(ceres-core's timer and IF, ceres-netlist's `timer` and `interrupts`), run
+(ceres-core's timer, IF, OAM DMA and line timing, ceres-netlist's
+transcriptions of them), run
 
 ```sh
 CHARON=.../charon AENEAS=.../aeneas lean/translate.sh
@@ -81,7 +92,11 @@ indices, `Option`s are taken apart with `match`; a loop that carries an
 `Option` is written out, as Aeneas finds no fixed point for it. Aeneas
 prints a bool's `!` as Lean's `¬`, a proposition: Lean takes it back as a
 bool under `&&` or `||`, but not alone in a tuple (several fields set in one
-branch), so write such a value without `!`.
+branch), so write such a value without `!`. The same goes for a lazy `||`
+or `&&` whose last operand is a comparison, kept in a variable: Aeneas
+makes it a branch whose last arm is the comparison, a proposition, so
+write it with `|` or `&`. Aeneas has no `Option::clone`: a struct with
+`Option` fields that the steps copy derives `Copy`.
 
 To move to a newer Aeneas: change the `rev` in `lakefile.toml`, run
 `lake update aeneas`, build Charon at that Aeneas's `charon-pin` and the

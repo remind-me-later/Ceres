@@ -21,6 +21,8 @@ Then
   interrupt feeds IF); if A steps, and B steps on the inputs that A's
   related outputs give it, the two together step, with the known
   differences of either;
+- `Steps.comap`: a block's inputs can be made from others (another
+  block's outputs put in its input);
 - `Steps.map_cer`: ceres's side can be replaced by a step that does the
   same from the states `R` relates (ceres's blocks as it interleaves them).
 -/
@@ -118,6 +120,17 @@ theorem Steps.weaken_in {Sn Sc In Ic On Oc : Type}
     {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R) (w : ∀ i j, RI' i j → RI i j) :
     Steps net cer RI' RO K R :=
   fun n c hr i j hij => h n c hr i j (w i j hij)
+
+/-- A block that steps for the inputs `RI` relates steps for inputs that
+`f` and `g` turn into those: inputs made from other blocks' outputs (the
+STAT line's rises put into IF's input). -/
+theorem Steps.comap {Sn Sc In Ic In' Ic' On Oc : Type}
+    {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R) (f : In' → In) (g : Ic' → Ic)
+    {RI' : In' → Ic' → Prop} (w : ∀ i j, RI' i j → RI (f i) (g j)) :
+    Steps (fun s i => net s (f i)) (fun s j => cer s (g j)) RI' RO (fun s i => K s (f i)) R :=
+  fun n c hr i j hij => h n c hr (f i) (g j) (w i j hij)
 
 /-- Ceres's step replaced by `cer'`, which does what `cer` does from the
 states `R` relates, its output mapped by `f`. -/

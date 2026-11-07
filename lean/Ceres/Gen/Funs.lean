@@ -335,6 +335,252 @@ def ceres_netlist.interrupts.NetIf.m_cycle
       { start := 0#usize, «end» := i1 } self1 access rises selected
   ok ((read, taken), self2)
 
+/-- [ceres_netlist::lcd_timing::STAT_IF_HBLANK_B]
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 28:0-28:26
+    Name pattern: [ceres_netlist::lcd_timing::STAT_IF_HBLANK_B] -/
+@[global_simps, irreducible, rust_const
+  "ceres_netlist::lcd_timing::STAT_IF_HBLANK_B"]
+def ceres_netlist.lcd_timing.STAT_IF_HBLANK_B : Std.U8 := 8#u8
+
+/-- [ceres_netlist::lcd_timing::STAT_IF_VBLANK_B]
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 29:0-29:26
+    Name pattern: [ceres_netlist::lcd_timing::STAT_IF_VBLANK_B] -/
+@[global_simps, irreducible, rust_const
+  "ceres_netlist::lcd_timing::STAT_IF_VBLANK_B"]
+def ceres_netlist.lcd_timing.STAT_IF_VBLANK_B : Std.U8 := 16#u8
+
+/-- [ceres_netlist::lcd_timing::STAT_IF_OAM_B]
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 30:0-30:23
+    Name pattern: [ceres_netlist::lcd_timing::STAT_IF_OAM_B] -/
+@[global_simps, irreducible, rust_const
+  "ceres_netlist::lcd_timing::STAT_IF_OAM_B"]
+def ceres_netlist.lcd_timing.STAT_IF_OAM_B : Std.U8 := 32#u8
+
+/-- [ceres_netlist::lcd_timing::STAT_IF_LYC_B]
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 31:0-31:23
+    Name pattern: [ceres_netlist::lcd_timing::STAT_IF_LYC_B] -/
+@[global_simps, irreducible, rust_const
+  "ceres_netlist::lcd_timing::STAT_IF_LYC_B"]
+def ceres_netlist.lcd_timing.STAT_IF_LYC_B : Std.U8 := 64#u8
+
+/-- [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::int_stat]:
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 91:4-91:53
+    Name pattern: [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::int_stat]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::int_stat"]
+def ceres_netlist.lcd_timing.NetLcd.int_stat
+  (self : ceres_netlist.lcd_timing.NetLcd) (mode0 : Bool) : Result Bool := do
+  let i ← lift (self.stat_enable &&& ceres_netlist.lcd_timing.STAT_IF_LYC_B)
+  let i1 ← lift (self.stat_enable &&& ceres_netlist.lcd_timing.STAT_IF_OAM_B)
+  let i2 ←
+    lift (self.stat_enable &&& ceres_netlist.lcd_timing.STAT_IF_VBLANK_B)
+  let i3 ←
+    lift (self.stat_enable &&& ceres_netlist.lcd_timing.STAT_IF_HBLANK_B)
+  ok (((((i != 0#u8) && self.lyc_match) || (((i1 != 0#u8) && self.vclk) && (¬
+    self.mode1))) || ((i2 != 0#u8) && self.mode1)) || ((i3 != 0#u8) && mode0))
+
+/-- [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::stage]:
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 226:4-226:64
+    Name pattern: [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::stage] -/
+@[rust_fun
+  "ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::stage"]
+def ceres_netlist.lcd_timing.NetLcd.stage
+  (now : Bool) (level : Bool) (rose : Bool) : Result (Bool × Bool) := do
+  ok (now, rose || (now && (¬ level)))
+
+/-- [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::edge]:
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 100:4-100:53
+    Name pattern: [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::edge]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::edge"]
+def ceres_netlist.lcd_timing.NetLcd.edge
+  (self : ceres_netlist.lcd_timing.NetLcd) (mode0 : Bool) :
+  Result (Bool × ceres_netlist.lcd_timing.NetLcd)
+  := do
+  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat self mode0
+  if ¬ self.clk
+  then ok (false, { self with clk := (¬ self.clk), wosu := (¬ self.wuvu) })
+  else
+    let b ← if self.wuvu
+              then ok (¬ self.vena)
+              else ok self.vena
+    let (i, b1, b2) ←
+      if (¬ self.vena) && b
+      then
+        do
+        let i1 ← if self.vclk
+                   then ok self.lx
+                   else self.lx + 1#u8
+        ok (i1, self.vclk, self.ly = self.lyc)
+      else ok (self.lx, self.nype, self.lyc_match)
+    let (b3, b4) ←
+      if self.vena && (¬ b)
+      then
+        do
+        let b5 ←
+          match i with
+          | 0#uscalar => ok true
+          | 7#uscalar => ok true
+          | 45#uscalar => ok true
+          | 83#uscalar => ok true
+          | _ => ok false
+        ok (i = 113#u8, b5)
+      else ok (self.vclk, self.cpg_lx)
+    let b5 ←
+      ceres_netlist.lcd_timing.NetLcd.int_stat
+        {
+          self
+            with
+            clk := (¬ self.clk),
+            wuvu := (¬ self.wuvu),
+            vena := b,
+            lx := i,
+            vclk := b3,
+            nype := b1,
+            cpg_lx := b4,
+            lyc_match := b2
+        } mode0
+    let (level1, rose) ← ceres_netlist.lcd_timing.NetLcd.stage b5 level false
+    let i1 ← if b3
+               then ok 0#u8
+               else ok i
+    let i2 ←
+      if ((¬ self.vclk) && b3) && (¬ self.line_153)
+      then ok (core.num.U8.wrapping_add self.ly 1#u8)
+      else ok self.ly
+    let b6 ←
+      if self.vclk && (¬ b3)
+      then ok (¬ self.line_parity)
+      else ok self.line_parity
+    let b7 ←
+      if (¬ self.nype) && b1
+      then do
+           let i3 ← lift (i2 &&& 144#u8)
+           ok (i3 = 144#u8)
+      else ok self.mode1
+    let (b8, b9) ←
+      if self.nype && (¬ b1)
+      then ok (i2 = 153#u8, i2 = 0#u8)
+      else ok (self.line_153, self.first_line)
+    let b10 ←
+      ceres_netlist.lcd_timing.NetLcd.int_stat
+        {
+          self
+            with
+            clk := (¬ self.clk),
+            wuvu := (¬ self.wuvu),
+            vena := b,
+            lx := i1,
+            vclk := b3,
+            nype := b1,
+            ly := i2,
+            line_153 := b8,
+            first_line := b9,
+            mode1 := b7,
+            line_parity := b6,
+            cpg_lx := b4,
+            lyc_match := b2
+        } mode0
+    let (level2, rose1) ←
+      ceres_netlist.lcd_timing.NetLcd.stage b10 level1 rose
+    let b11 ←
+      if (¬ self.mode1) && b7
+      then ok (¬ self.frame)
+      else ok self.frame
+    let i3 ← if b8
+               then ok 0#u8
+               else ok i2
+    let b12 ←
+      ceres_netlist.lcd_timing.NetLcd.int_stat
+        {
+          self
+            with
+            clk := (¬ self.clk),
+            wuvu := (¬ self.wuvu),
+            vena := b,
+            lx := i1,
+            vclk := b3,
+            nype := b1,
+            ly := i3,
+            line_153 := b8,
+            first_line := b9,
+            mode1 := b7,
+            frame := b11,
+            line_parity := b6,
+            cpg_lx := b4,
+            lyc_match := b2
+        } mode0
+    let (_, rose2) ← ceres_netlist.lcd_timing.NetLcd.stage b12 level2 rose1
+    ok (rose2,
+      {
+        self
+          with
+          clk := (¬ self.clk),
+          wuvu := (¬ self.wuvu),
+          vena := b,
+          lx := i1,
+          vclk := b3,
+          nype := b1,
+          ly := i3,
+          line_153 := b8,
+          first_line := b9,
+          mode1 := b7,
+          frame := b11,
+          line_parity := b6,
+          cpg_lx := b4,
+          lyc_match := b2
+      })
+
+/-- [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::write]:
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 178:4-178:54
+    Name pattern: [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::write]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::write"]
+def ceres_netlist.lcd_timing.NetLcd.write
+  (self : ceres_netlist.lcd_timing.NetLcd) (addr : Std.U16) (data : Std.U8) :
+  Result ceres_netlist.lcd_timing.NetLcd
+  := do
+  match addr with
+  | 65349#uscalar => ok { self with lyc := data }
+  | 65345#uscalar =>
+    let i ← lift (data &&& 120#u8)
+    ok { self with stat_enable := i }
+  | _ => ok self
+
+/-- [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::read]:
+    Source: 'ceres-netlist/src/lcd_timing.rs', lines 211:4-211:79
+    Name pattern: [ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::read]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::lcd_timing::{ceres_netlist::lcd_timing::NetLcd}::read"]
+def ceres_netlist.lcd_timing.NetLcd.read
+  (self : ceres_netlist.lcd_timing.NetLcd) (addr : Std.U16) (mode2 : Bool)
+  (mode3 : Bool) :
+  Result (Option Std.U8)
+  := do
+  match addr with
+  | 65345#uscalar =>
+    let i ← lift (128#u8 ||| self.stat_enable)
+    let i1 ← if self.lyc_match
+               then ok 4#u8
+               else ok 0#u8
+    let i2 ← lift (i ||| i1)
+    let i3 ← if mode2 || mode3
+               then ok 2#u8
+               else ok 0#u8
+    let i4 ← lift (i2 ||| i3)
+    let i5 ← if mode3 || self.mode1
+               then ok 1#u8
+               else ok 0#u8
+    let i6 ← lift (i4 ||| i5)
+    ok (some i6)
+  | 65348#uscalar => ok (some self.ly)
+  | 65349#uscalar => ok (some self.lyc)
+  | _ => ok none
+
 /-- [ceres_netlist::timer::TAC_ENABLE_B]
     Source: 'ceres-netlist/src/timer.rs', lines 16:0-16:22
     Name pattern: [ceres_netlist::timer::TAC_ENABLE_B] -/
@@ -1185,7 +1431,7 @@ def interrupts.Interrupts.acknowledge_interrupt
   ok { self with ifr := i1 }
 
 /-- [ceres_core::interrupts::check::ceres_t_cycle]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 68:0-89:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 93:0-114:1 -/
 def interrupts.check.ceres_t_cycle
   (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
   (t : Std.Usize) (request : Std.U8) (queue : Std.U8) :
@@ -1220,7 +1466,7 @@ def interrupts.Interrupts.read_ie
   ok self.ie
 
 /-- [ceres_core::interrupts::check::ceres_boundary]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 57:0-64:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 82:0-89:1 -/
 def interrupts.check.ceres_boundary
   (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access) :
   Result ((Option Std.U8) × Std.U8)
@@ -1242,7 +1488,7 @@ def interrupts.check.ceres_boundary
   ok (read, queue)
 
 /-- [ceres_core::interrupts::check::requests]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 47:4-51:5 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 72:4-76:5 -/
 @[rust_loop_body]
 def interrupts.check.requests_loop.body
   (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
@@ -1264,7 +1510,7 @@ def interrupts.check.requests_loop.body
   else ok (done requests)
 
 /-- [ceres_core::interrupts::check::requests]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 47:4-51:5 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 72:4-76:5 -/
 @[rust_loop]
 def interrupts.check.requests_loop
   (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
@@ -1277,14 +1523,64 @@ def interrupts.check.requests_loop
     (requests, i)
 
 /-- [ceres_core::interrupts::check::requests]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 44:0-53:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 69:0-78:1 -/
 def interrupts.check.requests
   (rises : Array Std.U8 8#usize) : Result (Array Std.U8 4#usize) := do
   let requests := Array.repeat 4#usize 0#u8
   interrupts.check.requests_loop rises requests 0#usize
 
+/-- [ceres_core::interrupts::INT_LCD_B]
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 8:0-8:27 -/
+@[global_simps, irreducible] def interrupts.INT_LCD_B : Std.U8 := 2#u8
+
+/-- [ceres_core::interrupts::check::with_stat]: loop body 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 58:4-63:5 -/
+@[rust_loop_body]
+def interrupts.check.with_stat_loop.body
+  (stat : Array Bool 4#usize) (requests : Array Std.U8 4#usize) (t : Std.Usize)
+  :
+  Result (ControlFlow ((Array Std.U8 4#usize) × Std.Usize) (Array Std.U8
+    4#usize))
+  := do
+  if t < 4#usize
+  then
+    let b ← Array.index_usize stat t
+    let requests1 ←
+      if b
+      then
+        do
+        let i ← Array.index_usize requests t
+        let i1 ← lift (i ||| interrupts.INT_LCD_B)
+        Array.update requests t i1
+      else ok requests
+    let t1 ← t + 1#usize
+    ok (cont (requests1, t1))
+  else ok (done requests)
+
+/-- [ceres_core::interrupts::check::with_stat]: loop 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 58:4-63:5 -/
+@[rust_loop]
+def interrupts.check.with_stat_loop
+  (stat : Array Bool 4#usize) (requests : Array Std.U8 4#usize) (t : Std.Usize)
+  :
+  Result (Array Std.U8 4#usize)
+  := do
+  loop
+    (fun (requests1, t1) => interrupts.check.with_stat_loop.body stat requests1
+      t1)
+    (requests, t)
+
+/-- [ceres_core::interrupts::check::with_stat]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 55:0-65:1 -/
+@[reducible]
+def interrupts.check.with_stat
+  (requests : Array Std.U8 4#usize) (stat : Array Bool 4#usize) :
+  Result (Array Std.U8 4#usize)
+  := do
+  interrupts.check.with_stat_loop stat requests 0#usize
+
 /-- [ceres_core::check::ceres_m_cycle_joint]: loop body 0:
-    Source: 'ceres-core/src/check.rs', lines 106:4-110:5 -/
+    Source: 'ceres-core/src/check.rs', lines 108:4-112:5 -/
 @[rust_loop_body]
 def check.ceres_m_cycle_joint_loop.body
   (if_access : ceres_netlist.interrupts.Access) (queue : Std.U8)
@@ -1306,7 +1602,7 @@ def check.ceres_m_cycle_joint_loop.body
   else ok (done (clock, i, i1))
 
 /-- [ceres_core::check::ceres_m_cycle_joint]: loop 0:
-    Source: 'ceres-core/src/check.rs', lines 106:4-110:5 -/
+    Source: 'ceres-core/src/check.rs', lines 108:4-112:5 -/
 @[rust_loop]
 def check.ceres_m_cycle_joint_loop
   (clock : timing.timer.Clock) (i : Std.U16) (i1 : interrupts.Interrupts)
@@ -1320,12 +1616,12 @@ def check.ceres_m_cycle_joint_loop
     (clock, i, i1, t)
 
 /-- [ceres_core::check::ceres_m_cycle_joint]:
-    Source: 'ceres-core/src/check.rs', lines 91:0-112:1 -/
+    Source: 'ceres-core/src/check.rs', lines 92:0-114:1 -/
 def check.ceres_m_cycle_joint
   (clock : timing.timer.Clock) (host : check.JointHost)
   (timer_access : ceres_netlist.timer.Access)
   (if_access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  :
+  (stat : Array Bool 4#usize) :
   Result (((Option Std.U8) × (Option Std.U8) × (Option Std.U8)) ×
     timing.timer.Clock × check.JointHost)
   := do
@@ -1343,7 +1639,8 @@ def check.ceres_m_cycle_joint
       do
       let i ← ceres_netlist.interrupts.lowest queue
       ok (some i)
-  let other ← interrupts.check.requests rises
+  let a ← interrupts.check.requests rises
+  let other ← interrupts.check.with_stat a stat
   let (clock2, i, i1) ←
     check.ceres_m_cycle_joint_loop clock1 host1.serial_div_mask host1.ints
       if_access queue other 0#usize
@@ -1559,7 +1856,7 @@ def timing.check.CheckHost.new
   ok { serial_div_mask, timer_interrupts := 0#u32 }
 
 /-- [ceres_core::interrupts::check::ceres_step]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 124:4-127:5 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 159:4-162:5 -/
 @[rust_loop_body]
 def interrupts.check.ceres_step_loop.body
   (access : ceres_netlist.interrupts.Access) (requests : Array Std.U8 4#usize)
@@ -1576,7 +1873,7 @@ def interrupts.check.ceres_step_loop.body
   else ok (done ints)
 
 /-- [ceres_core::interrupts::check::ceres_step]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 124:4-127:5 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 159:4-162:5 -/
 @[rust_loop]
 def interrupts.check.ceres_step_loop
   (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
@@ -1589,13 +1886,15 @@ def interrupts.check.ceres_step_loop
     (ints, t)
 
 /-- [ceres_core::interrupts::check::ceres_step]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 108:0-129:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 142:0-164:1 -/
 def interrupts.check.ceres_step
   (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
-  (rises : Array Std.U8 8#usize) (timer : Option Std.U8) :
+  (rises : Array Std.U8 8#usize) (timer : Option Std.U8)
+  (stat : Array Bool 4#usize) :
   Result (((Option Std.U8) × (Option Std.U8)) × interrupts.Interrupts)
   := do
-  let requests ← interrupts.check.requests rises
+  let a ← interrupts.check.requests rises
+  let requests ← interrupts.check.with_stat a stat
   let requests1 ←
     match timer with
     | none => ok requests
@@ -1621,20 +1920,20 @@ def interrupts.check.ceres_step
   ok ((read, taken), ints1)
 
 /-- [ceres_core::interrupts::check::same_ints]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 38:0-40:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 40:0-42:1 -/
 def interrupts.check.same_ints
   (a : interrupts.Interrupts) (b : interrupts.Interrupts) : Result Bool := do
   ok ((a.ie = b.ie) && (a.ifr = b.ifr))
 
 /-- [ceres_core::check::in_sequence]:
-    Source: 'ceres-core/src/check.rs', lines 122:0-152:1 -/
+    Source: 'ceres-core/src/check.rs', lines 124:0-161:1 -/
 def check.in_sequence
   (net : ceres_netlist.timer.NetTimer) (clock : timing.timer.Clock)
   (clock_joint : timing.timer.Clock) (ints : interrupts.Interrupts)
   (ints_joint : interrupts.Interrupts)
   (timer_access : ceres_netlist.timer.Access) (serial_div_mask : Std.U16)
   (if_access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  :
+  (stat : Array Bool 4#usize) :
   Result Bool
   := do
   let b ← timing.check.related net clock
@@ -1647,11 +1946,12 @@ def check.in_sequence
     let ((timer_read, timer_irq, twice), clock1, _) ←
       timing.check.ceres_m_cycle clock host timer_access
     let ((if_read, taken), ints1) ←
-      interrupts.check.ceres_step ints if_access rises timer_irq
+      interrupts.check.ceres_step ints if_access rises timer_irq stat
     let joint ← check.JointHost.new serial_div_mask ints_joint
     let ((joint_timer_read, joint_if_read, joint_taken), clock_joint1, joint1)
       ←
       check.ceres_m_cycle_joint clock_joint joint timer_access if_access rises
+        stat
     let b3 ← timing.check.same_read timer_read joint_timer_read
     let b4 ← timing.check.same_read if_read joint_if_read
     let b5 ← timing.check.same_read taken joint_taken
@@ -1660,7 +1960,7 @@ def check.in_sequence
     ok (twice || ((((b3 && b4) && b5) && b6) && b7))
 
 /-- [ceres_core::interrupts::check::related]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 33:0-35:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 35:0-37:1 -/
 def interrupts.check.related
   (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts) :
   Result Bool
@@ -1669,12 +1969,65 @@ def interrupts.check.related
   let i1 ← lift (net.flags &&& i)
   ok (((i1 = 0#u8) && (ints.ifr = net.flags)) && (ints.ie = net.ie))
 
+/-- [ceres_core::interrupts::check::same_stat]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 48:0-52:1 -/
+def interrupts.check.same_stat
+  (net : Array Bool 8#usize) (ceres : Array Bool 4#usize) : Result Bool := do
+  let b ← Array.index_usize net 0#usize
+  let b1 ← Array.index_usize net 1#usize
+  let b2 ← Array.index_usize net 2#usize
+  let b3 ← Array.index_usize ceres 0#usize
+  let b4 ← Array.index_usize net 3#usize
+  let b5 ← Array.index_usize ceres 1#usize
+  let b6 ← Array.index_usize net 4#usize
+  let b7 ← Array.index_usize net 5#usize
+  let b8 ← Array.index_usize net 6#usize
+  let b9 ← Array.index_usize net 7#usize
+  let b10 ← Array.index_usize ceres 2#usize
+  let b11 ← Array.index_usize ceres 3#usize
+  ok (((((b || b1) || b2) = b3) && (b4 = b5)) && ((((b6 || b7) || b8) || b9) =
+    (b10 || b11)))
+
+/-- [ceres_core::interrupts::check::net_step]: loop body 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 131:4-136:5 -/
+@[rust_loop_body]
+def interrupts.check.net_step_loop.body
+  (stat : Array Bool 8#usize) (rises : Array Std.U8 8#usize) (i : Std.Usize) :
+  Result (ControlFlow ((Array Std.U8 8#usize) × Std.Usize) (Array Std.U8
+    8#usize))
+  := do
+  if i < 8#usize
+  then
+    let b ← Array.index_usize stat i
+    let rises1 ←
+      if b
+      then
+        do
+        let i1 ← Array.index_usize rises i
+        let i2 ← lift (i1 ||| interrupts.INT_LCD_B)
+        Array.update rises i i2
+      else ok rises
+    let i1 ← i + 1#usize
+    ok (cont (rises1, i1))
+  else ok (done rises)
+
+/-- [ceres_core::interrupts::check::net_step]: loop 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 131:4-136:5 -/
+@[rust_loop]
+def interrupts.check.net_step_loop
+  (stat : Array Bool 8#usize) (rises : Array Std.U8 8#usize) (i : Std.Usize) :
+  Result (Array Std.U8 8#usize)
+  := do
+  loop
+    (fun (rises1, i1) => interrupts.check.net_step_loop.body stat rises1 i1)
+    (rises, i)
+
 /-- [ceres_core::interrupts::check::net_step]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 93:0-104:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 119:0-138:1 -/
 def interrupts.check.net_step
   (net : ceres_netlist.interrupts.NetIf)
   (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  (timer : Bool) :
+  (timer : Bool) (stat : Array Bool 8#usize) :
   Result (((Option Std.U8) × (Option Std.U8)) ×
     ceres_netlist.interrupts.NetIf)
   := do
@@ -1686,7 +2039,8 @@ def interrupts.check.net_step
       let i1 ← lift (i ||| ceres_netlist.interrupts.TIMER)
       Array.update rises ceres_netlist.interrupts.A i1
     else ok rises
-  ceres_netlist.interrupts.NetIf.m_cycle net access rises1
+  let rises2 ← interrupts.check.net_step_loop stat rises1 0#usize
+  ceres_netlist.interrupts.NetIf.m_cycle net access rises2
 
 /-- [ceres_core::timing::check::same_interrupt]:
     Source: 'ceres-core/src/timing/check.rs', lines 157:0-162:1 -/
@@ -1697,26 +2051,28 @@ def timing.check.same_interrupt
   | some t => ok (net && (t = 2#u8))
 
 /-- [ceres_core::interrupts::check::step_agrees]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 135:0-169:1 -/
+    Source: 'ceres-core/src/interrupts/check.rs', lines 172:0-215:1 -/
 def interrupts.check.step_agrees
   (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts)
   (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  (net_timer : Bool) (ceres_timer : Option Std.U8) :
+  (net_timer : Bool) (ceres_timer : Option Std.U8)
+  (net_stat : Array Bool 8#usize) (ceres_stat : Array Bool 4#usize) :
   Result Bool
   := do
   let b ← interrupts.check.related net ints
   let b1 ← timing.check.same_interrupt net_timer ceres_timer
-  if (¬ b) || (¬ b1)
+  let b2 ← interrupts.check.same_stat net_stat ceres_stat
+  if ((¬ b) || (¬ b1)) || (¬ b2)
   then ok true
   else
     let ((net_read, net_taken), net1) ←
-      interrupts.check.net_step net access rises net_timer
+      interrupts.check.net_step net access rises net_timer net_stat
     let ((ceres_read, ceres_taken), ints1) ←
-      interrupts.check.ceres_step ints access rises ceres_timer
-    let b2 ← timing.check.same_read net_read ceres_read
-    let b3 ← timing.check.same_read net_taken ceres_taken
-    let b4 ← interrupts.check.related net1 ints1
-    ok ((b2 && b3) && b4)
+      interrupts.check.ceres_step ints access rises ceres_timer ceres_stat
+    let b3 ← timing.check.same_read net_read ceres_read
+    let b4 ← timing.check.same_read net_taken ceres_taken
+    let b5 ← interrupts.check.related net1 ints1
+    ok ((b3 && b4) && b5)
 
 /-- [ceres_core::memory::dma::check::net_m_cycle]:
     Source: 'ceres-core/src/memory/dma/check.rs', lines 56:0-79:1 -/
@@ -2150,6 +2506,1108 @@ def memory.dma.check.step_agrees
     ok ((((((b1 && b2) && (out.runs_after_access = run_before)) && (out.runs =
       run_after)) && (out.blocks_oam = run_after)) && (¬ out.twice)) && b3)
   else ok true
+
+/-- [ceres_core::ppu::display::LINE_LENGTH]
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 53:0-53:40 -/
+@[global_simps, irreducible] def ppu.display.LINE_LENGTH : Std.I32 := 456#i32
+
+/-- [ceres_core::ppu::PX_HEIGHT]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 21:0-21:30
+    Visibility: public -/
+@[global_simps, irreducible] def ppu.PX_HEIGHT : Std.U8 := 144#u8
+
+/-- [ceres_core::ppu::display::LINES]
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 55:0-55:39 -/
+@[global_simps, irreducible] def ppu.display.LINES : Std.U8 := ppu.PX_HEIGHT
+
+/-- [ceres_core::ppu::display::LAST_LINE]
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 57:0-57:37 -/
+@[global_simps, irreducible] def ppu.display.LAST_LINE : Std.U8 := 153#u8
+
+/-- [ceres_core::ppu::STAT_LYC_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 54:0-54:38 -/
+@[global_simps, irreducible] def ppu.STAT_LYC_B : Std.U8 := 4#u8
+
+/-- [ceres_core::ppu::STAT_IF_LYC_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 58:0-58:42 -/
+@[global_simps, irreducible] def ppu.STAT_IF_LYC_B : Std.U8 := 64#u8
+
+/-- [ceres_core::ppu::STAT_IF_OAM_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 57:0-57:42 -/
+@[global_simps, irreducible] def ppu.STAT_IF_OAM_B : Std.U8 := 32#u8
+
+/-- [ceres_core::ppu::STAT_IF_VBLANK_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 56:0-56:45 -/
+@[global_simps, irreducible] def ppu.STAT_IF_VBLANK_B : Std.U8 := 16#u8
+
+/-- [ceres_core::ppu::STAT_IF_HBLANK_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 55:0-55:44 -/
+@[global_simps, irreducible] def ppu.STAT_IF_HBLANK_B : Std.U8 := 8#u8
+
+/-- [ceres_core::ppu::display::timing::STAT_ENABLES]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 92:0-92:93 -/
+@[global_simps, irreducible]
+def ppu.display.timing.STAT_ENABLES : Std.U8 :=
+  let i := ppu.STAT_IF_HBLANK_B ||| ppu.STAT_IF_VBLANK_B
+  let i1 := i ||| ppu.STAT_IF_OAM_B
+  i1 ||| ppu.STAT_IF_LYC_B
+
+/-- [ceres_core::ppu::display::timing::check::STAT_OWN]
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 53:0-53:47 -/
+@[global_simps, irreducible]
+def ppu.display.timing.check.STAT_OWN : Std.U8 :=
+  ppu.display.timing.STAT_ENABLES ||| ppu.STAT_LYC_B
+
+/-- [ceres_core::ppu::display::timing::LINE_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 44:0-44:36 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LINE_H : Result Std.I32 :=
+  2#i32 * ppu.display.LINE_LENGTH
+
+/-- [ceres_core::ppu::display::timing::LINE_END_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 77:0-77:46 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LINE_END_H : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_H
+  i - 8#i32
+
+/-- [ceres_core::ppu::display::timing::check::ly_at]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 57:0-65:1 -/
+def ppu.display.timing.check.ly_at
+  (line : Std.U8) (h : Std.I32) : Result Std.U8 := do
+  let i ← ppu.display.timing.LINE_END_H
+  if h >= i
+  then if line = ppu.display.LAST_LINE
+       then ok 0#u8
+       else line + 1#u8
+  else
+    if (line = ppu.display.LAST_LINE) && (h >= 4#i32)
+    then ok 0#u8
+    else ok line
+
+/-- [ceres_core::ppu::display::timing::LAST_VISIBLE_LINE]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 89:0-89:40 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LAST_VISIBLE_LINE : Result Std.U8 :=
+  ppu.display.LINES - 1#u8
+
+/-- [ceres_core::ppu::display::timing::VBLANK_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 81:0-81:48 -/
+@[global_simps, irreducible]
+def ppu.display.timing.VBLANK_H : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_END_H
+  i + 4#i32
+
+/-- [ceres_core::ppu::display::timing::check::vblank_at]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 68:0-74:1 -/
+def ppu.display.timing.check.vblank_at
+  (line : Std.U8) (h : Std.I32) : Result Bool := do
+  match line with
+  | 143#uscalar => let i ← ppu.display.timing.VBLANK_H
+                   ok (h >= i)
+  | 153#uscalar => let i ← ppu.display.timing.VBLANK_H
+                   ok (h < i)
+  | _ => let i ← ppu.display.timing.LAST_VISIBLE_LINE
+         ok (line > i)
+
+/-- [ceres_core::ppu::display::timing::LINE_RESET_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 79:0-79:52 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LINE_RESET_H : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_END_H
+  i + 2#i32
+
+/-- [ceres_core::ppu::display::timing::DMG_PHASES]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 120:0-129:2 -/
+@[global_simps, irreducible]
+def ppu.display.timing.DMG_PHASES : Result ppu.display.timing.Phases := do
+  let i ← ppu.display.timing.LINE_RESET_H
+  let i1 ← i + 4#i32
+  let i2 ← 2#i32 * 77#i32
+  let i3 ← i2 + 4#i32
+  let i4 ← ppu.display.timing.LINE_H
+  let i5 ← ppu.display.timing.VBLANK_H
+  ok
+    {
+      cgb := false,
+      hblank_clear := i,
+      line153_ly_reset := 4#i32,
+      scan_start := i1,
+      scan_end := i3,
+      mode1_start := i4,
+      mode1_end := i5,
+      flag_holds := false
+    }
+
+/-- [ceres_core::ppu::display::timing::check::dmg_phases]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 77:0-87:1 -/
+def ppu.display.timing.check.dmg_phases
+  (p : ppu.display.timing.Phases) : Result Bool := do
+  let d ← ppu.display.timing.DMG_PHASES
+  ok ((((((((p.cgb = d.cgb) && (p.hblank_clear = d.hblank_clear)) &&
+    (p.line153_ly_reset = d.line153_ly_reset)) && (p.scan_start =
+    d.scan_start)) && (p.scan_end = d.scan_end)) && (p.mode1_start =
+    d.mode1_start)) && (p.mode1_end = d.mode1_end)) && (p.flag_holds =
+    d.flag_holds))
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::line_for]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 232:4-237:5 -/
+def ppu.display.timing.LcdTiming.line_for
+  (self : ppu.display.timing.LcdTiming) (enables : Std.U8) : Result Bool := do
+  let i ← lift (enables &&& ppu.STAT_IF_LYC_B)
+  if i != 0#u8
+  then
+    if self.ly_match
+    then ok true
+    else
+      let i1 ← lift (enables &&& ppu.STAT_IF_OAM_B)
+      if i1 != 0#u8
+      then
+        if self.line_end
+        then
+          if self.vblank
+          then
+            let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+            if i2 != 0#u8
+            then
+              if self.vblank
+              then ok true
+              else
+                let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+                if i3 != 0#u8
+                then if self.hblank
+                     then ok (¬ self.vblank)
+                     else ok false
+                else ok false
+            else
+              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+              if i3 != 0#u8
+              then if self.hblank
+                   then ok (¬ self.vblank)
+                   else ok false
+              else ok false
+          else ok true
+        else
+          let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+          if i2 != 0#u8
+          then
+            if self.vblank
+            then ok true
+            else
+              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+              if i3 != 0#u8
+              then if self.hblank
+                   then ok (¬ self.vblank)
+                   else ok false
+              else ok false
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+      else
+        let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+        if i2 != 0#u8
+        then
+          if self.vblank
+          then ok true
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+        else
+          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+          if i3 != 0#u8
+          then if self.hblank
+               then ok (¬ self.vblank)
+               else ok false
+          else ok false
+  else
+    let i1 ← lift (enables &&& ppu.STAT_IF_OAM_B)
+    if i1 != 0#u8
+    then
+      if self.line_end
+      then
+        if self.vblank
+        then
+          let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+          if i2 != 0#u8
+          then
+            if self.vblank
+            then ok true
+            else
+              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+              if i3 != 0#u8
+              then if self.hblank
+                   then ok (¬ self.vblank)
+                   else ok false
+              else ok false
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+        else ok true
+      else
+        let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+        if i2 != 0#u8
+        then
+          if self.vblank
+          then ok true
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+        else
+          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+          if i3 != 0#u8
+          then if self.hblank
+               then ok (¬ self.vblank)
+               else ok false
+          else ok false
+    else
+      let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+      if i2 != 0#u8
+      then
+        if self.vblank
+        then ok true
+        else
+          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+          if i3 != 0#u8
+          then if self.hblank
+               then ok (¬ self.vblank)
+               else ok false
+          else ok false
+      else
+        let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+        if i3 != 0#u8
+        then if self.hblank
+             then ok (¬ self.vblank)
+             else ok false
+        else ok false
+
+/-- [ceres_core::ppu::display::timing::check::related_at]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 100:0-145:1 -/
+def ppu.display.timing.check.related_at
+  (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming)
+  (line : Std.U8) (h : Std.I32) :
+  Result Bool
+  := do
+  let i ← ppu.display.timing.LINE_H
+  if (((((t.line <= ppu.display.LAST_LINE) && (t.h >= 0#i32)) && (t.h < i)) &&
+    (line <= ppu.display.LAST_LINE)) && (h >= 0#i32)) && (h < i)
+  then
+    let b ← ppu.display.timing.check.dmg_phases t.phases
+    let i1 ← lift (~~~ ppu.STAT_IF_HBLANK_B)
+    let i2 ← lift (ppu.display.timing.STAT_ENABLES &&& i1)
+    let i3 ← lift (~~~ i2)
+    let i4 ← lift (t.enables &&& i3)
+    let b1 := core.option.Option.is_none t.lyc_pending
+    let b2 := core.option.Option.is_none t.stat_pending
+    let i5 ← ppu.display.timing.check.ly_at t.line t.h
+    let i6 ← ppu.display.timing.LINE_END_H
+    let b3 ← ppu.display.timing.check.vblank_at t.line t.h
+    let b4 ← ppu.display.timing.LcdTiming.line_for t t.enables
+    let lx ←
+      if (h >= 4#i32) && (h < i6)
+      then
+        do
+        let i7 ← h - 4#i32
+        let i8 ← i7 / 8#i32
+        let i9 ← i8 + 1#i32
+        ok (IScalar.hcast .U8 i9)
+      else ok 0#u8
+    let i7 ← lift (h &&& 1#i32)
+    let i8 ← lift (h &&& 2#i32)
+    let i9 ← lift (h &&& 7#i32)
+    let i10 ← h + 1#i32
+    let i11 ← lift (i10 &&& 2#i32)
+    let i12 ← ppu.display.timing.VBLANK_H
+    ok ((((((((((((b && (i4 = 0#u8)) && (¬ t.hblank_pending)) && t.on) && (¬
+      t.dirty)) && b1) && b2) && (t.ly = i5)) && (t.line_end = (t.h >= i6))) &&
+      (t.vblank = b3)) && (t.stat_line = b4)) && ((((((((net.clk = (i7 !=
+      0#i32)) && (net.wuvu = (i8 != 0#i32))) && (net.vena = (i9 >= 4#i32))) &&
+      (net.wosu = (i11 != 0#i32))) && (net.lx = lx)) && (net.vclk = (h >= i6)))
+      && (net.nype = ((h >= i12) || (h < 4#i32)))) && (net.line_153 = (((line =
+      ppu.display.LAST_LINE) && (h >= 4#i32)) || ((line = 0#u8) && (h <
+      4#i32)))))) && (((((net.ly = t.ly) && (net.mode1 = t.vblank)) && (
+      net.lyc = t.lyc)) && (net.lyc_match = t.ly_match)) && (net.stat_enable =
+      t.enables)))
+  else ok false
+
+/-- [ceres_core::ppu::display::timing::check::related]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 153:0-155:1 -/
+def ppu.display.timing.check.related
+  (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming) :
+  Result Bool
+  := do
+  let i ← lift (t.h &&& 7#i32)
+  let b ← ppu.display.timing.check.related_at net t t.line t.h
+  ok (((i = 0#i32) && (¬ t.hblank)) && b)
+
+/-- [ceres_core::ppu::display::timing::check::outside]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 159:0-168:1 -/
+def ppu.display.timing.check.outside
+  (access : ppu.display.timing.check.Access) : Result Bool := do
+  match access with
+  | ppu.display.timing.check.Access.None => ok false
+  | ppu.display.timing.check.Access.ReadStat => ok false
+  | ppu.display.timing.check.Access.ReadLy => ok false
+  | ppu.display.timing.check.Access.ReadLyc => ok false
+  | ppu.display.timing.check.Access.WriteStat data =>
+    let i ← lift (data &&& ppu.STAT_IF_HBLANK_B)
+    ok (i != 0#u8)
+  | ppu.display.timing.check.Access.WriteLyc _ => ok false
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_lyc]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 622:4-632:5 -/
+def ppu.display.timing.LcdTiming.write_lyc
+  (self : ppu.display.timing.LcdTiming) (val : Std.U8)
+  (delays : ppu.display.timing.Delays) :
+  Result ppu.display.timing.LcdTiming
+  := do
+  if self.on
+  then
+    ok
+      {
+        self
+          with
+          lyc_pending :=
+            (some { value := val, half_dots_left := delays.lyc_write })
+      }
+  else ok { self with lyc := val, lyc_pending := none }
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::update_line]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 240:4-245:5 -/
+def ppu.display.timing.LcdTiming.update_line
+  (self : ppu.display.timing.LcdTiming) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  let line ← ppu.display.timing.LcdTiming.line_for self self.enables
+  if line
+  then ok (¬ self.stat_line, { self with stat_line := line })
+  else ok (false, { self with stat_line := line })
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_stat]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 598:4-617:5 -/
+def ppu.display.timing.LcdTiming.write_stat
+  (self : ppu.display.timing.LcdTiming) (val : Std.U8)
+  (delays : ppu.display.timing.Delays) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  let enables ← lift (val &&& ppu.display.timing.STAT_ENABLES)
+  let (o, o1) := core.option.Option.take self.stat_pending
+  let (i, b) ←
+    match o with
+    | none => ok (self.enables, self.dirty)
+    | some write => ok (write.value, true)
+  if self.on
+  then
+    if delays.stat_write > 0#u8
+    then
+      ok (false,
+        {
+          self
+            with
+            enables := i,
+            stat_pending :=
+              (some { value := enables, half_dots_left := delays.stat_write }),
+            dirty := b
+        })
+    else
+      let glitch ←
+        if self.phases.cgb
+        then ok false
+        else
+          do
+          let b1 ←
+            ppu.display.timing.LcdTiming.line_for
+              { self with enables := i, stat_pending := o1, dirty := b }
+              ppu.display.timing.STAT_ENABLES
+          if b1
+          then ok (¬ self.stat_line)
+          else ok false
+      let (b1, self1) ←
+        ppu.display.timing.LcdTiming.update_line
+          {
+            self
+              with
+              enables,
+              stat_line := (self.stat_line || glitch),
+              stat_pending := o1,
+              dirty := b
+          }
+      if b1
+      then ok (true, self1)
+      else ok (glitch, self1)
+  else
+    let glitch ←
+      if self.phases.cgb
+      then ok false
+      else
+        do
+        let b1 ←
+          ppu.display.timing.LcdTiming.line_for
+            { self with enables := i, stat_pending := o1, dirty := b }
+            ppu.display.timing.STAT_ENABLES
+        if b1
+        then ok (¬ self.stat_line)
+        else ok false
+    let (b1, self1) ←
+      ppu.display.timing.LcdTiming.update_line
+        {
+          self
+            with
+            enables,
+            stat_line := (self.stat_line || glitch),
+            stat_pending := o1,
+            dirty := b
+        }
+    if b1
+    then ok (true, self1)
+    else ok (glitch, self1)
+
+/-- [ceres_core::ppu::STAT_MODE_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 53:0-53:39 -/
+@[global_simps, irreducible] def ppu.STAT_MODE_B : Std.U8 := 3#u8
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_mode]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 392:4-410:5 -/
+def ppu.display.timing.LcdTiming.read_mode
+  (self : ppu.display.timing.LcdTiming) (pipeline : Std.U8) :
+  Result Std.U8
+  := do
+  let i ← ppu.display.timing.LAST_VISIBLE_LINE
+  let i1 ← ppu.display.timing.VBLANK_H
+  if (self.vblank && ((self.line >= ppu.display.LINES) || (self.h >=
+    self.phases.mode1_start))) || (((self.line = ppu.display.LAST_LINE) &&
+    (self.h >= i1)) && (self.h < self.phases.mode1_end))
+  then ok 1#u8
+  else
+    if ((self.h >= self.phases.scan_start) && ((self.line < i) || (self.line =
+      ppu.display.LAST_LINE))) || (((self.h < self.phases.scan_end) &&
+      (self.line < ppu.display.LINES)) && (¬ self.first_line))
+    then ok 2#u8
+    else
+      if (self.line < ppu.display.LINES) && (¬ ((self.line = i) && (
+        self.h >= self.phases.scan_start)))
+      then if pipeline != 0#u8
+           then ok 3#u8
+           else ok 0#u8
+      else ok 0#u8
+
+/-- [ceres_core::ppu::display::timing::LY_MATCH_PHASE]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 83:0-83:30 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LY_MATCH_PHASE : Std.I32 := 4#i32
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::PendingWrite}::ticked]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 56:4-65:5 -/
+def ppu.display.timing.PendingWrite.ticked
+  (self : ppu.display.timing.PendingWrite) :
+  Result ppu.display.timing.PendingWrite
+  := do
+  if self.half_dots_left > 1#u8
+  then
+    let i ← self.half_dots_left - 1#u8
+    ok { self with half_dots_left := i }
+  else ok { self with half_dots_left := 1#u8 }
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::unit]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 248:4-346:5 -/
+def ppu.display.timing.LcdTiming.unit
+  (self : ppu.display.timing.LcdTiming) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  let i ← self.h + 1#i32
+  let i1 ← ppu.display.timing.LINE_H
+  let (b, i2, i3) ←
+    if i = i1
+    then
+      do
+      let i4 ←
+        if self.line = ppu.display.LAST_LINE
+        then ok 0#u8
+        else self.line + 1#u8
+      ok (false, i4, 0#i32)
+    else ok (self.first_line, self.line, i)
+  if self.on
+  then
+    let (b1, b2, changed) ←
+      if self.hblank_pending
+      then ok (true, false, true)
+      else ok (self.hblank, self.hblank_pending, self.dirty)
+    let (i4, b3, changed1) ←
+      match i3 with
+      | 0#iscalar => ok (self.ly, false, true)
+      | 904#iscalar =>
+        do
+        let i5 ← if i2 = ppu.display.LAST_LINE
+                   then ok 0#u8
+                   else i2 + 1#u8
+        ok (i5, true, true)
+      | _ => ok (self.ly, self.line_end, changed)
+    let (b4, changed2) ←
+      if i3 = self.phases.hblank_clear
+      then
+        do
+        let i5 ← ppu.display.timing.LAST_VISIBLE_LINE
+        if i2 != i5
+        then if b1
+             then ok (false, true)
+             else ok (b1, changed1)
+        else ok (b1, changed1)
+      else ok (b1, changed1)
+    let i5 ← lift (i3 &&& 7#i32)
+    let (self1, rose) ←
+      match self.lyc_pending with
+      | none =>
+        ok
+          ({
+             self
+               with
+               first_line := b,
+               line := i2,
+               h := i3,
+               ly := i4,
+               line_end := b3,
+               hblank := b4,
+               hblank_pending := b2,
+               dirty := false
+           }, false)
+      | some write =>
+        if write.half_dots_left <= 1#u8
+        then
+          if i5 = ppu.display.timing.LY_MATCH_PHASE
+          then
+            do
+            let (b5, self2) ←
+              ppu.display.timing.LcdTiming.update_line
+                {
+                  self
+                    with
+                    first_line := b,
+                    line := i2,
+                    h := i3,
+                    ly := i4,
+                    line_end := b3,
+                    hblank := b4,
+                    hblank_pending := b2,
+                    ly_match := (i4 = write.value),
+                    lyc := write.value,
+                    lyc_pending := none,
+                    dirty := false
+                }
+            ok (self2, false || b5)
+          else
+            if self.phases.cgb
+            then
+              do
+              let pw ← ppu.display.timing.PendingWrite.ticked write
+              ok
+                ({
+                   self
+                     with
+                     first_line := b,
+                     line := i2,
+                     h := i3,
+                     ly := i4,
+                     line_end := b3,
+                     hblank := b4,
+                     hblank_pending := b2,
+                     lyc_pending := (some pw),
+                     dirty := false
+                 }, false)
+            else
+              do
+              let (b5, self2) ←
+                ppu.display.timing.LcdTiming.update_line
+                  {
+                    self
+                      with
+                      first_line := b,
+                      line := i2,
+                      h := i3,
+                      ly := i4,
+                      line_end := b3,
+                      hblank := b4,
+                      hblank_pending := b2,
+                      ly_match := (i4 = write.value),
+                      lyc := write.value,
+                      lyc_pending := none,
+                      dirty := false
+                  }
+              ok (self2, false || b5)
+        else
+          do
+          let pw ← ppu.display.timing.PendingWrite.ticked write
+          ok
+            ({
+               self
+                 with
+                 first_line := b,
+                 line := i2,
+                 h := i3,
+                 ly := i4,
+                 line_end := b3,
+                 hblank := b4,
+                 hblank_pending := b2,
+                 lyc_pending := (some pw),
+                 dirty := false
+             }, false)
+    let (self2, changed3) ←
+      if i5 = ppu.display.timing.LY_MATCH_PHASE
+      then
+        do
+        let (b5, b6) ←
+          if self1.ly_match != (self1.ly = self1.lyc)
+          then ok (¬ self1.ly_match, true)
+          else ok (self1.ly_match, changed2)
+        ok ({ self1 with ly_match := b5 }, b6)
+      else ok (self1, changed2)
+    let i6 ←
+      if self2.h = self2.phases.line153_ly_reset
+      then if self2.line = ppu.display.LAST_LINE
+           then ok 0#u8
+           else ok self2.ly
+      else ok self2.ly
+    let (self3, rose1) ←
+      if changed3
+      then
+        do
+        let (b5, self4) ←
+          ppu.display.timing.LcdTiming.update_line { self2 with ly := i6 }
+        ok (self4, rose || b5)
+      else ok ({ self2 with ly := i6 }, rose)
+    let (i7, o, changed4) ←
+      match self3.stat_pending with
+      | none => ok (self3.enables, none, false)
+      | some write =>
+        if write.half_dots_left <= 1#u8
+        then ok (write.value, none, true)
+        else
+          do
+          let pw ← ppu.display.timing.PendingWrite.ticked write
+          ok (self3.enables, some pw, false)
+    let i8 ← ppu.display.timing.VBLANK_H
+    let (b5, changed5) ←
+      if self3.h = i8
+      then
+        match self3.line with
+        | 143#uscalar => ok (true, true)
+        | 153#uscalar => ok (false, true)
+        | _ => ok (self3.vblank, changed4)
+      else ok (self3.vblank, changed4)
+    if changed5
+    then
+      let (b6, self4) ←
+        ppu.display.timing.LcdTiming.update_line
+          { self3 with vblank := b5, enables := i7, stat_pending := o }
+      ok (rose1 || b6, self4)
+    else
+      ok (rose1, { self3 with vblank := b5, enables := i7, stat_pending := o })
+  else ok (false, { self with first_line := b, line := i2, h := i3 })
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 579:8-590:9 -/
+@[rust_loop_body]
+def ppu.display.timing.LcdTiming.read_stat_loop.body
+  (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
+  (last2 : Std.U8) (t : ppu.display.timing.LcdTiming) (lyc_flag : Bool)
+  (mode : Std.U8) (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × Std.U8 ×
+    Std.U8) (Bool × Std.U8))
+  := do
+  if k <= last2
+  then
+    let t1 ←
+      if k > 0#u8
+      then do
+           let (_, t2) ← ppu.display.timing.LcdTiming.unit t
+           ok t2
+      else ok t
+    let (t2, lyc_flag1) ←
+      if k = last
+      then
+        do
+        let b ←
+          if t1.ly_match
+          then if holds
+               then ok true
+               else ok (t1.ly = t1.lyc)
+          else ok false
+        ok (t1, b)
+      else ok (t1, lyc_flag)
+    let mode1 ←
+      if k = last1
+      then
+        do
+        let i ← lift (stat &&& ppu.STAT_MODE_B)
+        ppu.display.timing.LcdTiming.read_mode t2 i
+      else ok mode
+    let k1 ← k + 1#u8
+    ok (cont (t2, lyc_flag1, mode1, k1))
+  else ok (done (lyc_flag, mode))
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 579:8-590:9 -/
+@[rust_loop]
+def ppu.display.timing.LcdTiming.read_stat_loop
+  (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
+  (t : ppu.display.timing.LcdTiming) (lyc_flag : Bool) (mode : Std.U8)
+  (last2 : Std.U8) (k : Std.U8) :
+  Result (Bool × Std.U8)
+  := do
+  loop
+    (fun (t1, lyc_flag1, mode1, k1) =>
+      ppu.display.timing.LcdTiming.read_stat_loop.body stat last last1 holds
+      last2 t1 lyc_flag1 mode1 k1)
+    (t, lyc_flag, mode, k)
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 562:4-592:5 -/
+def ppu.display.timing.LcdTiming.read_stat
+  (self : ppu.display.timing.LcdTiming) (stat : Std.U8)
+  (delays : ppu.display.timing.Delays) (double_speed : Bool) :
+  Result Std.U8
+  := do
+  let i ← lift (ppu.STAT_MODE_B ||| ppu.STAT_LYC_B)
+  let i1 ← lift (~~~ i)
+  let enables ← lift (stat &&& i1)
+  if self.on
+  then
+    let holds ←
+      if self.phases.cgb
+      then if double_speed
+           then ok true
+           else ok self.phases.flag_holds
+      else ok false
+    let last ←
+      if delays.flag_read > delays.mode_read
+      then ok delays.flag_read
+      else ok delays.mode_read
+    let (lyc_flag, mode) ←
+      ppu.display.timing.LcdTiming.read_stat_loop stat delays.flag_read
+        delays.mode_read holds self false 0#u8 last 0#u8
+    let i2 ← lift (enables ||| mode)
+    let i3 ← if lyc_flag
+               then ok ppu.STAT_LYC_B
+               else ok 0#u8
+    ok (i2 ||| i3)
+  else
+    let i2 ← if self.ly_match
+               then ok ppu.STAT_LYC_B
+               else ok 0#u8
+    ok (enables ||| i2)
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 545:8-549:9 -/
+@[rust_loop_body]
+def ppu.display.timing.LcdTiming.read_ly_loop.body
+  (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
+  (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × Std.U8 × Std.U8)
+    (ppu.display.timing.LcdTiming × Std.U8))
+  := do
+  if k < delay
+  then
+    let (_, t1) ← ppu.display.timing.LcdTiming.unit t
+    let k1 ← k + 1#u8
+    ok (cont (t1, t.ly, k1))
+  else ok (done (t, before))
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 545:8-549:9 -/
+@[rust_loop]
+def ppu.display.timing.LcdTiming.read_ly_loop
+  (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
+  (k : Std.U8) :
+  Result (ppu.display.timing.LcdTiming × Std.U8)
+  := do
+  loop
+    (fun (t1, before1, k1) => ppu.display.timing.LcdTiming.read_ly_loop.body
+      delay t1 before1 k1)
+    (t, before, k)
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 539:4-556:5 -/
+def ppu.display.timing.LcdTiming.read_ly
+  (self : ppu.display.timing.LcdTiming) (delays : ppu.display.timing.Delays) :
+  Result Std.U8
+  := do
+  let (t, before) ←
+    ppu.display.timing.LcdTiming.read_ly_loop delays.ly_read self self.ly 0#u8
+  if self.phases.cgb
+  then
+    if delays.ly_read > 0#u8
+    then if before != t.ly
+         then ok (before &&& t.ly)
+         else ok t.ly
+    else ok t.ly
+  else ok t.ly
+
+/-- [ceres_core::ppu::display::timing::DMG_DELAYS]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 362:0-368:2 -/
+@[global_simps, irreducible]
+def ppu.display.timing.DMG_DELAYS : ppu.display.timing.Delays :=
+  {
+    stat_write := 0#u8,
+    lyc_write := 3#u8,
+    ly_read := 4#u8,
+    flag_read := 3#u8,
+    mode_read := 4#u8
+  }
+
+/-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 191:4-196:5 -/
+@[rust_loop_body]
+def ppu.display.timing.check.ceres_m_cycle_loop.body
+  (t : ppu.display.timing.LcdTiming) (rose : Array Bool 4#usize)
+  (k : Std.Usize) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × (Array Bool 4#usize) ×
+    Std.Usize) (ppu.display.timing.LcdTiming × (Array Bool 4#usize)))
+  := do
+  if k < 4#usize
+  then
+    let (first, t1) ← ppu.display.timing.LcdTiming.unit t
+    let (second, t2) ← ppu.display.timing.LcdTiming.unit t1
+    let a ← Array.update rose k (first || second)
+    let k1 ← k + 1#usize
+    ok (cont (t2, a, k1))
+  else ok (done (t, rose))
+
+/-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 191:4-196:5 -/
+@[rust_loop]
+def ppu.display.timing.check.ceres_m_cycle_loop
+  (t : ppu.display.timing.LcdTiming) (rose : Array Bool 4#usize)
+  (k : Std.Usize) :
+  Result (ppu.display.timing.LcdTiming × (Array Bool 4#usize))
+  := do
+  loop
+    (fun (t1, rose1, k1) => ppu.display.timing.check.ceres_m_cycle_loop.body t1
+      rose1 k1)
+    (t, rose, k)
+
+/-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 173:0-199:1 -/
+def ppu.display.timing.check.ceres_m_cycle
+  (t : ppu.display.timing.LcdTiming) (access : ppu.display.timing.check.Access)
+  :
+  Result (((Option Std.U8) × (Array Bool 4#usize)) ×
+    ppu.display.timing.LcdTiming)
+  := do
+  let (t1, at_access, read) ←
+    match access with
+    | ppu.display.timing.check.Access.None => ok (t, false, none)
+    | ppu.display.timing.check.Access.ReadStat =>
+      do
+      let i ←
+        ppu.display.timing.LcdTiming.read_stat t t.enables
+          ppu.display.timing.DMG_DELAYS false
+      let i1 ← lift (i &&& ppu.display.timing.check.STAT_OWN)
+      ok (t, false, some i1)
+    | ppu.display.timing.check.Access.ReadLy =>
+      do
+      let i ←
+        ppu.display.timing.LcdTiming.read_ly t ppu.display.timing.DMG_DELAYS
+      ok (t, false, some i)
+    | ppu.display.timing.check.Access.ReadLyc => ok (t, false, some t.lyc)
+    | ppu.display.timing.check.Access.WriteStat data =>
+      do
+      let (at_access1, t2) ←
+        ppu.display.timing.LcdTiming.write_stat t data
+          ppu.display.timing.DMG_DELAYS
+      ok (t2, at_access1, none)
+    | ppu.display.timing.check.Access.WriteLyc data =>
+      do
+      let t2 ←
+        ppu.display.timing.LcdTiming.write_lyc t data
+          ppu.display.timing.DMG_DELAYS
+      ok (t2, false, none)
+  let rose := Array.repeat 4#usize false
+  let (t2, rose1) ←
+    ppu.display.timing.check.ceres_m_cycle_loop t1 rose 0#usize
+  let b ← Array.index_usize rose1 0#usize
+  let rose2 ← Array.update rose1 0#usize (b || at_access)
+  ok ((read, rose2), t2)
+
+/-- [ceres_core::ppu::display::timing::check::net_write]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 202:0-210:1 -/
+def ppu.display.timing.check.net_write
+  (net : ceres_netlist.lcd_timing.NetLcd)
+  (access : ppu.display.timing.check.Access) (byte : Std.U8) :
+  Result (Bool × ceres_netlist.lcd_timing.NetLcd)
+  := do
+  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net false
+  let net1 ←
+    match access with
+    | ppu.display.timing.check.Access.None => ok net
+    | ppu.display.timing.check.Access.ReadStat => ok net
+    | ppu.display.timing.check.Access.ReadLy => ok net
+    | ppu.display.timing.check.Access.ReadLyc => ok net
+    | ppu.display.timing.check.Access.WriteStat _ =>
+      ceres_netlist.lcd_timing.NetLcd.write net 65345#u16 byte
+    | ppu.display.timing.check.Access.WriteLyc _ =>
+      ceres_netlist.lcd_timing.NetLcd.write net 65349#u16 byte
+  let b ← ceres_netlist.lcd_timing.NetLcd.int_stat net1 false
+  ok (b && (¬ level), net1)
+
+/-- [ceres_core::ppu::display::timing::check::net_shown]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 213:0-223:1 -/
+def ppu.display.timing.check.net_shown
+  (net : ceres_netlist.lcd_timing.NetLcd)
+  (access : ppu.display.timing.check.Access) :
+  Result (Option Std.U8)
+  := do
+  match access with
+  | ppu.display.timing.check.Access.None => ok none
+  | ppu.display.timing.check.Access.ReadStat =>
+    let o ← ceres_netlist.lcd_timing.NetLcd.read net 65345#u16 false false
+    match o with
+    | none => ok none
+    | some b =>
+      let i ← lift (b &&& ppu.display.timing.check.STAT_OWN)
+      ok (some i)
+  | ppu.display.timing.check.Access.ReadLy =>
+    ceres_netlist.lcd_timing.NetLcd.read net 65348#u16 false false
+  | ppu.display.timing.check.Access.ReadLyc =>
+    ceres_netlist.lcd_timing.NetLcd.read net 65349#u16 false false
+  | ppu.display.timing.check.Access.WriteStat _ => ok none
+  | ppu.display.timing.check.Access.WriteLyc _ => ok none
+
+/-- [ceres_core::ppu::display::timing::check::and_bus]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 226:0-231:1 -/
+def ppu.display.timing.check.and_bus
+  (a : Option Std.U8) (b : Option Std.U8) : Result (Option Std.U8) := do
+  match a with
+  | none => ok none
+  | some x =>
+    match b with
+    | none => ok none
+    | some y => let i ← lift (x &&& y)
+                ok (some i)
+
+/-- [ceres_core::ppu::display::timing::check::net_m_cycle]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 256:4-259:5 -/
+@[rust_loop_body]
+def ppu.display.timing.check.net_m_cycle_loop.body
+  (net : ceres_netlist.lcd_timing.NetLcd) (rose : Array Bool 8#usize)
+  (k : Std.Usize) :
+  Result (ControlFlow (ceres_netlist.lcd_timing.NetLcd × (Array Bool 8#usize)
+    × Std.Usize) (ceres_netlist.lcd_timing.NetLcd × (Array Bool 8#usize)))
+  := do
+  if k < 8#usize
+  then
+    let (b, net1) ← ceres_netlist.lcd_timing.NetLcd.edge net false
+    let a ← Array.update rose k b
+    let k1 ← k + 1#usize
+    ok (cont (net1, a, k1))
+  else ok (done (net, rose))
+
+/-- [ceres_core::ppu::display::timing::check::net_m_cycle]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 256:4-259:5 -/
+@[rust_loop]
+def ppu.display.timing.check.net_m_cycle_loop
+  (net : ceres_netlist.lcd_timing.NetLcd) (rose : Array Bool 8#usize)
+  (k : Std.Usize) :
+  Result (ceres_netlist.lcd_timing.NetLcd × (Array Bool 8#usize))
+  := do
+  loop
+    (fun (net1, rose1, k1) => ppu.display.timing.check.net_m_cycle_loop.body
+      net1 rose1 k1)
+    (net, rose, k)
+
+/-- [ceres_core::ppu::display::timing::check::net_m_cycle]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 237:0-261:1 -/
+def ppu.display.timing.check.net_m_cycle
+  (net : ceres_netlist.lcd_timing.NetLcd)
+  (access : ppu.display.timing.check.Access) :
+  Result (((Option Std.U8) × (Array Bool 8#usize)) ×
+    ceres_netlist.lcd_timing.NetLcd)
+  := do
+  let rose := Array.repeat 8#usize false
+  let (b, net1) ← ceres_netlist.lcd_timing.NetLcd.edge net false
+  let (_, index_mut_back) ← Array.index_mut_usize rose 0#usize
+  let (net2, rose1) ←
+    match access with
+    | ppu.display.timing.check.Access.None =>
+      let a := index_mut_back b
+      ok (net1, a)
+    | ppu.display.timing.check.Access.ReadStat =>
+      let a := index_mut_back b
+      ok (net1, a)
+    | ppu.display.timing.check.Access.ReadLy =>
+      let a := index_mut_back b
+      ok (net1, a)
+    | ppu.display.timing.check.Access.ReadLyc =>
+      let a := index_mut_back b
+      ok (net1, a)
+    | ppu.display.timing.check.Access.WriteStat data =>
+      do
+      let (glitch, net3) ←
+        ppu.display.timing.check.net_write net1 access 255#u8
+      let (lands, net4) ← ppu.display.timing.check.net_write net3 access data
+      let rose2 := index_mut_back b
+      let b1 ← Array.index_usize rose2 0#usize
+      let a ← Array.update rose2 0#usize ((b1 || glitch) || lands)
+      ok (net4, a)
+    | ppu.display.timing.check.Access.WriteLyc data =>
+      do
+      let (glitch, net3) ←
+        ppu.display.timing.check.net_write net1 access 255#u8
+      let (lands, net4) ← ppu.display.timing.check.net_write net3 access data
+      let rose2 := index_mut_back b
+      let b1 ← Array.index_usize rose2 0#usize
+      let a ← Array.update rose2 0#usize ((b1 || glitch) || lands)
+      ok (net4, a)
+  let bus ← ppu.display.timing.check.net_shown net2 access
+  let (b1, net3) ← ceres_netlist.lcd_timing.NetLcd.edge net2 false
+  let rose2 ← Array.update rose1 1#usize b1
+  let o ← ppu.display.timing.check.net_shown net3 access
+  let bus1 ← ppu.display.timing.check.and_bus bus o
+  let (b2, net4) ← ceres_netlist.lcd_timing.NetLcd.edge net3 false
+  let rose3 ← Array.update rose2 2#usize b2
+  let o1 ← ppu.display.timing.check.net_shown net4 access
+  let bus2 ← ppu.display.timing.check.and_bus bus1 o1
+  let (b3, net5) ← ceres_netlist.lcd_timing.NetLcd.edge net4 false
+  let a ← Array.update rose3 3#usize b3
+  let o2 ← ppu.display.timing.check.net_shown net5 access
+  let bus3 ← ppu.display.timing.check.and_bus bus2 o2
+  let (net6, rose4) ←
+    ppu.display.timing.check.net_m_cycle_loop net5 a 4#usize
+  ok ((bus3, rose4), net6)
+
+/-- [ceres_core::ppu::display::timing::check::step_agrees]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 272:0-299:1 -/
+def ppu.display.timing.check.step_agrees
+  (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming)
+  (access : ppu.display.timing.check.Access) :
+  Result Bool
+  := do
+  let b ← ppu.display.timing.check.related net t
+  let b1 ← ppu.display.timing.check.outside access
+  if (¬ b) || b1
+  then ok true
+  else
+    let ((net_read, net_rose), net1) ←
+      ppu.display.timing.check.net_m_cycle net access
+    let ((ceres_read, ceres_rose), t1) ←
+      ppu.display.timing.check.ceres_m_cycle t access
+    let b2 ← timing.check.same_read net_read ceres_read
+    let b3 ← interrupts.check.same_stat net_rose ceres_rose
+    let b4 ← ppu.display.timing.check.related net1 t1
+    ok ((b2 && b3) && b4)
 
 /-- [ceres_core::timing::check::known_difference]:
     Source: 'ceres-core/src/timing/check.rs', lines 234:0-267:1 -/

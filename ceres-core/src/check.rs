@@ -17,7 +17,7 @@
 use crate::{
     interrupts::{
         Interrupts,
-        check::{ceres_boundary, ceres_step, ceres_t_cycle, requests, same_ints},
+        check::{ceres_boundary, ceres_step, ceres_t_cycle, requests, same_ints, with_stat},
     },
     timing::{
         Clock,
@@ -85,15 +85,17 @@ impl TimerHost for JointHost {
 
 /// Ceres's M-cycle of the timer and IF: the accesses at the boundary, then
 /// four T-cycles, in each of which the timer runs (and may request its
-/// interrupt in IF) and then IF takes the other requests, the write and the
-/// acknowledge. The timer's read, IF's read and the interrupt an entry
-/// takes.
+/// interrupt in IF) and then IF takes the other requests (the STAT line's,
+/// which the line timing's M-cycle gives by T-cycle, among them), the write
+/// and the acknowledge. The timer's read, IF's read and the interrupt an
+/// entry takes.
 pub(crate) fn ceres_m_cycle_joint(
     clock: &mut Clock,
     host: &mut JointHost,
     timer_access: TimerAccess,
     if_access: IfAccess,
     rises: [u8; 8],
+    stat: [bool; 4],
 ) -> (Option<u8>, Option<u8>, Option<u8>) {
     let timer_read = ceres_access(clock, host, timer_access);
     let (if_read, queue) = ceres_boundary(&host.ints, if_access);
@@ -101,7 +103,7 @@ pub(crate) fn ceres_m_cycle_joint(
         IfAccess::Entry => Some(lowest(queue)),
         IfAccess::None | IfAccess::ReadIf | IfAccess::WriteIf(_) => None,
     };
-    let other = requests(rises);
+    let other = with_stat(requests(rises), stat);
     let mut t = 0;
     while t < 4 {
         clock.run(host, 1);
@@ -129,6 +131,7 @@ pub(crate) fn in_sequence(
     serial_div_mask: u16,
     if_access: IfAccess,
     rises: [u8; 8],
+    stat: [bool; 4],
 ) -> bool {
     if !related(&net, &clock) | !same_clock(&clock, &clock_joint) | !same_ints(&ints, &ints_joint) {
         return true;
@@ -137,12 +140,18 @@ pub(crate) fn in_sequence(
     let mut host = CheckHost::new(serial_div_mask);
     let (timer_read, timer_irq, twice) = ceres_m_cycle(&mut clock, &mut host, timer_access);
     let mut ints = ints;
-    let (if_read, taken) = ceres_step(&mut ints, if_access, rises, timer_irq);
+    let (if_read, taken) = ceres_step(&mut ints, if_access, rises, timer_irq, stat);
 
     let mut clock_joint = clock_joint;
     let mut joint = JointHost::new(serial_div_mask, ints_joint);
-    let (joint_timer_read, joint_if_read, joint_taken) =
-        ceres_m_cycle_joint(&mut clock_joint, &mut joint, timer_access, if_access, rises);
+    let (joint_timer_read, joint_if_read, joint_taken) = ceres_m_cycle_joint(
+        &mut clock_joint,
+        &mut joint,
+        timer_access,
+        if_access,
+        rises,
+        stat,
+    );
     twice
         | (same_read(timer_read, joint_timer_read)
             & same_read(if_read, joint_if_read)

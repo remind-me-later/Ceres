@@ -77,8 +77,14 @@ fn netlist_timer_and_if() {
     }
     let (net_if_read, net_taken) = net_if.m_cycle(if_access, net_rises);
 
-    let (ceres_timer_read, ceres_if_read, ceres_taken) =
-        ceres_m_cycle_joint(&mut clock, &mut host, timer_access, if_access, rises);
+    let (ceres_timer_read, ceres_if_read, ceres_taken) = ceres_m_cycle_joint(
+        &mut clock,
+        &mut host,
+        timer_access,
+        if_access,
+        rises,
+        [false; 4],
+    );
 
     assert!(
         net_timer_read == ceres_timer_read,
@@ -118,6 +124,7 @@ fn ceres_timer_and_if_in_sequence() {
         timer_proof::any_access(),
         kani::any(),
         if_proof::any_access(),
+        kani::any(),
         kani::any()
     ));
 }

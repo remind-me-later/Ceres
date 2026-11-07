@@ -16,7 +16,10 @@ coinduction, and wires the timer's interrupt into IF with `agree_wire`.
 Both blocks' netlist steps are cut at the start of E, where ceres's
 M-cycle begins, and the netlist's side of the pair is the two steps one
 after the other: NetTimer and NetIf share no state but the interrupt's
-wire. Ceres runs the two T-cycle by T-cycle (`check::ceres_m_cycle_joint`);
+wire. IF also takes the STAT line's rises, by phase on the netlist and by
+T-cycle on ceres, as inputs (`SameIn` relates them as IF tells them apart),
+which the line timing's step gives when it is wired in front
+(`Ceres/Bisim/Lcd.lean`). Ceres runs the two T-cycle by T-cycle (`check::ceres_m_cycle_joint`);
 Kani proves that this is the two steps in sequence (`check::in_sequence`,
 `ceres_timer_and_if_in_sequence`), the hypothesis `KaniSeq`, so the main
 theorem, `timer_and_if_agree`, is about ceres's M-cycle as it runs it.
@@ -30,23 +33,31 @@ abbrev NetIf := ceres_netlist.interrupts.NetIf
 abbrev CeresIf := interrupts.Interrupts
 
 /-- An M-cycle's inputs on the netlist: an access to the timer, one to IF,
-one to the OAM DMA, and the other sources' rises by phase. -/
+one to the OAM DMA, the other sources' rises by phase, an access to the
+line timing, and the STAT line's rises by phase (which the line timing's
+step gives, `Ceres/Bisim/Lcd.lean`). -/
 structure NetIn where
   timer : ceres_netlist.timer.Access
   ifAccess : ceres_netlist.interrupts.Access
   dma : memory.dma.check.Access
   rises : Array Std.U8 8#usize
+  lcd : ppu.display.timing.check.Access
+  stat : Array Bool 8#usize
 
-/-- The same on ceres, which also takes the serial's DIV mask. -/
+/-- The same on ceres, which also takes the serial's DIV mask, and has the
+STAT line's rises by T-cycle. -/
 structure CeresIn where
   timer : ceres_netlist.timer.Access
   mask : Std.U16
   ifAccess : ceres_netlist.interrupts.Access
   dma : memory.dma.check.Access
   rises : Array Std.U8 8#usize
+  lcd : ppu.display.timing.check.Access
+  stat : Array Bool 4#usize
 
 def SameIn (i : NetIn) (j : CeresIn) : Prop :=
-  i.timer = j.timer ∧ i.ifAccess = j.ifAccess ∧ i.dma = j.dma ∧ i.rises = j.rises
+  i.timer = j.timer ∧ i.ifAccess = j.ifAccess ∧ i.dma = j.dma ∧ i.rises = j.rises ∧
+    i.lcd = j.lcd ∧ interrupts.check.same_stat i.stat j.stat = ok true
 
 /-! The timer: the read and the interrupt (the netlist's at the A edge;
 ceres's T-cycle, and whether a second came). -/
@@ -66,16 +77,16 @@ def TimerOut (o : Option Std.U8 × Bool) (p : Option Std.U8 × Option Std.U8 × 
 def TimerK (n : NetTimer) (i : NetIn) : Prop :=
   timing.check.known_difference n i.timer = ok true
 
-/-! IF: its access, the other sources' rises and the timer's interrupt; the
-read and the interrupt taken. -/
+/-! IF: its access, the other sources' rises, the STAT line's and the
+timer's interrupt; the read and the interrupt taken. -/
 
 def netIf (n : NetIf) (x : NetIn × (Option Std.U8 × Bool)) :
     Result ((Option Std.U8 × Option Std.U8) × NetIf) :=
-  interrupts.check.net_step n x.1.ifAccess x.1.rises x.2.2
+  interrupts.check.net_step n x.1.ifAccess x.1.rises x.2.2 x.1.stat
 
 def ceresIf (c : CeresIf) (x : CeresIn × (Option Std.U8 × Option Std.U8 × Bool)) :
     Result ((Option Std.U8 × Option Std.U8) × CeresIf) :=
-  interrupts.check.ceres_step c x.1.ifAccess x.1.rises x.2.2.1
+  interrupts.check.ceres_step c x.1.ifAccess x.1.rises x.2.2.1 x.1.stat
 
 /-! Ceres's M-cycle of the two, as it runs them: the timer's read, IF's
 read and the interrupt taken. -/
@@ -83,7 +94,7 @@ read and the interrupt taken. -/
 def ceresJoint (s : CeresTimer × CeresIf) (j : CeresIn) :
     Result ((Option Std.U8 × Option Std.U8 × Option Std.U8) × (CeresTimer × CeresIf)) := do
   let host ← check.JointHost.new j.mask s.2
-  let (o, c', h') ← check.ceres_m_cycle_joint s.1 host j.timer j.ifAccess j.rises
+  let (o, c', h') ← check.ceres_m_cycle_joint s.1 host j.timer j.ifAccess j.rises j.stat
   ok (o, (c', h'.ints))
 
 /-- The pair's outputs alike: the timer's read, IF's read, the interrupt
@@ -97,12 +108,12 @@ def KaniTimer : Prop :=
   ∀ net clock access mask, timing.check.step_agrees net clock access mask = ok true
 
 def KaniIf : Prop :=
-  ∀ net ints access rises nt ct,
-    interrupts.check.step_agrees net ints access rises nt ct = ok true
+  ∀ net ints access rises nt ct ns cs,
+    interrupts.check.step_agrees net ints access rises nt ct ns cs = ok true
 
 def KaniSeq : Prop :=
-  ∀ net clock clock' ints ints' ta mask ia rises,
-    check.in_sequence net clock clock' ints ints' ta mask ia rises = ok true
+  ∀ net clock clock' ints ints' ta mask ia rises stat,
+    check.in_sequence net clock clock' ints ints' ta mask ia rises stat = ok true
 
 theorem same_read_true {a b : Option Std.U8}
     (h : timing.check.same_read a b = ok true) : a = b := by
@@ -179,8 +190,8 @@ theorem if_steps (kani : KaniIf) :
   right
   obtain ⟨i, o⟩ := x
   obtain ⟨j, p⟩ := y
-  obtain ⟨⟨-, ha, -, hr⟩, -, hsi, -⟩ := hxy
-  have k := kani n c i.ifAccess i.rises o.2 p.2.1
+  obtain ⟨⟨-, ha, -, hr, -, hst⟩, -, hsi, -⟩ := hxy
+  have k := kani n c i.ifAccess i.rises o.2 p.2.1 i.stat j.stat
   unfold interrupts.check.step_agrees at k
   obtain ⟨b, hb, k⟩ := bind_eq_ok k
   rw [h, Result.ok.injEq] at hb
@@ -188,6 +199,9 @@ theorem if_steps (kani : KaniIf) :
   obtain ⟨b1, hb1, k⟩ := bind_eq_ok k
   rw [hsi, Result.ok.injEq] at hb1
   subst hb1
+  obtain ⟨b2, hb2, k⟩ := bind_eq_ok k
+  rw [hst, Result.ok.injEq] at hb2
+  subst hb2
   simp only [Bool.false_eq_true, ↓reduceIte, decide_false, not_true_eq_false,
     Bool.or_false] at k
   obtain ⟨⟨⟨nr, nt⟩, n'⟩, hn, k⟩ := bind_eq_ok k
@@ -216,7 +230,7 @@ theorem joint_in_sequence (kani : KaniSeq) (n : NetTimer) (c c' : CeresTimer)
   obtain ⟨q1, q2⟩ := p2
   simp only at htw
   subst htw
-  have k := kani n c c cif cif j.timer j.mask j.ifAccess j.rises
+  have k := kani n c c cif cif j.timer j.mask j.ifAccess j.rises j.stat
   unfold check.in_sequence at k
   obtain ⟨b, hb, k⟩ := bind_eq_ok k
   rw [h, Result.ok.injEq] at hb

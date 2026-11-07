@@ -20,7 +20,8 @@
 //! and the proof is a bisimulation under that mapping: from equal IF and IE,
 //! an M-cycle with any access and any rises of the sources gives the same
 //! read, the same interrupt taken, and equal IF after (`check::step_agrees`,
-//! which also takes the timer's interrupt).
+//! which also takes the timer's interrupt and the STAT line's rises, by
+//! T-cycle on ceres's side, `check::same_stat`).
 
 use super::{Interrupts, check::step_agrees};
 pub(crate) use ceres_netlist::interrupts::{A, Access, NetIf, TIMER};
@@ -62,6 +63,8 @@ fn netlist_if_bisimulation() {
         net,
         any_ints(),
         any_access(),
+        kani::any(),
+        kani::any(),
         kani::any(),
         kani::any(),
         kani::any()

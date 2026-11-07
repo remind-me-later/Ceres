@@ -1,0 +1,172 @@
+import Ceres.Bisim.Dma
+open Aeneas Aeneas.Std Result ceres_core ceres_core.bisim ceres_core.timer_if ceres_core.dma
+
+/-!
+# The line timing, wired into IF
+
+Kani proves the line timing's M-cycle for every pair of states
+(`netlist_lcd_access` asserts `ppu::display::timing::check::step_agrees`),
+the hypothesis `KaniLcd`: from related states at an M-cycle's boundary
+(`h = 0`, mod 8), an access to STAT, LY or LYC gives the same read, and the
+STAT line rises alike as IF tells its rises apart, the netlist's by edge,
+ceres's by T-cycle (`interrupts::check::same_stat`). The step reads none of
+the other blocks' outputs, and IF reads its rises: so it is wired in front
+of the timer and IF, its rises put in IF's input (`Steps.comap`), and the
+OAM DMA after them.
+
+Ceres's side is the line timing's M-cycle, then the timer's and IF's as
+ceres runs them, which take its rises in their T-cycles, then the DMA's.
+Ceres runs the PPU after the timer in `Gb::advance_cycles`, but the two
+share nothing but IF, whose requests only set its bits, in the T-cycle the
+source rises in (`mapping-m-cycle-at-e`, which IF's step assumes).
+
+The step leaves out the LCD turned off and on (an LCDC write), the first
+line after it is turned on, and the HBlank source: the related states have
+the LCD on, both clocks at the same half dot, and HBlank's enable and gate
+off. Kani's other harnesses (`netlist_lcd_off`, `netlist_lcd_on`,
+`netlist_lcd_line0`) prove those half dots, from reset.
+-/
+
+namespace ceres_core.lcd
+
+abbrev NetLcd := ceres_netlist.lcd_timing.NetLcd
+abbrev CeresLcd := ppu.display.timing.LcdTiming
+
+/-- The netlist's M-cycle: the read, and the STAT line's rises by edge. -/
+def netLcd (n : NetLcd) (i : NetIn) : Result ((Option Std.U8 × Array Bool 8#usize) × NetLcd) :=
+  ppu.display.timing.check.net_m_cycle n i.lcd
+
+/-- Ceres's M-cycle: the read, and the STAT line's rises by T-cycle. -/
+def ceresLcd (c : CeresLcd) (j : CeresIn) :
+    Result ((Option Std.U8 × Array Bool 4#usize) × CeresLcd) :=
+  ppu.display.timing.check.ceres_m_cycle c j.lcd
+
+/-- The same read, and the rises alike as IF tells them apart. -/
+def LcdOut (o : Option Std.U8 × Array Bool 8#usize) (p : Option Std.U8 × Array Bool 4#usize) :
+    Prop :=
+  o.1 = p.1 ∧ interrupts.check.same_stat o.2 p.2 = ok true
+
+/-- What the step leaves out: a STAT write that enables the HBlank source. -/
+def LcdK (_ : NetLcd) (i : NetIn) : Prop :=
+  ppu.display.timing.check.outside i.lcd = ok true
+
+/-- What Kani proves. -/
+def KaniLcd : Prop :=
+  ∀ net t access, ppu.display.timing.check.step_agrees net t access = ok true
+
+/-- The line timing's M-cycle, from every related pair (Kani's step). -/
+-- @assumes lcd-step-agrees
+theorem lcd_steps (kani : KaniLcd) :
+    Steps netLcd ceresLcd SameIn LcdOut LcdK
+      (fun n c => ppu.display.timing.check.related n c = ok true) := by
+  intro n c h i j hij
+  obtain ⟨-, -, -, -, hl, -⟩ := hij
+  have k := kani n c i.lcd
+  unfold ppu.display.timing.check.step_agrees at k
+  obtain ⟨b, hb, k⟩ := bind_eq_ok k
+  rw [h, Result.ok.injEq] at hb
+  subst hb
+  obtain ⟨d, hd, k⟩ := bind_eq_ok k
+  cases d
+  · right
+    simp only [Bool.false_eq_true, ↓reduceIte, decide_not, decide_true, Bool.not_true,
+      Bool.or_false] at k
+    obtain ⟨⟨⟨nr, nrose⟩, n'⟩, hn, k⟩ := bind_eq_ok k
+    obtain ⟨⟨⟨cr, crose⟩, c'⟩, hc, k⟩ := bind_eq_ok k
+    obtain ⟨s1, hs1, k⟩ := bind_eq_ok k
+    obtain ⟨s2, hs2, k⟩ := bind_eq_ok k
+    obtain ⟨r, hr, k⟩ := bind_eq_ok k
+    simp only [Result.ok.injEq, Bool.and_eq_true] at k
+    obtain ⟨⟨e1, e2⟩, e3⟩ := k
+    subst e1 e2 e3
+    refine ⟨(nr, nrose), n', (cr, crose), c', hn, ?_, ⟨same_read_true hs1, hs2⟩, hr⟩
+    simp only [ceresLcd]
+    rw [← hl]
+    exact hc
+  · left
+    exact hd
+
+/-! The machine's blocks wired together. -/
+
+abbrev LcdNetOut := Option Std.U8 × Array Bool 8#usize
+abbrev LcdCeresOut := Option Std.U8 × Array Bool 4#usize
+abbrev JointNetOut := (Option Std.U8 × Bool) × (Option Std.U8 × Option Std.U8)
+abbrev JointCeresOut := Option Std.U8 × Option Std.U8 × Option Std.U8
+
+/-- IF's input, with the STAT line's rises that the line timing gives. -/
+def withStat (x : NetIn × (Option Std.U8 × Array Bool 8#usize)) : NetIn :=
+  { x.1 with stat := x.2.2 }
+
+def withStatC (y : CeresIn × (Option Std.U8 × Array Bool 4#usize)) : CeresIn :=
+  { y.1 with stat := y.2.2 }
+
+/-- The netlist: the line timing, the timer and IF (the line's rises into
+IF), the OAM DMA. -/
+def netBlocks := wire (wire netLcd (fun s x => wire netTimer netIf s (withStat x)))
+  (fun s x => netDma s (x.1, x.2.2))
+
+/-- Ceres: the line timing's M-cycle, the timer's and IF's as ceres runs
+them, the DMA's. -/
+def ceresBlocks := wire (wire ceresLcd (fun s y => ceresJoint s (withStatC y)))
+  (fun s y => ceresDma s (y.1, y.2.2))
+
+/-- The outputs alike: the line timing's read, the timer's read, IF's read,
+the interrupt taken, and the DMA's read, OAM write, run and blocking. -/
+def BlocksOut (o : ((Option Std.U8 × Array Bool 8#usize) ×
+      ((Option Std.U8 × Bool) × (Option Std.U8 × Option Std.U8))) ×
+      (Option Std.U8 × Option (Std.U16 × Std.U8) × Bool × Bool))
+    (p : ((Option Std.U8 × Array Bool 4#usize) ×
+      (Option Std.U8 × Option Std.U8 × Option Std.U8)) × memory.dma.check.CeresOut) : Prop :=
+  (LcdOut o.1.1 p.1.1 ∧ JointOut o.1.2 p.1.2) ∧ DmaOut o.2 p.2
+
+/-- The known differences: the line timing's left-out STAT write, or the
+timer's. -/
+def BlocksK := wireK (wire netLcd (fun s x => wire netTimer netIf s (withStat x)))
+  (wireK netLcd LcdK (fun s x => wireK netTimer TimerK (fun _ _ => False) s (withStat x)))
+  (fun (_ : NetDma) _ => False)
+
+/-- Every block's states related. -/
+def BlocksRelated (n : (NetLcd × (NetTimer × NetIf)) × NetDma)
+    (c : (CeresLcd × (CeresTimer × CeresIf)) × CeresDma) : Prop :=
+  (ppu.display.timing.check.related n.1.1 c.1.1 = ok true ∧
+    (timing.check.related n.1.2.1 c.1.2.1 = ok true ∧
+      interrupts.check.related n.1.2.2 c.1.2.2 = ok true)) ∧
+  memory.dma.check.related n.2 c.2 = ok true
+
+-- @assumes lcd-step-agrees
+-- @assumes timer-step-agrees
+-- @assumes if-step-agrees
+-- @assumes blocks-in-sequence
+-- @assumes dma-step-agrees
+theorem blocks_steps (kl : KaniLcd) (kt : KaniTimer) (ki : KaniIf) (ks : KaniSeq)
+    (kd : KaniDma) : Steps netBlocks ceresBlocks SameIn BlocksOut BlocksK BlocksRelated := by
+  have ti := (timer_and_if_steps kt ki ks).comap withStat withStatC
+    (RI' := fun x y => SameIn x.1 y.1 ∧ LcdOut x.2 y.2) (by
+      rintro ⟨i, o⟩ ⟨j, p⟩ ⟨⟨h1, h2, h3, h4, h5, -⟩, -, h7⟩
+      exact ⟨h1, h2, h3, h4, h5, h7⟩)
+  have d := (dma_steps kd).comap (fun x => (x.1, x.2.2)) (fun y => (y.1, y.2.2))
+    (RI' := fun (x : NetIn × (LcdNetOut × JointNetOut))
+      (y : CeresIn × (LcdCeresOut × JointCeresOut)) =>
+        SameIn x.1 y.1 ∧ (LcdOut x.2.1 y.2.1 ∧ JointOut x.2.2 y.2.2))
+    (fun x y hxy => hxy.1.2.2.1)
+  exact ((lcd_steps kl).wire ti).wire d
+
+/-- The line timing, the timer, IF and the OAM DMA, as ceres runs them:
+from related states, every M-cycle gives the same reads of STAT, LY, LYC,
+the timer, IF and FF46, the same interrupt taken (the STAT line's and the
+timer's interrupts among those IF takes), the same OAM write, and the DMA's
+run and OAM blocking alike, unless it is one of the timer's known
+differences or a STAT write the step leaves out. -/
+-- @assumes lcd-step-agrees
+-- @assumes timer-step-agrees
+-- @assumes if-step-agrees
+-- @assumes blocks-in-sequence
+-- @assumes dma-step-agrees
+-- @assumes dma-one-run-per-m-cycle
+theorem blocks_agree (kl : KaniLcd) (kt : KaniTimer) (ki : KaniIf) (ks : KaniSeq)
+    (kd : KaniDma) (n : (NetLcd × (NetTimer × NetIf)) × NetDma)
+    (c : (CeresLcd × (CeresTimer × CeresIf)) × CeresDma) (h : BlocksRelated n c) :
+    Agree netBlocks ceresBlocks SameIn BlocksOut BlocksK n c :=
+  (blocks_steps kl kt ki ks kd).agree h
+
+end ceres_core.lcd

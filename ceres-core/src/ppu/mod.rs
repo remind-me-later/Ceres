@@ -189,7 +189,7 @@ impl Ppu {
 
     /// LY as the CPU reads it.
     #[must_use]
-    pub(crate) fn cpu_read_ly(&self) -> u8 {
+    pub(crate) const fn cpu_read_ly(&self) -> u8 {
         self.timing_read_ly()
     }
 
@@ -199,7 +199,7 @@ impl Ppu {
     /// (the DMG-CPU B's netlist, ACYL). The CGB is taken to do the same: no
     /// test says otherwise.
     #[must_use]
-    pub(crate) fn cpu_read_stat(&self) -> u8 {
+    pub(crate) const fn cpu_read_stat(&self) -> u8 {
         let stat = self.timing_read_stat(self.read_stat());
         if self.dma_hides_object_search() && stat & STAT_MODE_B == Mode::OamScan as u8 {
             stat & !STAT_MODE_B
