@@ -16,7 +16,7 @@ use crate::Phase;
 const TAC_ENABLE_B: u8 = 0x04;
 const TAC_CLOCK: u8 = 0x03;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 pub enum Reg {
     Div,
     Tima,
@@ -46,7 +46,7 @@ pub enum Access {
 }
 
 /// The netlist's divider and timer, between phases.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
 pub struct NetTimer {
     /// The divider: M-cycles.

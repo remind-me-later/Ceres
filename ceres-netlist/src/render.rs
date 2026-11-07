@@ -393,7 +393,7 @@ pub fn vram_power_on() -> Box<[u8; 0x2000]> {
 
 /// The sprite store (`hdl/rtl/sprite_store.vhd`): the ten sprites the OAM
 /// scan found on the line, each with its X, its line and its index in OAM.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct NetSpriteStore {
     /// The index OAM's address had at the last rise of `wuvu`.
     pub scanned: u8,

@@ -53,7 +53,7 @@ impl OamInputs {
 ///
 /// The first take the data lines while they are open, the second the first
 /// while the RAM is precharged; the scan's comparator sees the second.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub struct NetOamLatches {
     pub first: u8,
     pub second: u8,
@@ -74,7 +74,6 @@ impl NetOamLatches {
 }
 
 /// What OAM takes in (`hdl/rtl/oam.vhd`), after an edge.
-#[derive(Clone, Copy, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the strobes' levels")]
 pub struct NetOamInputs {
     /// The CPU's access: the address, its read and write strobes, the data
@@ -107,7 +106,7 @@ pub struct NetOamInputs {
 
 /// OAM's wires: its concurrent statements, each a delta cycle behind what
 /// it is made of (`hdl/rtl/oam.vhd`).
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's gates")]
 pub struct OamWires {
     pub fexx: bool,
@@ -135,7 +134,7 @@ pub struct OamWires {
 /// write, the address changes deltas before the write ends; a write
 /// reaches a word only once the RAM selects it, a moment after the address
 /// (`selected_word`), so the scan's word keeps its byte.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NetOam {
     pub ram_even: [u8; 80],
     pub ram_odd: [u8; 80],

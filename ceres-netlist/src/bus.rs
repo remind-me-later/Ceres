@@ -29,7 +29,7 @@ pub fn arbitrary(length: usize, seed: u32) -> Vec<u8> {
 }
 
 /// The cartridge's MBC, from the header's byte 0147.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Mbc {
     None,
     Mbc1,
@@ -37,7 +37,6 @@ pub enum Mbc {
 }
 
 /// The board's cartridge (`hdl/board/cartridge.vhd`).
-#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Cartridge {
     pub rom: Vec<u8>,
     pub ram: Vec<u8>,
@@ -196,7 +195,6 @@ impl Cartridge {
 }
 
 /// The board: its work RAM (C000 to DFFF, and its echo) and its cartridge.
-#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct NetBoard {
     pub work_ram: Vec<u8>,
     pub cartridge: Cartridge,
@@ -233,7 +231,7 @@ impl NetBoard {
 }
 
 /// The cartridge bus's pins.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct BusPins {
     pub a: u16,
     pub d: u8,
@@ -244,7 +242,6 @@ pub struct BusPins {
 
 /// What the bus side takes in, in a phase: the CPU core's access, the
 /// clocks', OAM DMA's, the divider, the joypad's and the serial port's pins.
-#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the strobes' levels")]
 pub struct BusInputs {
     /// The core's address, its read and write, its memory request, and the
@@ -316,7 +313,7 @@ pub struct NetBus {
 }
 
 /// What edges are taken against.
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the strobes' levels")]
 pub struct Before {
     pub write_ff50: bool,

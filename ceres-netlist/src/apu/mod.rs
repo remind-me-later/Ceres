@@ -44,7 +44,7 @@ pub use {
 ///
 /// As VHDL's inertial delay does, a later change replaces
 /// a pending one, and a zero-delay assignment (a reset, a load) cancels it.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct Ff<T> {
     pub q: T,
     pub next: T,
@@ -84,7 +84,7 @@ impl<T: Copy> Ff<T> {
 }
 
 /// What the APU takes in after an edge of the chip's clock.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "the clocks' and strobes' levels"

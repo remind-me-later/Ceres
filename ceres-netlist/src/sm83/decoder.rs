@@ -9,7 +9,6 @@
 
 /// A pattern of bits, the most significant first, `-` for a bit that does
 /// not count.
-#[derive(Clone, Copy)]
 struct Pattern {
     mask: u8,
     value: u8,
@@ -54,7 +53,6 @@ struct Inputs {
 /// One line of the PLA: the patterns of cb, int, the M-cycle and the
 /// opcode. The decoder writes its lines as constants (`const { .. }`), so
 /// that the patterns are parsed as the crate compiles.
-#[derive(Clone, Copy)]
 struct Line {
     cb: Pattern,
     int: Pattern,
@@ -82,7 +80,7 @@ impl Line {
 }
 
 /// The decoder's lines that are on.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the decoder's lines")]
 pub struct Steps {
     pub nop_or_stop: bool,

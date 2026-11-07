@@ -42,7 +42,6 @@ pub use {
 use {alu::AluInputs, idu::idu, registers::RegisterInputs, sequencer::SequencerInputs};
 
 /// What the core takes in during a phase.
-#[derive(Clone, Copy, Default)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "the clocks' and pins' levels"
@@ -83,7 +82,7 @@ pub struct CoreInputs {
 /// register (PC, BC, DE, or FF for LDH), HL or SP, which come later; or the
 /// core lets go of it (the test mode T1 alone).
 // @hw measured: dmg-sim (the delays of its gates and wires)
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Default, Debug)]
 pub enum HighByte {
     #[default]
     Precharged,
@@ -115,7 +114,7 @@ pub const CTL_MREQ_ARRIVES: u32 = 14_000;
 pub const MREQ_GATE: u32 = 8_000;
 
 /// What the core gives out as a phase ends.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, Default, Debug)]
 #[expect(clippy::struct_excessive_bools, reason = "the control lines")]
 pub struct CoreOutputs {
     pub addr: u16,

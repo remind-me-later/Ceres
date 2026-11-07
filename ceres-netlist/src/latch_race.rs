@@ -193,7 +193,7 @@ const fn min(a: u32, b: u32) -> u32 {
 
 /// The core's address and request in a phase, and the chip's state that
 /// decodes them.
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 #[expect(
     clippy::struct_excessive_bools,
     reason = "the requests' and pins' levels"
@@ -216,7 +216,6 @@ pub struct LatchRace {
 /// What an address's high byte decodes to.
 // @hw die: SORE TEVY (VRAM), TUNA SYRO (FE00 to FFFF), TULO TERA TUTU (the
 // boot ROM's)
-#[derive(Clone, Copy)]
 struct Decoded {
     vram: bool,
     fexx_ffxx: bool,

@@ -17,7 +17,7 @@ const LCDC_ON_B: u8 = 0x80;
 const LCDC_TALL_B: u8 = 0x04;
 
 /// The netlist's LCDC.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub struct NetLcdControl {
     /// LCDC's latches.
     pub lcdc: u8,

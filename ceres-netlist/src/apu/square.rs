@@ -9,7 +9,7 @@
 use super::{ApuInputs, ControlWires, Ff, fell, rose};
 
 /// A square channel's flip-flops and latches.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's latches")]
 pub struct NetSquare {
     /// NRx1's duty, NRx2, the frequency (NRx3, NRx4), NRx4's length enable
@@ -53,7 +53,7 @@ pub struct NetSquare {
 
 /// A square channel's concurrent statements, each a delta behind its
 /// inputs.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the wires' levels")]
 pub struct SquareWires {
     pub write_1: bool,

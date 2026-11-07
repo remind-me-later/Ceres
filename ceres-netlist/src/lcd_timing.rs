@@ -31,7 +31,7 @@ const STAT_IF_OAM_B: u8 = 0x20;
 const STAT_IF_LYC_B: u8 = 0x40;
 
 /// The netlist's line timing, between edges of the PPU's clock.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
 pub struct NetLcd {
     /// The PPU's clock, as its last edge left it.

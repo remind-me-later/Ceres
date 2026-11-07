@@ -13,7 +13,7 @@
 use super::{ApuInputs, ControlWires, Ff, NetSquare, SquareWires, fell, rose};
 
 /// Channel 1's frequency and sweep.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct NetSweep {
     /// NR10: a latch, open while the CPU writes it.
     pub sweep: u8,
@@ -36,7 +36,7 @@ pub struct NetSweep {
 }
 
 /// The sweep's concurrent statements, each a delta behind its inputs.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the wires' levels")]
 pub struct SweepWires {
     pub write_nr10: bool,

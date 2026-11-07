@@ -12,7 +12,7 @@
 use super::{control::Controls, decoder::Steps};
 
 /// The sequencer's flip-flops and latches.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's latches")]
 pub struct NetSequencer {
     /// The opcode, and what IR's master took while the core fetched.
@@ -58,7 +58,7 @@ pub struct NetSequencer {
 
 /// What the flip-flops clocked by `clk` take at its rise: the wires as the
 /// phase before left them.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[expect(clippy::struct_excessive_bools, reason = "the wires' levels")]
 pub struct Sampled {
     /// The next M-cycle, 7 when a condition failed or the core is idle.

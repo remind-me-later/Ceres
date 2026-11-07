@@ -11,7 +11,7 @@
 use super::{control::Controls, decoder::Steps};
 
 /// Z, N, H and C.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[expect(clippy::struct_excessive_bools, reason = "the flags")]
 pub struct Flags {
     pub z: bool,
@@ -40,7 +40,7 @@ impl Flags {
 }
 
 /// The ALU's latches: the flags, the failed condition, Z's sign.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NetAlu {
     /// The flags as they show, and as their masters took them.
     pub flags: Flags,
@@ -54,7 +54,6 @@ pub struct NetAlu {
 }
 
 /// What the ALU computes in a phase.
-#[derive(Clone, Copy)]
 pub struct AluResult {
     pub res: u8,
     /// The carries out of each bit.

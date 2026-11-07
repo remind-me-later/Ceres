@@ -18,7 +18,7 @@ use super::{control::Controls, decoder::Steps};
 // @hw die: dff_cc_ee_q_x1_reg_bit, dff_cc_ee_q_x2_reg_bit,
 // dff_cc_ee_q_n_reg_wz_bit, dff_cc_ee_pch_d_reg_sp_bit,
 // dffs_cc_ee_pch_d_reg_pc_bit
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Register {
     pub q: u8,
     pub master: u8,
@@ -48,7 +48,7 @@ impl Register {
 
 /// The registers. Those the die keeps inverted (SP, PC, W and Z) start at
 /// FF, as in dmg-sim, the others at 0.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NetRegisters {
     pub a: Register,
     pub b: Register,
@@ -66,7 +66,6 @@ pub struct NetRegisters {
 }
 
 /// The buses the registers drive in a phase.
-#[derive(Clone, Copy)]
 pub struct Buses {
     pub op1: u8,
     pub op2: u8,

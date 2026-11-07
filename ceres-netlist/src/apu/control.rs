@@ -7,7 +7,7 @@
 use super::{ApuInputs, Ff, fell, rose};
 
 /// The control's flip-flops and latches.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub struct NetApuControl {
     /// NR52 bit 7: the APU's power, taken as the CPU's write ends. HADA
     pub power: Ff<bool>,
@@ -39,7 +39,7 @@ pub struct NetApuControl {
 
 /// The control's concurrent statements, each a delta behind its inputs;
 /// its ports that copy a signal are wires too.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the wires' levels")]
 pub struct ControlWires {
     pub write_nr50: bool,

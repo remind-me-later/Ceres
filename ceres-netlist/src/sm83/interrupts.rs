@@ -9,7 +9,7 @@
 use super::{control::Controls, decoder::Steps};
 
 /// The interrupt logic's latches.
-#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct NetCoreInterrupts {
     /// IE: its master takes the data bus in `write_phase` while the core
     /// writes FFFF; the output follows while it does not.
@@ -22,7 +22,6 @@ pub struct NetCoreInterrupts {
 }
 
 /// What the interrupt logic gives in a phase.
-#[derive(Clone, Copy, Default)]
 pub struct Selected {
     /// An enabled interrupt is requested (latched; and as it is now).
     pub int_pending: bool,

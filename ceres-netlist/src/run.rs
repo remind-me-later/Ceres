@@ -22,7 +22,7 @@ use crate::{
 pub const HALF_PERIOD_PS: u64 = 119_000;
 
 /// How a test ROM reports its result.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy)]
 pub enum Test {
     /// Mooneye's: LD B,B (opcode 40), with the Fibonacci numbers 3, 5, 8,
     /// 13, 21 and 34 in B, C, D, E, H and L if it passed.
@@ -42,7 +42,6 @@ pub enum Test {
 /// A memory access of the CPU, as the model's testbench traces it
 /// (`BUS_TRACE`): seen in phase H, the M-cycle's address and the byte on
 /// the core's data bus, read or written.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct CpuAccess {
     /// The M-cycle, counted from the CPU's first access.
     pub mcycle: u64,
@@ -52,7 +51,6 @@ pub struct CpuAccess {
 }
 
 /// How a run ended.
-#[derive(Clone, PartialEq, Eq, Debug)]
 pub enum Outcome {
     Pass(String),
     Fail(String),

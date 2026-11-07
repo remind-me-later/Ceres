@@ -14,7 +14,7 @@
 use super::decoder::Steps;
 
 /// The control lines.
-#[derive(Clone, Copy, Default)]
+#[derive(Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the decoders' lines")]
 pub struct Controls {
     pub mreq: bool,

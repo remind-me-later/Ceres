@@ -15,7 +15,7 @@
 use super::{ApuInputs, ControlWires, Ff, fell, rose};
 
 /// Channel 3's flip-flops, latches and RAM.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the netlist's latches")]
 pub struct NetWave {
     /// NR30's DAC, NR32's level, the frequency, NR34's length enable and
@@ -60,7 +60,7 @@ pub struct NetWave {
 }
 
 /// Channel 3's concurrent statements, each a delta behind its inputs.
-#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
 #[expect(clippy::struct_excessive_bools, reason = "the wires' levels")]
 pub struct WaveWires {
     pub write_0: bool,
