@@ -131,6 +131,13 @@ title = "Ceres's object search, reading at the A edge, sees its OAM DMA as befor
 evidence = "measured"
 how = "Gambatte's DMG late_sp traces: the run rose in index k's window and ceres hid from sprite k + 1 (k = 0, 2, 38), fell there and ceres hid up to k (k = 0, 2)."
 
+[mapping-mode3-end]
+title = "Render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (timing_mode3_end), on an even half dot of a visible line, before its end; it falls at the scan's line start (h = 906), but after line 143, where VBlank masks it; it pulses only for a sprite at X 167"
+evidence = "measured"
+how = "Model traces of 13 ROMs (gbmicrotest's hblank_int_scx0 to 7, gambatte's sprite m0irq, m0stat and m3stat ROMs) against ceres's timing_mode3_end (a temporary trace event): 11,020 lines a half dot after, 23 in line 0 after the LCD is turned on (ceres 2 half dots ahead), and 14 with a sprite at X 167 pulsing; rises at h = 500 to 720, all even; 12,859 falls at 906 and 85 at line 143's 908."
+rests_on = ["readable-model-is-dmg-sim"]
+facts = ["sprite-at-167-mode-0-pulse"]
+
 [resync-only-in-line-0]
 title = "The pixel pipeline's line-end resync moves ceres's clock only in line 0 after the LCD is turned on (895 to 893); on the other lines it finds 893"
 evidence = "measured"
@@ -180,7 +187,7 @@ title = "memory::dma::check::step_agrees holds for every argument: from every re
 evidence = "proved"
 
 [lcd-step-agrees]
-title = "ppu::display::timing::check::step_agrees holds for every argument: from every related pair of line timings at an M-cycle's boundary (the LCD on, off, or in line 0 after it was turned on), an M-cycle with an access to STAT, LY, LYC or LCDC agrees and leaves them related"
+title = "ppu::display::timing::check::step_agrees holds for every argument: from every related pair of line timings at an M-cycle's boundary (the LCD on, off, or in line 0 after it was turned on), an M-cycle with an access to STAT, LY, LYC or LCDC, and mode 3 ending at any half dot (the HBlank source), agrees and leaves them related"
 evidence = "proved"
 
 [blocks-in-sequence]
@@ -196,11 +203,6 @@ title = "Ceres's object search keeps the first ten sprites on the line: a step a
 evidence = "proved"
 
 # What the proofs leave out
-
-[hblank-source-off]
-title = "The HBlank source of STAT is off"
-evidence = "open"
-how = "render.vhd's mode 0 is not transcribed: the line timing's harnesses hold its enable off."
 
 
 [cpu-does-not-address-oam]

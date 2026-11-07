@@ -45,10 +45,11 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   M-cycle gives the same reads of STAT, LY, LYC, the timer, IF and FF46,
   the same interrupt taken and the same OAM write (`blocks_agree`). It
   covers the LCD on, off, turned off and on, and line 0 after it is turned
-  on, with ceres's clock ahead until the pixel pipeline resyncs it; it
-  leaves out HBlank's source, and turning the LCD on with LYC 0, its
-  enable on and the flag clear (Kani's `netlist_lcd_on` pins that case
-  down).
+  on, with ceres's clock ahead until the pixel pipeline resyncs it, and
+  the HBlank source, with where mode 3 ends as an input (the pixel
+  pipeline's, the same on both sides); it leaves out turning the LCD on
+  with LYC 0, its enable on and the flag clear (Kani's `netlist_lcd_on`
+  pins that case down).
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).

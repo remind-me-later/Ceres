@@ -23,6 +23,12 @@
 //! line end resyncs it (at 895, `SKEWED_LINE_END`): there ceres's accesses
 //! fall at `h = 2` (mod 8), still the netlist's D edge.
 //!
+//! The HBlank source: the step takes the half dot where mode 3 ends, the
+//! same on both sides. Ceres's pixel pipeline raises the HBlank gate there
+//! (`LcdTiming::mode3_end`), and render's mode 0 rises: the netlist's side
+//! holds it (`Net::mode0`), as render's pixel counter does, until the
+//! scan's line start.
+//!
 //! Written as Aeneas takes it, as ceres-netlist is (see its crate
 //! documentation).
 #![cfg_attr(
@@ -39,11 +45,11 @@
 
 use super::{
     DMG_DELAYS, DMG_PHASES, LAST_LINE, LAST_VISIBLE_LINE, LCD_OFF_LATE, LINE_END_H, LINE_H,
-    LcdTiming, Phases, STAT_ENABLES, VBLANK_H,
+    LINE_RESET_H, LINES, LcdTiming, Phases, STAT_ENABLES, VBLANK_H,
 };
 use crate::{
     interrupts::check::same_stat,
-    ppu::{LCDC_ON_B, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_LYC_B},
+    ppu::{LCDC_ON_B, STAT_IF_LYC_B, STAT_LYC_B},
     timing::check::same_read,
 };
 use ceres_netlist::{lcd_control::NetLcdControl, lcd_timing::NetLcd};
@@ -61,11 +67,14 @@ pub(crate) enum Access {
     WriteLcdc(u8),
 }
 
-/// The netlist's line timing and LCDC's latches, whose bit 7 holds it in
-/// reset.
+/// The netlist's line timing, LCDC's latches, whose bit 7 holds it in
+/// reset, and render's mode 0 (the HBlank source), before VBlank masks it:
+/// set as mode 3 ends (the pixel counter's 167), cleared at the scan's line
+/// start (`mapping-mode3-end`).
 pub(crate) struct Net {
     pub lcd: NetLcd,
     pub control: NetLcdControl,
+    pub mode0: bool,
 }
 
 /// The half dots ceres's DMG LCDC write lands before its access
@@ -126,7 +135,6 @@ const fn dmg_phases(p: Phases) -> bool {
 /// VBlank, LYC, LY = LYC flag and enables, and ceres's line, LY, VBlank and
 /// interrupt line are consistent. The LCD's pins' flip-flops (`first_line`,
 /// `frame`, `line_parity`, `cpg_lx`), which nothing here reads, are free.
-/// HBlank's enable is held off (`hblank-source-off`).
 #[expect(
     clippy::suspicious_operation_groupings,
     reason = "the netlist's mode 1 is ceres's VBlank"
@@ -142,7 +150,7 @@ pub(crate) const fn related_at(net: NetLcd, t: &LcdTiming, line: u8, h: i32) -> 
         return false;
     }
     let ceres = dmg_phases(t.phases)
-        & (t.enables & !(STAT_ENABLES & !STAT_IF_HBLANK_B) == 0)
+        & (t.enables & !STAT_ENABLES == 0)
         & !t.hblank_pending
         & t.on
         & !t.dirty
@@ -185,7 +193,7 @@ const fn skewed(t: &LcdTiming) -> bool {
 }
 
 /// Both LCDs are off and agree on what outlives it: LYC, the LY = LYC flag
-/// and the enables (not HBlank's), the netlist's clock held at the
+/// and the enables, the netlist's clock held at the
 /// boundary's level. Ceres's clock, which runs on, is anywhere in the
 /// frame: turning the LCD on restarts it.
 #[expect(
@@ -198,7 +206,7 @@ pub(crate) const fn off_related(net: &NetLcd, t: &LcdTiming) -> bool {
         & (t.h >= 0)
         & (t.h < LINE_H)
         & !t.on
-        & (t.enables & !(STAT_ENABLES & !STAT_IF_HBLANK_B) == 0)
+        & (t.enables & !STAT_ENABLES == 0)
         & !t.hblank
         & !t.hblank_pending
         & !t.line_end
@@ -223,47 +231,81 @@ pub(crate) const fn off_related(net: &NetLcd, t: &LcdTiming) -> bool {
         & (net.int_stat(false) == t.stat_line)
 }
 
-/// The states match at an M-cycle's boundary, HBlank's gate low: with the
-/// LCD on, both clocks at the same half dot (`h = 0`, mod 8), or in line
-/// 0 after it was turned on, ceres's 2 half dots ahead, the flag LY 0's
-/// comparison with LYC (which ceres's clock samples first, as LY stays 0;
-/// a written LYC both compare by the boundary); or the LCD off.
+/// The states match at an M-cycle's boundary, HBlank's gate render's mode
+/// 0: with the LCD on, both clocks at the same half dot (`h = 0`, mod 8), or in line
+/// 0 after it was turned on, ceres's 2 half dots ahead; or the LCD off.
+/// With the LCD on, the LY = LYC flag is LY's comparison with LYC (a
+/// written LYC both compare by the boundary), but where LY just changed
+/// (in line 0 it stays 0, and ceres's clock samples first).
 #[expect(
     clippy::verbose_bit_mask,
     reason = "the phase in the M-cycle, as the netlist's dividers count it"
 )]
+#[expect(
+    clippy::suspicious_operation_groupings,
+    reason = "render's mode 0 is ceres's HBlank gate"
+)]
 pub(crate) const fn related(net: &Net, t: &LcdTiming) -> bool {
     if net.control.ppu_reset(false) {
-        return off_related(&net.lcd, t);
+        return !net.mode0 & off_related(&net.lcd, t);
     }
-    let aligned = (t.h & 7 == 0) & related_at(net.lcd, t, t.line, t.h);
+    // The flag is LY's comparison with LYC but where LY just changed: at
+    // the line's end, and after line 153's LY reset, until the next sample.
+    let flag = (t.ly_match == (t.ly == t.lyc))
+        | (t.h == LINE_END_H)
+        | ((t.line == LAST_LINE) & (t.h == 8));
+    let aligned = (t.h & 7 == 0) & flag & related_at(net.lcd, t, t.line, t.h);
     let ahead = if skewed(t) & (t.h >= SKEWED_FIRST + 2) & (t.h <= SKEWED_LAST + 2) {
         (t.ly_match == (t.ly == t.lyc)) & related_at(net.lcd, t, 0, t.h - 2)
     } else {
         false
     };
-    !t.hblank & (aligned | ahead)
+    (t.hblank == net.mode0) & (aligned | ahead)
 }
 
-/// What the proof leaves out: a STAT write that enables the HBlank source
-/// (`hblank-source-off`), and turning the LCD on with LYC 0, its enable on
+/// The last M-cycle of a line (its LX) in which mode 3 may end: long
+/// before the line's end (`mapping-mode3-end`).
+const MODE3_LAST_LX: u8 = 111;
+
+/// Where the pixel pipeline may end mode 3, at the `k`th edge of the
+/// M-cycle (from 0, E): the LCD on, in a visible line, by its M-cycle
+/// `MODE3_LAST_LX`, and on a falling edge of the PPU's clock (F, H, B, D:
+/// an even half dot, as render's pixel clock runs).
+const fn mode3_may_end(net: &Net, k: u8) -> bool {
+    (k & 1 == 1)
+        & !net.control.ppu_reset(false)
+        & (net.lcd.ly < LINES)
+        & !net.lcd.mode1
+        & !net.lcd.vclk
+        & (net.lcd.lx <= MODE3_LAST_LX)
+}
+
+/// What the proof leaves out: turning the LCD on with LYC 0, its enable on
 /// and the flag clear, when ceres raises the line at once, an M-cycle
-/// before the netlist, at its first sample in H (`lcd-on-lyc0-invisible`).
-pub(crate) const fn outside(net: &Net, access: Access) -> bool {
+/// before the netlist, at its first sample in H (`lcd-on-lyc0-invisible`);
+/// and mode 3 ending (`mode3_end`, the half dot of the M-cycle) where the
+/// pixel pipeline does not end it: as LCDC is written, or but where
+/// `mode3_may_end` says.
+pub(crate) const fn outside(net: &Net, access: Access, mode3_end: Option<u8>) -> bool {
+    let pipeline = match mode3_end {
+        Some(k) => !mode3_may_end(net, k),
+        None => false,
+    };
     match access {
-        Access::WriteStat(data) => data & STAT_IF_HBLANK_B != 0,
         Access::WriteLcdc(data) => {
-            (data & LCDC_ON_B != 0)
-                & net.control.ppu_reset(false)
-                & (net.lcd.stat_enable & STAT_IF_LYC_B != 0)
-                & (net.lcd.lyc == 0)
-                & !net.lcd.lyc_match
+            mode3_end.is_some()
+                | ((data & LCDC_ON_B != 0)
+                    & net.control.ppu_reset(false)
+                    & (net.lcd.stat_enable & STAT_IF_LYC_B != 0)
+                    & (net.lcd.lyc == 0)
+                    & !net.lcd.lyc_match)
         }
         Access::None
         | Access::ReadStat
         | Access::ReadLy
         | Access::ReadLyc
-        | Access::WriteLyc(_) => false,
+        | Access::WriteStat(_)
+        | Access::WriteLyc(_) => pipeline,
     }
 }
 
@@ -305,10 +347,25 @@ const fn ceres_unit(t: &mut LcdTiming, ahead: &mut bool) -> bool {
     rose
 }
 
+/// A half dot of the M-cycle (`k`, from 0), the pixel pipeline ending mode
+/// 3 before it if `mode3_end` says so (`Ppu::timing_mode3_end`, a half dot
+/// before render's mode 0 rises: `mapping-mode3-end`): whether the line
+/// rose.
+const fn ceres_half_dot(t: &mut LcdTiming, ahead: &mut bool, mode3_end: Option<u8>, k: u8) -> bool {
+    if ends_at(mode3_end, k) {
+        t.mode3_end();
+    }
+    ceres_unit(t, ahead)
+}
+
 /// Ceres's M-cycle: the access, then eight half dots. What a read gives,
 /// and the rises of the interrupt's line by T-cycle (two half dots each;
 /// one at the access counts in the first).
-pub(crate) const fn ceres_m_cycle(t: &mut LcdTiming, access: Access) -> (Option<u8>, [bool; 4]) {
+pub(crate) const fn ceres_m_cycle(
+    t: &mut LcdTiming,
+    access: Access,
+    mode3_end: Option<u8>,
+) -> (Option<u8>, [bool; 4]) {
     let mut ahead = skewed(t);
     let mut at_access = false;
     let read = match access {
@@ -330,32 +387,76 @@ pub(crate) const fn ceres_m_cycle(t: &mut LcdTiming, access: Access) -> (Option<
         }
     };
     let mut rose = [false; 4];
-    let mut k = 0;
+    let mut k: u8 = 0;
     while k < 4 {
-        let first = ceres_unit(t, &mut ahead);
-        let second = ceres_unit(t, &mut ahead);
-        rose[k] = first | second;
+        let first = ceres_half_dot(t, &mut ahead, mode3_end, 2 * k);
+        let second = ceres_half_dot(t, &mut ahead, mode3_end, 2 * k + 1);
+        rose[k as usize] = first | second;
         k += 1;
     }
     rose[0] |= at_access;
     (read, rose)
 }
 
-/// An edge of the PPU's clock, with LCDC as the edge finds it, which holds
-/// the line timing in reset while its bit 7 is clear, as `NetChip::step_lcd`
-/// does: whether the line rose.
-const fn net_edge(net: &mut Net) -> bool {
-    let held = net.control.ppu_reset(false);
-    let rose = net.lcd.held_edge(held, false);
-    if held {
-        net.lcd.reset();
-    }
-    rose
+/// Render's mode 0 as the line timing takes it: VBlank masks it.
+const fn net_mode0(net: &Net) -> bool {
+    net.mode0 & !net.lcd.mode1
 }
 
-/// The register a write reaches takes `byte`: whether the line rose.
-const fn net_write(net: &mut NetLcd, access: Access, byte: u8) -> bool {
-    let level = net.int_stat(false);
+/// The scan's line start, which resets render's pixel counter: at
+/// `LINE_RESET_H`, the line's end up, but for line 143's end, where VBlank
+/// starts (`mapping-mode3-end`).
+const fn net_line_start(lcd: &NetLcd) -> bool {
+    let phase = 4 * (lcd.vena as i32) + 2 * (lcd.wuvu as i32) + (lcd.clk as i32);
+    lcd.vclk & (phase == LINE_RESET_H - LINE_END_H) & (lcd.ly != LINES)
+}
+
+/// An edge of the PPU's clock, with LCDC as the edge finds it, which holds
+/// the line timing in reset while its bit 7 is clear, and render's mode 0
+/// as the edge finds it, as `NetChip::step_lcd` takes them: whether the
+/// line rose, and that mode 0.
+const fn net_edge_starts(net: &mut Net) -> (bool, bool) {
+    let mode0 = net_mode0(net);
+    let rose = net.lcd.held_edge(net.control.ppu_reset(false), mode0);
+    (rose, mode0)
+}
+
+/// The rest of the edge, from the line's `level` after the line timing's
+/// flip-flops and the writes: LCDC's reset, then render's mode 0, which
+/// rises as mode 3 ends and falls at the scan's line start (and in reset).
+/// Whether the line rose.
+const fn net_edge_ends(net: &mut Net, mode0: bool, level: bool, mode3_ends: bool) -> bool {
+    let reset = net.control.ppu_reset(false);
+    if reset {
+        net.lcd.reset();
+    }
+    if mode3_ends {
+        net.mode0 = true;
+    }
+    if reset | net_line_start(&net.lcd) {
+        net.mode0 = false;
+    }
+    let after_reset = net.lcd.int_stat(mode0);
+    let after_render = net.lcd.int_stat(net_mode0(net));
+    (after_reset & !level) | (after_render & !after_reset)
+}
+
+/// An edge without an access: whether the line rose.
+const fn net_edge(net: &mut Net, mode3_ends: bool) -> bool {
+    let (rose, mode0) = net_edge_starts(net);
+    let level = net.lcd.int_stat(mode0);
+    rose | net_edge_ends(net, mode0, level, mode3_ends)
+}
+
+/// The register a write reaches takes `byte`, with render's mode 0 as the
+/// edge found it: whether the line rose from `level`, which follows it.
+const fn net_write(
+    net: &mut NetLcd,
+    access: Access,
+    byte: u8,
+    mode0: bool,
+    level: &mut bool,
+) -> bool {
     match access {
         Access::WriteStat(_) => net.write(0xFF41, byte),
         Access::WriteLyc(_) => net.write(0xFF45, byte),
@@ -365,7 +466,18 @@ const fn net_write(net: &mut NetLcd, access: Access, byte: u8) -> bool {
         | Access::ReadLyc
         | Access::WriteLcdc(_) => {}
     }
-    net.int_stat(false) & !level
+    let now = net.int_stat(mode0);
+    let rose = now & !*level;
+    *level = now;
+    rose
+}
+
+/// Whether mode 3 ends at edge `k` of the M-cycle (from 0, E).
+const fn ends_at(mode3_end: Option<u8>, k: u8) -> bool {
+    match mode3_end {
+        Some(end) => end == k,
+        None => false,
+    }
 }
 
 /// What a read drives on the bus now (of STAT, this block's bits).
@@ -393,35 +505,38 @@ const fn and_bus(a: Option<u8>, b: Option<u8>) -> Option<u8> {
 /// latch, which takes the precharged bus (FF) and then the byte (LCDC's
 /// opens after the edge, which still finds the old one; then its bit 7
 /// clear resets the line timing); then the edges F to D. A read gives the
-/// AND of what the register shows after E's edge to H's. The rises of the
-/// interrupt's line, by edge.
-pub(crate) const fn net_m_cycle(net: &mut Net, access: Access) -> (Option<u8>, [bool; 8]) {
+/// AND of what the register shows after E's edge to H's. Render's mode 0
+/// rises in the edge `mode3_end` says. The rises of the interrupt's line,
+/// by edge.
+pub(crate) const fn net_m_cycle(
+    net: &mut Net,
+    access: Access,
+    mode3_end: Option<u8>,
+) -> (Option<u8>, [bool; 8]) {
     let mut rose = [false; 8];
-    rose[0] = net_edge(net);
+    let (edge_rose, mode0) = net_edge_starts(net);
+    let mut level = net.lcd.int_stat(mode0);
+    let mut written = false;
     match access {
         Access::WriteStat(data) | Access::WriteLyc(data) => {
-            let glitch = net_write(&mut net.lcd, access, 0xFF);
-            let lands = net_write(&mut net.lcd, access, data);
-            rose[0] = rose[0] | glitch | lands;
+            let glitch = net_write(&mut net.lcd, access, 0xFF, mode0, &mut level);
+            let lands = net_write(&mut net.lcd, access, data, mode0, &mut level);
+            written = glitch | lands;
         }
-        Access::WriteLcdc(data) => {
-            net.control.settle(false, Some(data));
-            if net.control.ppu_reset(false) {
-                net.lcd.reset();
-            }
-        }
+        Access::WriteLcdc(data) => net.control.settle(false, Some(data)),
         Access::None | Access::ReadStat | Access::ReadLy | Access::ReadLyc => {}
     }
+    rose[0] = edge_rose | written | net_edge_ends(net, mode0, level, ends_at(mode3_end, 0));
     let mut bus = net_shown(&net.lcd, access);
-    rose[1] = net_edge(net);
+    rose[1] = net_edge(net, ends_at(mode3_end, 1));
     bus = and_bus(bus, net_shown(&net.lcd, access));
-    rose[2] = net_edge(net);
+    rose[2] = net_edge(net, ends_at(mode3_end, 2));
     bus = and_bus(bus, net_shown(&net.lcd, access));
-    rose[3] = net_edge(net);
+    rose[3] = net_edge(net, ends_at(mode3_end, 3));
     bus = and_bus(bus, net_shown(&net.lcd, access));
-    let mut k = 4;
+    let mut k: u8 = 4;
     while k < 8 {
-        rose[k] = net_edge(net);
+        rose[k as usize] = net_edge(net, ends_at(mode3_end, k));
         k += 1;
     }
     (bus, rose)
@@ -436,14 +551,19 @@ pub(crate) const fn net_m_cycle(net: &mut Net, access: Access) -> (Option<u8>, [
     not(kani),
     expect(clippy::missing_const_for_fn, reason = "Kani's covers are not const")
 )]
-pub(crate) fn step_agrees(mut net: Net, mut t: LcdTiming, access: Access) -> bool {
-    if !related(&net, &t) | outside(&net, access) {
+pub(crate) fn step_agrees(
+    mut net: Net,
+    mut t: LcdTiming,
+    access: Access,
+    mode3_end: Option<u8>,
+) -> bool {
+    if !related(&net, &t) | outside(&net, access, mode3_end) {
         return true;
     }
     #[cfg(kani)]
-    let (was_on, was_ahead) = (t.on, skewed(&t));
-    let (net_read, net_rose) = net_m_cycle(&mut net, access);
-    let (ceres_read, ceres_rose) = ceres_m_cycle(&mut t, access);
+    let (was_on, was_ahead, was_hblank) = (t.on, skewed(&t), t.hblank);
+    let (net_read, net_rose) = net_m_cycle(&mut net, access, mode3_end);
+    let (ceres_read, ceres_rose) = ceres_m_cycle(&mut t, access, mode3_end);
     #[cfg(kani)]
     {
         kani::cover!(
@@ -476,6 +596,20 @@ pub(crate) fn step_agrees(mut net: Net, mut t: LcdTiming, access: Access) -> boo
         kani::cover!(
             !was_on && matches!(access, Access::WriteStat(_)) && ceres_rose[0],
             "a STAT write raises the line with the LCD off"
+        );
+        kani::cover!(
+            mode3_end.is_some()
+                && ceres_rose.contains(&true)
+                && t.enables == crate::ppu::STAT_IF_HBLANK_B,
+            "the HBlank source raises the line"
+        );
+        kani::cover!(
+            was_hblank && matches!(access, Access::WriteStat(_)) && ceres_rose[0],
+            "a STAT write's glitch with HBlank's gate up"
+        );
+        kani::cover!(
+            was_hblank && !t.hblank && t.on && t.line != LAST_VISIBLE_LINE + 1,
+            "the scan's line start clears HBlank's gate"
         );
     }
     same_read(net_read, ceres_read) & same_stat(net_rose, ceres_rose) & related(&net, &t)

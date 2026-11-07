@@ -446,7 +446,7 @@ impl Ppu {
 
     /// Mode 3 ended: the HBlank gate rises in the next unit.
     pub(super) const fn timing_mode3_end(&mut self) {
-        self.d.timing.hblank_pending = true;
+        self.d.timing.mode3_end();
     }
 
     /// The LCD was turned on: the line clock starts at line 0.
@@ -520,6 +520,11 @@ impl LcdTiming {
         self.hblank_pending = false;
         self.ly_match = self.lyc == 0;
         self.update_line()
+    }
+
+    /// Mode 3 ended: the HBlank gate rises in the next unit.
+    const fn mode3_end(&mut self) {
+        self.hblank_pending = true;
     }
 
     /// The pixel pipeline's line end: the clock is at `line`'s half dot

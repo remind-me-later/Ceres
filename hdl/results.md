@@ -517,8 +517,12 @@ LYC 0, its enable on and the flag clear, ceres raises the STAT line in the
 M-cycle before the write's, the netlist at H, after its first sample.
 `check/lcd_on_lyc0.asm` shows the CPU cannot see it: both enter the
 handler after the same instruction, as in that M-cycle the CPU is writing
-LCDC. STAT's mode bits and the HBlank source (the OAM scan's and render's)
-are not proved yet.
+LCDC. The HBlank source is proved with where mode 3 ends as an input, the
+same on both sides: render's mode 0 rises a half dot after ceres's pixel
+pipeline ends mode 3 (11,020 lines of 13 ROMs' traces, all on even half
+dots between 500 and 720), and falls at the scan's line start, 906, but
+after line 143, where VBlank masks it at 908. STAT's mode bits (the OAM
+scan's and render's) and the pixel pipeline itself are not proved yet.
 
 ## Ceres's transcription of the OAM scan
 

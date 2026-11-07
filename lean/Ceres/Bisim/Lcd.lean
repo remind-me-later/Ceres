@@ -23,10 +23,13 @@ source rises in (`mapping-m-cycle-at-e`, which IF's step assumes).
 The step takes LCDC writes too: the related states have the LCD on, both
 clocks at the same half dot; or in line 0 after it was turned on, ceres's
 clock 2 half dots ahead until the pixel pipeline resyncs it; or the LCD
-off. It leaves out the HBlank source (HBlank's enable and gate off), and
-turning the LCD on with LYC 0, its enable on and the flag clear, when
-ceres raises the STAT line an M-cycle before the netlist
-(`lcd-on-lyc0-invisible`, which Kani's `netlist_lcd_on` pins down).
+off. It takes the HBlank source as well: where mode 3 ends is an input,
+the same on both sides (`mode3End`; `mapping-mode3-end`), which raises
+ceres's HBlank gate and render's mode 0. It leaves out turning the LCD on
+with LYC 0, its enable on and the flag clear, when ceres raises the STAT
+line an M-cycle before the netlist (`lcd-on-lyc0-invisible`, which Kani's
+`netlist_lcd_on` pins down), and mode 3 ending where the pixel pipeline
+does not end it.
 -/
 
 namespace ceres_core.lcd
@@ -37,26 +40,28 @@ abbrev CeresLcd := ppu.display.timing.LcdTiming
 
 /-- The netlist's M-cycle: the read, and the STAT line's rises by edge. -/
 def netLcd (n : NetLcd) (i : NetIn) : Result ((Option Std.U8 × Array Bool 8#usize) × NetLcd) :=
-  ppu.display.timing.check.net_m_cycle n i.lcd
+  ppu.display.timing.check.net_m_cycle n i.lcd i.mode3End
 
 /-- Ceres's M-cycle: the read, and the STAT line's rises by T-cycle. -/
 def ceresLcd (c : CeresLcd) (j : CeresIn) :
     Result ((Option Std.U8 × Array Bool 4#usize) × CeresLcd) :=
-  ppu.display.timing.check.ceres_m_cycle c j.lcd
+  ppu.display.timing.check.ceres_m_cycle c j.lcd j.mode3End
 
 /-- The same read, and the rises alike as IF tells them apart. -/
 def LcdOut (o : Option Std.U8 × Array Bool 8#usize) (p : Option Std.U8 × Array Bool 4#usize) :
     Prop :=
   o.1 = p.1 ∧ interrupts.check.same_stat o.2 p.2 = ok true
 
-/-- What the step leaves out: a STAT write that enables the HBlank source,
-and turning the LCD on with LYC 0, its enable on and the flag clear. -/
+/-- What the step leaves out: turning the LCD on with LYC 0, its enable on
+and the flag clear, and mode 3 ending where the pixel pipeline does not
+end it. -/
 def LcdK (n : NetLcd) (i : NetIn) : Prop :=
-  ppu.display.timing.check.outside n i.lcd = ok true
+  ppu.display.timing.check.outside n i.lcd i.mode3End = ok true
 
 /-- What Kani proves. -/
 def KaniLcd : Prop :=
-  ∀ net t access, ppu.display.timing.check.step_agrees net t access = ok true
+  ∀ net t access mode3End,
+    ppu.display.timing.check.step_agrees net t access mode3End = ok true
 
 /-- The line timing's M-cycle, from every related pair (Kani's step). -/
 -- @assumes lcd-step-agrees
@@ -64,8 +69,8 @@ theorem lcd_steps (kani : KaniLcd) :
     Steps netLcd ceresLcd SameIn LcdOut LcdK
       (fun n c => ppu.display.timing.check.related n c = ok true) := by
   intro n c h i j hij
-  obtain ⟨-, -, -, -, hl, -⟩ := hij
-  have k := kani n c i.lcd
+  obtain ⟨-, -, -, -, hl, -, hm⟩ := hij
+  have k := kani n c i.lcd i.mode3End
   unfold ppu.display.timing.check.step_agrees at k
   obtain ⟨b, hb, k⟩ := bind_eq_ok k
   rw [h, Result.ok.injEq] at hb
@@ -85,7 +90,7 @@ theorem lcd_steps (kani : KaniLcd) :
     subst e1 e2 e3
     refine ⟨(nr, nrose), n', (cr, crose), c', hn, ?_, ⟨same_read_true hs1, hs2⟩, hr⟩
     simp only [ceresLcd]
-    rw [← hl]
+    rw [← hl, ← hm]
     exact hc
   · left
     exact hd
@@ -146,8 +151,8 @@ theorem blocks_steps (kl : KaniLcd) (kt : KaniTimer) (ki : KaniIf) (ks : KaniSeq
     (kd : KaniDma) : Steps netBlocks ceresBlocks SameIn BlocksOut BlocksK BlocksRelated := by
   have ti := (timer_and_if_steps kt ki ks).comap withStat withStatC
     (RI' := fun x y => SameIn x.1 y.1 ∧ LcdOut x.2 y.2) (by
-      rintro ⟨i, o⟩ ⟨j, p⟩ ⟨⟨h1, h2, h3, h4, h5, -⟩, -, h7⟩
-      exact ⟨h1, h2, h3, h4, h5, h7⟩)
+      rintro ⟨i, o⟩ ⟨j, p⟩ ⟨⟨h1, h2, h3, h4, h5, -, h6⟩, -, h7⟩
+      exact ⟨h1, h2, h3, h4, h5, h7, h6⟩)
   have d := (dma_steps kd).comap (fun x => (x.1, x.2.2)) (fun y => (y.1, y.2.2))
     (RI' := fun (x : NetIn × (LcdNetOut × JointNetOut))
       (y : CeresIn × (LcdCeresOut × JointCeresOut)) =>
@@ -157,9 +162,10 @@ theorem blocks_steps (kl : KaniLcd) (kt : KaniTimer) (ki : KaniIf) (ks : KaniSeq
 
 /-- The line timing, the timer, IF and the OAM DMA, as ceres runs them:
 from related states, every M-cycle gives the same reads of STAT, LY, LYC,
-the timer, IF and FF46, the same interrupt taken (the STAT line's and the
-timer's interrupts among those IF takes), the same OAM write, and the DMA's
-run and OAM blocking alike, the LCD turned off and on among them, unless
+the timer, IF and FF46, the same interrupt taken (the STAT line's, its
+HBlank source included, and the timer's interrupts among those IF takes),
+the same OAM write, and the DMA's run and OAM blocking alike, the LCD
+turned off and on among them, mode 3 ending where the same input says, unless
 it is one of the timer's known differences or what the line timing's step
 leaves out. -/
 -- @assumes lcd-step-agrees

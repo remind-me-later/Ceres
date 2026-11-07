@@ -2605,7 +2605,7 @@ def memory.dma.check.step_agrees
 @[global_simps, irreducible] def ppu.display.LAST_LINE : Std.U8 := 153#u8
 
 /-- [ceres_core::ppu::display::timing::check::LCDC_EARLY]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 73:0-73:25 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 82:0-82:25 -/
 @[global_simps, irreducible]
 def ppu.display.timing.check.LCDC_EARLY : Std.U8 := 2#u8
 
@@ -2616,19 +2616,19 @@ def ppu.display.timing.LINE_H : Result Std.I32 :=
   2#i32 * ppu.display.LINE_LENGTH
 
 /-- [ceres_core::ppu::display::timing::check::SKEWED_LINE_END]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 77:0-77:41 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 86:0-86:41 -/
 @[global_simps, irreducible]
 def ppu.display.timing.check.SKEWED_LINE_END : Result Std.I32 := do
   let i ← ppu.display.timing.LINE_H
   i - 17#i32
 
 /-- [ceres_core::ppu::display::timing::check::SKEWED_FIRST]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 82:0-82:28 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 91:0-91:28 -/
 @[global_simps, irreducible]
 def ppu.display.timing.check.SKEWED_FIRST : Std.I32 := 8#i32
 
 /-- [ceres_core::ppu::display::timing::check::SKEWED_LAST]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 83:0-83:45 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 92:0-92:45 -/
 @[global_simps, irreducible]
 def ppu.display.timing.check.SKEWED_LAST : Result Std.I32 := do
   let i ← ppu.display.timing.check.SKEWED_LINE_END
@@ -2663,7 +2663,7 @@ def ppu.display.timing.STAT_ENABLES : Std.U8 :=
   i1 ||| ppu.STAT_IF_LYC_B
 
 /-- [ceres_core::ppu::display::timing::check::STAT_OWN]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 87:0-87:47 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 96:0-96:47 -/
 @[global_simps, irreducible]
 def ppu.display.timing.check.STAT_OWN : Std.U8 :=
   ppu.display.timing.STAT_ENABLES ||| ppu.STAT_LYC_B
@@ -2676,7 +2676,7 @@ def ppu.display.timing.LINE_END_H : Result Std.I32 := do
   i - 8#i32
 
 /-- [ceres_core::ppu::display::timing::check::ly_at]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 91:0-99:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 100:0-108:1 -/
 def ppu.display.timing.check.ly_at
   (line : Std.U8) (h : Std.I32) : Result Std.U8 := do
   let i ← ppu.display.timing.LINE_END_H
@@ -2703,7 +2703,7 @@ def ppu.display.timing.VBLANK_H : Result Std.I32 := do
   i + 4#i32
 
 /-- [ceres_core::ppu::display::timing::check::vblank_at]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 102:0-108:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 111:0-117:1 -/
 def ppu.display.timing.check.vblank_at
   (line : Std.U8) (h : Std.I32) : Result Bool := do
   match line with
@@ -2744,7 +2744,7 @@ def ppu.display.timing.DMG_PHASES : Result ppu.display.timing.Phases := do
     }
 
 /-- [ceres_core::ppu::display::timing::check::dmg_phases]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 111:0-121:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 120:0-130:1 -/
 def ppu.display.timing.check.dmg_phases
   (p : ppu.display.timing.Phases) : Result Bool := do
   let d ← ppu.display.timing.DMG_PHASES
@@ -2901,7 +2901,7 @@ def ppu.display.timing.LcdTiming.line_for
         else ok false
 
 /-- [ceres_core::ppu::display::timing::check::related_at]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 134:0-179:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 142:0-187:1 -/
 def ppu.display.timing.check.related_at
   (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming)
   (line : Std.U8) (h : Std.I32) :
@@ -2912,37 +2912,35 @@ def ppu.display.timing.check.related_at
     (line <= ppu.display.LAST_LINE)) && (h >= 0#i32)) && (h < i)
   then
     let b ← ppu.display.timing.check.dmg_phases t.phases
-    let i1 ← lift (~~~ ppu.STAT_IF_HBLANK_B)
-    let i2 ← lift (ppu.display.timing.STAT_ENABLES &&& i1)
-    let i3 ← lift (~~~ i2)
-    let i4 ← lift (t.enables &&& i3)
+    let i1 ← lift (~~~ ppu.display.timing.STAT_ENABLES)
+    let i2 ← lift (t.enables &&& i1)
     let b1 := core.option.Option.is_none t.lyc_pending
     let b2 := core.option.Option.is_none t.stat_pending
-    let i5 ← ppu.display.timing.check.ly_at t.line t.h
-    let i6 ← ppu.display.timing.LINE_END_H
+    let i3 ← ppu.display.timing.check.ly_at t.line t.h
+    let i4 ← ppu.display.timing.LINE_END_H
     let b3 ← ppu.display.timing.check.vblank_at t.line t.h
     let b4 ← ppu.display.timing.LcdTiming.line_for t t.enables
     let lx ←
-      if (h >= 4#i32) && (h < i6)
+      if (h >= 4#i32) && (h < i4)
       then
         do
-        let i7 ← h - 4#i32
-        let i8 ← i7 / 8#i32
-        let i9 ← i8 + 1#i32
-        ok (IScalar.hcast .U8 i9)
+        let i5 ← h - 4#i32
+        let i6 ← i5 / 8#i32
+        let i7 ← i6 + 1#i32
+        ok (IScalar.hcast .U8 i7)
       else ok 0#u8
-    let i7 ← lift (h &&& 1#i32)
-    let i8 ← lift (h &&& 2#i32)
-    let i9 ← lift (h &&& 7#i32)
-    let i10 ← h + 1#i32
-    let i11 ← lift (i10 &&& 2#i32)
-    let i12 ← ppu.display.timing.VBLANK_H
-    ok ((((((((((((b && (i4 = 0#u8)) && (¬ t.hblank_pending)) && t.on) && (¬
-      t.dirty)) && b1) && b2) && (t.ly = i5)) && (t.line_end = (t.h >= i6))) &&
-      (t.vblank = b3)) && (t.stat_line = b4)) && ((((((((net.clk = (i7 !=
-      0#i32)) && (net.wuvu = (i8 != 0#i32))) && (net.vena = (i9 >= 4#i32))) &&
-      (net.wosu = (i11 != 0#i32))) && (net.lx = lx)) && (net.vclk = (h >= i6)))
-      && (net.nype = ((h >= i12) || (h < 4#i32)))) && (net.line_153 = (((line =
+    let i5 ← lift (h &&& 1#i32)
+    let i6 ← lift (h &&& 2#i32)
+    let i7 ← lift (h &&& 7#i32)
+    let i8 ← h + 1#i32
+    let i9 ← lift (i8 &&& 2#i32)
+    let i10 ← ppu.display.timing.VBLANK_H
+    ok ((((((((((((b && (i2 = 0#u8)) && (¬ t.hblank_pending)) && t.on) && (¬
+      t.dirty)) && b1) && b2) && (t.ly = i3)) && (t.line_end = (t.h >= i4))) &&
+      (t.vblank = b3)) && (t.stat_line = b4)) && ((((((((net.clk = (i5 !=
+      0#i32)) && (net.wuvu = (i6 != 0#i32))) && (net.vena = (i7 >= 4#i32))) &&
+      (net.wosu = (i9 != 0#i32))) && (net.lx = lx)) && (net.vclk = (h >= i4)))
+      && (net.nype = ((h >= i10) || (h < 4#i32)))) && (net.line_153 = (((line =
       ppu.display.LAST_LINE) && (h >= 4#i32)) || ((line = 0#u8) && (h <
       4#i32)))))) && (((((net.ly = t.ly) && (net.mode1 = t.vblank)) && (
       net.lyc = t.lyc)) && (net.lyc_match = t.ly_match)) && (net.stat_enable =
@@ -2950,30 +2948,28 @@ def ppu.display.timing.check.related_at
   else ok false
 
 /-- [ceres_core::ppu::display::timing::check::skewed]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 183:0-185:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 191:0-193:1 -/
 def ppu.display.timing.check.skewed
   (t : ppu.display.timing.LcdTiming) : Result Bool := do
   let i ← lift (t.h &&& 7#i32)
   ok (((t.on && t.first_line) && (t.line = 0#u8)) && (i = 2#i32))
 
 /-- [ceres_core::ppu::display::timing::check::off_related]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 195:0-224:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 203:0-232:1 -/
 def ppu.display.timing.check.off_related
   (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming) :
   Result Bool
   := do
   let b ← ppu.display.timing.check.dmg_phases t.phases
   let i ← ppu.display.timing.LINE_H
-  let i1 ← lift (~~~ ppu.STAT_IF_HBLANK_B)
-  let i2 ← lift (ppu.display.timing.STAT_ENABLES &&& i1)
-  let i3 ← lift (~~~ i2)
-  let i4 ← lift (t.enables &&& i3)
+  let i1 ← lift (~~~ ppu.display.timing.STAT_ENABLES)
+  let i2 ← lift (t.enables &&& i1)
   let b1 ← ppu.display.timing.LcdTiming.line_for t t.enables
   let b2 := core.option.Option.is_none t.lyc_pending
   let b3 := core.option.Option.is_none t.stat_pending
   let b4 ← ceres_netlist.lcd_timing.NetLcd.int_stat net false
   ok (((((((((((((((((((((((((((b && (t.line <= ppu.display.LAST_LINE)) && (
-    t.h >= 0#i32)) && (t.h < i)) && (¬ t.on)) && (i4 = 0#u8)) && (¬
+    t.h >= 0#i32)) && (t.h < i)) && (¬ t.on)) && (i2 = 0#u8)) && (¬
     t.hblank)) && (¬ t.hblank_pending)) && (¬ t.line_end)) && (¬ t.vblank))
     && (t.ly = 0#u8)) && (t.stat_line = b1)) && b2) && b3) && (¬ net.clk)) &&
     (¬ net.wuvu)) && (¬ net.vena)) && (¬ net.wosu)) && (net.lx = 0#u8)) &&
@@ -2982,58 +2978,84 @@ def ppu.display.timing.check.off_related
     && (net.stat_enable = t.enables)) && (b4 = t.stat_line))
 
 /-- [ceres_core::ppu::display::timing::check::related]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 235:0-246:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 248:0-264:1 -/
 def ppu.display.timing.check.related
   (net : ppu.display.timing.check.Net) (t : ppu.display.timing.LcdTiming) :
   Result Bool
   := do
   let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
   if b
-  then ppu.display.timing.check.off_related net.lcd t
+  then
+    let b1 ← ppu.display.timing.check.off_related net.lcd t
+    ok ((¬ net.mode0) && b1)
   else
-    let i ← lift (t.h &&& 7#i32)
+    let i ← ppu.display.timing.LINE_END_H
+    let i1 ← lift (t.h &&& 7#i32)
     let b1 ← ppu.display.timing.check.related_at net.lcd t t.line t.h
     let b2 ← ppu.display.timing.check.skewed t
-    let i1 ← ppu.display.timing.check.SKEWED_FIRST + 2#i32
-    let i2 ← ppu.display.timing.check.SKEWED_LAST
-    let i3 ← i2 + 2#i32
+    let i2 ← ppu.display.timing.check.SKEWED_FIRST + 2#i32
+    let i3 ← ppu.display.timing.check.SKEWED_LAST
+    let i4 ← i3 + 2#i32
     let ahead ←
-      if (b2 && (t.h >= i1)) && (t.h <= i3)
+      if (b2 && (t.h >= i2)) && (t.h <= i4)
       then
         do
-        let i4 ← t.h - 2#i32
-        let b3 ← ppu.display.timing.check.related_at net.lcd t 0#u8 i4
+        let i5 ← t.h - 2#i32
+        let b3 ← ppu.display.timing.check.related_at net.lcd t 0#u8 i5
         ok ((t.ly_match = (t.ly = t.lyc)) && b3)
       else ok false
-    ok ((¬ t.hblank) && (((i = 0#i32) && b1) || ahead))
+    ok ((t.hblank = net.mode0) && ((((i1 = 0#i32) && (((t.ly_match = (
+      t.ly = t.lyc)) || (t.h = i)) || ((t.line = ppu.display.LAST_LINE) && (
+      t.h = 8#i32)))) && b1) || ahead))
+
+/-- [ceres_core::ppu::display::timing::check::MODE3_LAST_LX]
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 268:0-268:30 -/
+@[global_simps, irreducible]
+def ppu.display.timing.check.MODE3_LAST_LX : Std.U8 := 111#u8
+
+/-- [ceres_core::ppu::display::timing::check::mode3_may_end]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 274:0-281:1 -/
+def ppu.display.timing.check.mode3_may_end
+  (net : ppu.display.timing.check.Net) (k : Std.U8) : Result Bool := do
+  let i ← lift (k &&& 1#u8)
+  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
+  ok ((((((i = 1#u8) && (¬ b)) && (net.lcd.ly < ppu.display.LINES)) && (¬
+    net.lcd.mode1)) && (¬ net.lcd.vclk)) && (net.lcd.lx <=
+    ppu.display.timing.check.MODE3_LAST_LX))
 
 /-- [ceres_core::ppu::LCDC_ON_B]
     Source: 'ceres-core/src/ppu/mod.rs', lines 36:0-36:38 -/
 @[global_simps, irreducible] def ppu.LCDC_ON_B : Std.U8 := 128#u8
 
 /-- [ceres_core::ppu::display::timing::check::outside]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 252:0-268:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 289:0-310:1 -/
 def ppu.display.timing.check.outside
   (net : ppu.display.timing.check.Net)
-  (access : ppu.display.timing.check.Access) :
+  (access : ppu.display.timing.check.Access) (mode3_end : Option Std.U8) :
   Result Bool
   := do
+  let pipeline ←
+    match mode3_end with
+    | none => ok false
+    | some k =>
+      do
+      let b ← ppu.display.timing.check.mode3_may_end net k
+      ok (¬ b)
   match access with
-  | ppu.display.timing.check.Access.None => ok false
-  | ppu.display.timing.check.Access.ReadStat => ok false
-  | ppu.display.timing.check.Access.ReadLy => ok false
-  | ppu.display.timing.check.Access.ReadLyc => ok false
-  | ppu.display.timing.check.Access.WriteStat data =>
-    let i ← lift (data &&& ppu.STAT_IF_HBLANK_B)
-    ok (i != 0#u8)
-  | ppu.display.timing.check.Access.WriteLyc _ => ok false
+  | ppu.display.timing.check.Access.None => ok pipeline
+  | ppu.display.timing.check.Access.ReadStat => ok pipeline
+  | ppu.display.timing.check.Access.ReadLy => ok pipeline
+  | ppu.display.timing.check.Access.ReadLyc => ok pipeline
+  | ppu.display.timing.check.Access.WriteStat _ => ok pipeline
+  | ppu.display.timing.check.Access.WriteLyc _ => ok pipeline
   | ppu.display.timing.check.Access.WriteLcdc data =>
+    let b := core.option.Option.is_some mode3_end
     let i ← lift (data &&& ppu.LCDC_ON_B)
-    let b ←
+    let b1 ←
       ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
     let i1 ← lift (net.lcd.stat_enable &&& ppu.STAT_IF_LYC_B)
-    ok (((((i != 0#u8) && b) && (i1 != 0#u8)) && (net.lcd.lyc = 0#u8)) && (¬
-      net.lcd.lyc_match))
+    ok (b || (((((i != 0#u8) && b1) && (i1 != 0#u8)) && (net.lcd.lyc = 0#u8))
+      && (¬ net.lcd.lyc_match)))
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::update_line]:
     Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 242:4-247:5 -/
@@ -3047,7 +3069,7 @@ def ppu.display.timing.LcdTiming.update_line
   else ok (false, { self with stat_line := line })
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_off]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 534:4-542:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 539:4-547:5 -/
 def ppu.display.timing.LcdTiming.turn_off
   (self : ppu.display.timing.LcdTiming) :
   Result ppu.display.timing.LcdTiming
@@ -3307,7 +3329,7 @@ def ppu.display.timing.LcdTiming.unit
 def ppu.display.timing.LCD_OFF_LATE : Std.U8 := 3#u8
 
 /-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 280:8-283:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 322:8-325:9 -/
 @[rust_loop_body]
 def ppu.display.timing.check.ceres_lcdc_loop0.body
   (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
@@ -3322,7 +3344,7 @@ def ppu.display.timing.check.ceres_lcdc_loop0.body
   else ok (done (rose, t))
 
 /-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 280:8-283:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 322:8-325:9 -/
 @[rust_loop]
 def ppu.display.timing.check.ceres_lcdc_loop0
   (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
@@ -3334,7 +3356,7 @@ def ppu.display.timing.check.ceres_lcdc_loop0
     (t, rose, k)
 
 /-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop body 1:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 286:8-289:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 328:8-331:9 -/
 @[rust_loop_body]
 def ppu.display.timing.check.ceres_lcdc_loop1.body
   (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
@@ -3349,7 +3371,7 @@ def ppu.display.timing.check.ceres_lcdc_loop1.body
   else ok (done (t, rose))
 
 /-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop 1:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 286:8-289:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 328:8-331:9 -/
 @[rust_loop]
 def ppu.display.timing.check.ceres_lcdc_loop1
   (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
@@ -3361,7 +3383,7 @@ def ppu.display.timing.check.ceres_lcdc_loop1
     (t, rose, k)
 
 /-- [ceres_core::ppu::display::timing::check::ceres_lcdc]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 274:0-295:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 316:0-337:1 -/
 def ppu.display.timing.check.ceres_lcdc
   (t : ppu.display.timing.LcdTiming) (data : Std.U8) :
   Result (Bool × ppu.display.timing.LcdTiming)
@@ -3390,7 +3412,7 @@ def ppu.display.timing.RESYNC_H : Result Std.I32 := do
   i - 19#i32
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::resync]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 527:4-530:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 532:4-535:5 -/
 def ppu.display.timing.LcdTiming.resync
   (self : ppu.display.timing.LcdTiming) (line : Std.U8) :
   Result ppu.display.timing.LcdTiming
@@ -3399,7 +3421,7 @@ def ppu.display.timing.LcdTiming.resync
   ok { self with line, h := i }
 
 /-- [ceres_core::ppu::display::timing::check::ceres_unit]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 299:0-306:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 341:0-348:1 -/
 def ppu.display.timing.check.ceres_unit
   (t : ppu.display.timing.LcdTiming) (ahead : Bool) :
   Result (Bool × ppu.display.timing.LcdTiming × Bool)
@@ -3412,8 +3434,37 @@ def ppu.display.timing.check.ceres_unit
     ok (rose, t2, false)
   else ok (rose, t1, ahead)
 
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::mode3_end]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 526:4-528:5 -/
+def ppu.display.timing.LcdTiming.mode3_end
+  (self : ppu.display.timing.LcdTiming) :
+  Result ppu.display.timing.LcdTiming
+  := do
+  ok { self with hblank_pending := true }
+
+/-- [ceres_core::ppu::display::timing::check::ends_at]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 476:0-481:1 -/
+def ppu.display.timing.check.ends_at
+  (mode3_end : Option Std.U8) (k : Std.U8) : Result Bool := do
+  match mode3_end with
+  | none => ok false
+  | some «end» => ok («end» = k)
+
+/-- [ceres_core::ppu::display::timing::check::ceres_half_dot]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 354:0-359:1 -/
+def ppu.display.timing.check.ceres_half_dot
+  (t : ppu.display.timing.LcdTiming) (ahead : Bool) (mode3_end : Option Std.U8)
+  (k : Std.U8) :
+  Result (Bool × ppu.display.timing.LcdTiming × Bool)
+  := do
+  let b ← ppu.display.timing.check.ends_at mode3_end k
+  let t1 ← if b
+             then ppu.display.timing.LcdTiming.mode3_end t
+             else ok t
+  ppu.display.timing.check.ceres_unit t1 ahead
+
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_lyc]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 630:4-640:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 635:4-645:5 -/
 def ppu.display.timing.LcdTiming.write_lyc
   (self : ppu.display.timing.LcdTiming) (val : Std.U8)
   (delays : ppu.display.timing.Delays) :
@@ -3431,7 +3482,7 @@ def ppu.display.timing.LcdTiming.write_lyc
   else ok { self with lyc := val, lyc_pending := none }
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 606:4-625:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 611:4-630:5 -/
 def ppu.display.timing.LcdTiming.write_stat
   (self : ppu.display.timing.LcdTiming) (val : Std.U8)
   (delays : ppu.display.timing.Delays) :
@@ -3539,7 +3590,7 @@ def ppu.display.timing.LcdTiming.read_mode
       else ok 0#u8
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 587:8-598:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 592:8-603:9 -/
 @[rust_loop_body]
 def ppu.display.timing.LcdTiming.read_stat_loop.body
   (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
@@ -3580,7 +3631,7 @@ def ppu.display.timing.LcdTiming.read_stat_loop.body
   else ok (done (lyc_flag, mode))
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 587:8-598:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 592:8-603:9 -/
 @[rust_loop]
 def ppu.display.timing.LcdTiming.read_stat_loop
   (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
@@ -3595,7 +3646,7 @@ def ppu.display.timing.LcdTiming.read_stat_loop
     (t, lyc_flag, mode, k)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 570:4-600:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 575:4-605:5 -/
 def ppu.display.timing.LcdTiming.read_stat
   (self : ppu.display.timing.LcdTiming) (stat : Std.U8)
   (delays : ppu.display.timing.Delays) (double_speed : Bool) :
@@ -3631,7 +3682,7 @@ def ppu.display.timing.LcdTiming.read_stat
     ok (enables ||| i2)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 553:8-557:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 558:8-562:9 -/
 @[rust_loop_body]
 def ppu.display.timing.LcdTiming.read_ly_loop.body
   (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
@@ -3647,7 +3698,7 @@ def ppu.display.timing.LcdTiming.read_ly_loop.body
   else ok (done (t, before))
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 553:8-557:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 558:8-562:9 -/
 @[rust_loop]
 def ppu.display.timing.LcdTiming.read_ly_loop
   (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
@@ -3660,7 +3711,7 @@ def ppu.display.timing.LcdTiming.read_ly_loop
     (t, before, k)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 547:4-564:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 552:4-569:5 -/
 def ppu.display.timing.LcdTiming.read_ly
   (self : ppu.display.timing.LcdTiming) (delays : ppu.display.timing.Delays) :
   Result Std.U8
@@ -3689,42 +3740,47 @@ def ppu.display.timing.DMG_DELAYS : ppu.display.timing.Delays :=
   }
 
 /-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 334:4-339:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 391:4-396:5 -/
 @[rust_loop_body]
 def ppu.display.timing.check.ceres_m_cycle_loop.body
-  (t : ppu.display.timing.LcdTiming) (ahead : Bool) (rose : Array Bool 4#usize)
-  (k : Std.Usize) :
+  (mode3_end : Option Std.U8) (t : ppu.display.timing.LcdTiming) (ahead : Bool)
+  (rose : Array Bool 4#usize) (k : Std.U8) :
   Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × (Array Bool
-    4#usize) × Std.Usize) (ppu.display.timing.LcdTiming × (Array Bool
-    4#usize)))
+    4#usize) × Std.U8) (ppu.display.timing.LcdTiming × (Array Bool 4#usize)))
   := do
-  if k < 4#usize
+  if k < 4#u8
   then
-    let (first, t1, ahead1) ← ppu.display.timing.check.ceres_unit t ahead
-    let (second, t2, ahead2) ← ppu.display.timing.check.ceres_unit t1 ahead1
-    let a ← Array.update rose k (first || second)
-    let k1 ← k + 1#usize
+    let i ← 2#u8 * k
+    let (first, t1, ahead1) ←
+      ppu.display.timing.check.ceres_half_dot t ahead mode3_end i
+    let i1 ← i + 1#u8
+    let (second, t2, ahead2) ←
+      ppu.display.timing.check.ceres_half_dot t1 ahead1 mode3_end i1
+    let i2 ← lift (UScalar.cast .Usize k)
+    let a ← Array.update rose i2 (first || second)
+    let k1 ← k + 1#u8
     ok (cont (t2, ahead2, a, k1))
   else ok (done (t, rose))
 
 /-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 334:4-339:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 391:4-396:5 -/
 @[rust_loop]
 def ppu.display.timing.check.ceres_m_cycle_loop
-  (t : ppu.display.timing.LcdTiming) (ahead : Bool) (rose : Array Bool 4#usize)
-  (k : Std.Usize) :
+  (t : ppu.display.timing.LcdTiming) (mode3_end : Option Std.U8) (ahead : Bool)
+  (rose : Array Bool 4#usize) (k : Std.U8) :
   Result (ppu.display.timing.LcdTiming × (Array Bool 4#usize))
   := do
   loop
     (fun (t1, ahead1, rose1, k1) =>
-      ppu.display.timing.check.ceres_m_cycle_loop.body t1 ahead1 rose1 k1)
+      ppu.display.timing.check.ceres_m_cycle_loop.body mode3_end t1 ahead1
+      rose1 k1)
     (t, ahead, rose, k)
 
 /-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 311:0-342:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 364:0-399:1 -/
 def ppu.display.timing.check.ceres_m_cycle
   (t : ppu.display.timing.LcdTiming) (access : ppu.display.timing.check.Access)
-  :
+  (mode3_end : Option Std.U8) :
   Result (((Option Std.U8) × (Array Bool 4#usize)) ×
     ppu.display.timing.LcdTiming)
   := do
@@ -3763,35 +3819,91 @@ def ppu.display.timing.check.ceres_m_cycle
       ok (t2, at_access1, none)
   let rose := Array.repeat 4#usize false
   let (t2, rose1) ←
-    ppu.display.timing.check.ceres_m_cycle_loop t1 ahead rose 0#usize
+    ppu.display.timing.check.ceres_m_cycle_loop t1 mode3_end ahead rose 0#u8
   let b ← Array.index_usize rose1 0#usize
   let rose2 ← Array.update rose1 0#usize (b || at_access)
   ok ((read, rose2), t2)
 
-/-- [ceres_core::ppu::display::timing::check::net_edge]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 347:0-354:1 -/
-def ppu.display.timing.check.net_edge
+/-- [ceres_core::ppu::display::timing::check::net_mode0]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 402:0-404:1 -/
+def ppu.display.timing.check.net_mode0
+  (net : ppu.display.timing.check.Net) : Result Bool := do
+  ok (net.mode0 && (¬ net.lcd.mode1))
+
+/-- [ceres_core::ppu::display::timing::check::net_line_start]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 409:0-412:1 -/
+def ppu.display.timing.check.net_line_start
+  (lcd : ceres_netlist.lcd_timing.NetLcd) : Result Bool := do
+  let i ← lift (IScalar.cast_fromBool .I32 lcd.vena)
+  let i1 ← 4#i32 * i
+  let i2 ← lift (IScalar.cast_fromBool .I32 lcd.wuvu)
+  let i3 ← 2#i32 * i2
+  let i4 ← i1 + i3
+  let i5 ← lift (IScalar.cast_fromBool .I32 lcd.clk)
+  let phase ← i4 + i5
+  let i6 ← ppu.display.timing.LINE_RESET_H
+  let i7 ← ppu.display.timing.LINE_END_H
+  let i8 ← i6 - i7
+  ok ((lcd.vclk && (phase = i8)) && (lcd.ly != ppu.display.LINES))
+
+/-- [ceres_core::ppu::display::timing::check::net_edge_starts]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 418:0-422:1 -/
+def ppu.display.timing.check.net_edge_starts
   (net : ppu.display.timing.check.Net) :
+  Result ((Bool × Bool) × ppu.display.timing.check.Net)
+  := do
+  let mode0 ← ppu.display.timing.check.net_mode0 net
+  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
+  let (rose, nl) ← ceres_netlist.lcd_timing.NetLcd.held_edge net.lcd b mode0
+  ok ((rose, mode0), { net with lcd := nl })
+
+/-- [ceres_core::ppu::display::timing::check::net_edge_ends]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 428:0-442:1 -/
+def ppu.display.timing.check.net_edge_ends
+  (net : ppu.display.timing.check.Net) (mode0 : Bool) (level : Bool)
+  (mode3_ends : Bool) :
   Result (Bool × ppu.display.timing.check.Net)
   := do
-  let held ←
+  let reset ←
     ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
-  let (rose, nl) ←
-    ceres_netlist.lcd_timing.NetLcd.held_edge net.lcd held false
-  if held
-  then
-    let nl1 ← ceres_netlist.lcd_timing.NetLcd.reset nl
-    ok (rose, { net with lcd := nl1 })
-  else ok (rose, { net with lcd := nl })
+  let nl ←
+    if reset
+    then ceres_netlist.lcd_timing.NetLcd.reset net.lcd
+    else ok net.lcd
+  let b ← if mode3_ends
+            then ok true
+            else ok net.mode0
+  let b1 ← ppu.display.timing.check.net_line_start nl
+  let b2 ← if reset || b1
+             then ok false
+             else ok b
+  let after_reset ← ceres_netlist.lcd_timing.NetLcd.int_stat nl mode0
+  let b3 ←
+    ppu.display.timing.check.net_mode0 { net with lcd := nl, mode0 := b2 }
+  let after_render ← ceres_netlist.lcd_timing.NetLcd.int_stat nl b3
+  ok ((after_reset && (¬ level)) || (after_render && (¬ after_reset)),
+    { net with lcd := nl, mode0 := b2 })
+
+/-- [ceres_core::ppu::display::timing::check::net_edge]:
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 445:0-449:1 -/
+def ppu.display.timing.check.net_edge
+  (net : ppu.display.timing.check.Net) (mode3_ends : Bool) :
+  Result (Bool × ppu.display.timing.check.Net)
+  := do
+  let ((rose, mode0), net1) ← ppu.display.timing.check.net_edge_starts net
+  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net1.lcd mode0
+  let (b, net2) ←
+    ppu.display.timing.check.net_edge_ends net1 mode0 level mode3_ends
+  ok (rose || b, net2)
 
 /-- [ceres_core::ppu::display::timing::check::net_write]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 357:0-369:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 453:0-473:1 -/
 def ppu.display.timing.check.net_write
   (net : ceres_netlist.lcd_timing.NetLcd)
-  (access : ppu.display.timing.check.Access) (byte : Std.U8) :
-  Result (Bool × ceres_netlist.lcd_timing.NetLcd)
+  (access : ppu.display.timing.check.Access) (byte : Std.U8) (mode0 : Bool)
+  (level : Bool) :
+  Result (Bool × ceres_netlist.lcd_timing.NetLcd × Bool)
   := do
-  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net false
   let net1 ←
     match access with
     | ppu.display.timing.check.Access.None => ok net
@@ -3803,11 +3915,11 @@ def ppu.display.timing.check.net_write
     | ppu.display.timing.check.Access.WriteLyc _ =>
       ceres_netlist.lcd_timing.NetLcd.write net 65349#u16 byte
     | ppu.display.timing.check.Access.WriteLcdc _ => ok net
-  let b ← ceres_netlist.lcd_timing.NetLcd.int_stat net1 false
-  ok (b && (¬ level), net1)
+  let now ← ceres_netlist.lcd_timing.NetLcd.int_stat net1 mode0
+  ok (now && (¬ level), net1, now)
 
 /-- [ceres_core::ppu::display::timing::check::net_shown]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 372:0-382:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 484:0-494:1 -/
 def ppu.display.timing.check.net_shown
   (net : ceres_netlist.lcd_timing.NetLcd)
   (access : ppu.display.timing.check.Access) :
@@ -3831,7 +3943,7 @@ def ppu.display.timing.check.net_shown
   | ppu.display.timing.check.Access.WriteLcdc _ => ok none
 
 /-- [ceres_core::ppu::display::timing::check::and_bus]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 385:0-390:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 497:0-502:1 -/
 def ppu.display.timing.check.and_bus
   (a : Option Std.U8) (b : Option Std.U8) : Result (Option Std.U8) := do
   match a with
@@ -3843,123 +3955,120 @@ def ppu.display.timing.check.and_bus
                 ok (some i)
 
 /-- [ceres_core::ppu::display::timing::check::net_m_cycle]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 423:4-426:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 538:4-541:5 -/
 @[rust_loop_body]
 def ppu.display.timing.check.net_m_cycle_loop.body
-  (net : ppu.display.timing.check.Net) (rose : Array Bool 8#usize)
-  (k : Std.Usize) :
+  (mode3_end : Option Std.U8) (net : ppu.display.timing.check.Net)
+  (rose : Array Bool 8#usize) (k : Std.U8) :
   Result (ControlFlow (ppu.display.timing.check.Net × (Array Bool 8#usize) ×
-    Std.Usize) (ppu.display.timing.check.Net × (Array Bool 8#usize)))
+    Std.U8) (ppu.display.timing.check.Net × (Array Bool 8#usize)))
   := do
-  if k < 8#usize
+  if k < 8#u8
   then
-    let (b, net1) ← ppu.display.timing.check.net_edge net
-    let a ← Array.update rose k b
-    let k1 ← k + 1#usize
+    let b ← ppu.display.timing.check.ends_at mode3_end k
+    let (b1, net1) ← ppu.display.timing.check.net_edge net b
+    let i ← lift (UScalar.cast .Usize k)
+    let a ← Array.update rose i b1
+    let k1 ← k + 1#u8
     ok (cont (net1, a, k1))
   else ok (done (net, rose))
 
 /-- [ceres_core::ppu::display::timing::check::net_m_cycle]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 423:4-426:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 538:4-541:5 -/
 @[rust_loop]
 def ppu.display.timing.check.net_m_cycle_loop
-  (net : ppu.display.timing.check.Net) (rose : Array Bool 8#usize)
-  (k : Std.Usize) :
+  (net : ppu.display.timing.check.Net) (mode3_end : Option Std.U8)
+  (rose : Array Bool 8#usize) (k : Std.U8) :
   Result (ppu.display.timing.check.Net × (Array Bool 8#usize))
   := do
   loop
     (fun (net1, rose1, k1) => ppu.display.timing.check.net_m_cycle_loop.body
-      net1 rose1 k1)
+      mode3_end net1 rose1 k1)
     (net, rose, k)
 
 /-- [ceres_core::ppu::display::timing::check::net_m_cycle]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 398:0-428:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 511:0-543:1 -/
 def ppu.display.timing.check.net_m_cycle
   (net : ppu.display.timing.check.Net)
-  (access : ppu.display.timing.check.Access) :
+  (access : ppu.display.timing.check.Access) (mode3_end : Option Std.U8) :
   Result (((Option Std.U8) × (Array Bool 8#usize)) ×
     ppu.display.timing.check.Net)
   := do
   let rose := Array.repeat 8#usize false
-  let (b, net1) ← ppu.display.timing.check.net_edge net
-  let (_, index_mut_back) ← Array.index_mut_usize rose 0#usize
-  let (net2, rose1) ←
+  let ((edge_rose, mode0), net1) ←
+    ppu.display.timing.check.net_edge_starts net
+  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net1.lcd mode0
+  let (nl, nlc, level1, written) ←
     match access with
     | ppu.display.timing.check.Access.None =>
-      let a := index_mut_back b
-      ok (net1, a)
+      ok (net1.lcd, net1.control, level, false)
     | ppu.display.timing.check.Access.ReadStat =>
-      let a := index_mut_back b
-      ok (net1, a)
+      ok (net1.lcd, net1.control, level, false)
     | ppu.display.timing.check.Access.ReadLy =>
-      let a := index_mut_back b
-      ok (net1, a)
+      ok (net1.lcd, net1.control, level, false)
     | ppu.display.timing.check.Access.ReadLyc =>
-      let a := index_mut_back b
-      ok (net1, a)
+      ok (net1.lcd, net1.control, level, false)
     | ppu.display.timing.check.Access.WriteStat data =>
       do
-      let (glitch, nl) ←
-        ppu.display.timing.check.net_write net1.lcd access 255#u8
-      let (lands, nl1) ← ppu.display.timing.check.net_write nl access data
-      let rose2 := index_mut_back b
-      let b1 ← Array.index_usize rose2 0#usize
-      let a ← Array.update rose2 0#usize ((b1 || glitch) || lands)
-      ok ({ net1 with lcd := nl1 }, a)
+      let (glitch, nl1, level2) ←
+        ppu.display.timing.check.net_write net1.lcd access 255#u8 mode0 level
+      let (lands, nl2, level3) ←
+        ppu.display.timing.check.net_write nl1 access data mode0 level2
+      ok (nl2, net1.control, level3, glitch || lands)
     | ppu.display.timing.check.Access.WriteLyc data =>
       do
-      let (glitch, nl) ←
-        ppu.display.timing.check.net_write net1.lcd access 255#u8
-      let (lands, nl1) ← ppu.display.timing.check.net_write nl access data
-      let rose2 := index_mut_back b
-      let b1 ← Array.index_usize rose2 0#usize
-      let a ← Array.update rose2 0#usize ((b1 || glitch) || lands)
-      ok ({ net1 with lcd := nl1 }, a)
+      let (glitch, nl1, level2) ←
+        ppu.display.timing.check.net_write net1.lcd access 255#u8 mode0 level
+      let (lands, nl2, level3) ←
+        ppu.display.timing.check.net_write nl1 access data mode0 level2
+      ok (nl2, net1.control, level3, glitch || lands)
     | ppu.display.timing.check.Access.WriteLcdc data =>
       do
-      let nlc ←
+      let nlc1 ←
         ceres_netlist.lcd_control.NetLcdControl.settle net1.control false (some
           data)
-      let b1 ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset nlc false
-      let nl ←
-        if b1
-        then ceres_netlist.lcd_timing.NetLcd.reset net1.lcd
-        else ok net1.lcd
-      let a := index_mut_back b
-      ok (({ lcd := nl, control := nlc } : ppu.display.timing.check.Net), a)
+      ok (net1.lcd, nlc1, level, false)
+  let b ← ppu.display.timing.check.ends_at mode3_end 0#u8
+  let (b1, net2) ←
+    ppu.display.timing.check.net_edge_ends
+      { net1 with lcd := nl, control := nlc } mode0 level1 b
+  let rose1 ← Array.update rose 0#usize ((edge_rose || written) || b1)
   let bus ← ppu.display.timing.check.net_shown net2.lcd access
-  let (b1, net3) ← ppu.display.timing.check.net_edge net2
-  let rose2 ← Array.update rose1 1#usize b1
+  let b2 ← ppu.display.timing.check.ends_at mode3_end 1#u8
+  let (b3, net3) ← ppu.display.timing.check.net_edge net2 b2
+  let rose2 ← Array.update rose1 1#usize b3
   let o ← ppu.display.timing.check.net_shown net3.lcd access
   let bus1 ← ppu.display.timing.check.and_bus bus o
-  let (b2, net4) ← ppu.display.timing.check.net_edge net3
-  let rose3 ← Array.update rose2 2#usize b2
+  let b4 ← ppu.display.timing.check.ends_at mode3_end 2#u8
+  let (b5, net4) ← ppu.display.timing.check.net_edge net3 b4
+  let rose3 ← Array.update rose2 2#usize b5
   let o1 ← ppu.display.timing.check.net_shown net4.lcd access
   let bus2 ← ppu.display.timing.check.and_bus bus1 o1
-  let (b3, net5) ← ppu.display.timing.check.net_edge net4
-  let a ← Array.update rose3 3#usize b3
+  let b6 ← ppu.display.timing.check.ends_at mode3_end 3#u8
+  let (b7, net5) ← ppu.display.timing.check.net_edge net4 b6
+  let a ← Array.update rose3 3#usize b7
   let o2 ← ppu.display.timing.check.net_shown net5.lcd access
   let bus3 ← ppu.display.timing.check.and_bus bus2 o2
   let (net6, rose4) ←
-    ppu.display.timing.check.net_m_cycle_loop net5 a 4#usize
+    ppu.display.timing.check.net_m_cycle_loop net5 mode3_end a 4#u8
   ok ((bus3, rose4), net6)
 
 /-- [ceres_core::ppu::display::timing::check::step_agrees]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 439:0-482:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 554:0-616:1 -/
 def ppu.display.timing.check.step_agrees
   (net : ppu.display.timing.check.Net) (t : ppu.display.timing.LcdTiming)
-  (access : ppu.display.timing.check.Access) :
+  (access : ppu.display.timing.check.Access) (mode3_end : Option Std.U8) :
   Result Bool
   := do
   let b ← ppu.display.timing.check.related net t
-  let b1 ← ppu.display.timing.check.outside net access
+  let b1 ← ppu.display.timing.check.outside net access mode3_end
   if (¬ b) || b1
   then ok true
   else
     let ((net_read, net_rose), net1) ←
-      ppu.display.timing.check.net_m_cycle net access
+      ppu.display.timing.check.net_m_cycle net access mode3_end
     let ((ceres_read, ceres_rose), t1) ←
-      ppu.display.timing.check.ceres_m_cycle t access
+      ppu.display.timing.check.ceres_m_cycle t access mode3_end
     let b2 ← timing.check.same_read net_read ceres_read
     let b3 ← interrupts.check.same_stat net_rose ceres_rose
     let b4 ← ppu.display.timing.check.related net1 t1

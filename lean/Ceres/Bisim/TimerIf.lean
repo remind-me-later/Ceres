@@ -34,8 +34,10 @@ abbrev CeresIf := interrupts.Interrupts
 
 /-- An M-cycle's inputs on the netlist: an access to the timer, one to IF,
 one to the OAM DMA, the other sources' rises by phase, an access to the
-line timing, and the STAT line's rises by phase (which the line timing's
-step gives, `Ceres/Bisim/Lcd.lean`). -/
+line timing, the STAT line's rises by phase (which the line timing's
+step gives, `Ceres/Bisim/Lcd.lean`), and the half dot of the M-cycle in
+which mode 3 ends, if it does (the pixel pipeline's, which the line
+timing's HBlank source takes). -/
 structure NetIn where
   timer : ceres_netlist.timer.Access
   ifAccess : ceres_netlist.interrupts.Access
@@ -43,6 +45,7 @@ structure NetIn where
   rises : Array Std.U8 8#usize
   lcd : ppu.display.timing.check.Access
   stat : Array Bool 8#usize
+  mode3End : Option Std.U8
 
 /-- The same on ceres, which also takes the serial's DIV mask, and has the
 STAT line's rises by T-cycle. -/
@@ -54,10 +57,12 @@ structure CeresIn where
   rises : Array Std.U8 8#usize
   lcd : ppu.display.timing.check.Access
   stat : Array Bool 4#usize
+  mode3End : Option Std.U8
 
 def SameIn (i : NetIn) (j : CeresIn) : Prop :=
   i.timer = j.timer ∧ i.ifAccess = j.ifAccess ∧ i.dma = j.dma ∧ i.rises = j.rises ∧
-    i.lcd = j.lcd ∧ interrupts.check.same_stat i.stat j.stat = ok true
+    i.lcd = j.lcd ∧ interrupts.check.same_stat i.stat j.stat = ok true ∧
+    i.mode3End = j.mode3End
 
 /-! The timer: the read and the interrupt (the netlist's at the A edge;
 ceres's T-cycle, and whether a second came). -/
@@ -190,7 +195,7 @@ theorem if_steps (kani : KaniIf) :
   right
   obtain ⟨i, o⟩ := x
   obtain ⟨j, p⟩ := y
-  obtain ⟨⟨-, ha, -, hr, -, hst⟩, -, hsi, -⟩ := hxy
+  obtain ⟨⟨-, ha, -, hr, -, hst, -⟩, -, hsi, -⟩ := hxy
   have k := kani n c i.ifAccess i.rises o.2 p.2.1 i.stat j.stat
   unfold interrupts.check.step_agrees at k
   obtain ⟨b, hb, k⟩ := bind_eq_ok k

@@ -247,7 +247,7 @@ inductive memory.dma.DmaStep where
 | Pause : Option (Std.U16 × Std.U8) → memory.dma.DmaStep
 
 /-- [ceres_core::ppu::display::timing::check::Access]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 54:0-62:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 60:0-68:1 -/
 @[discriminant isize]
 inductive ppu.display.timing.check.Access where
 | None : ppu.display.timing.check.Access
@@ -259,10 +259,11 @@ inductive ppu.display.timing.check.Access where
 | WriteLcdc : Std.U8 → ppu.display.timing.check.Access
 
 /-- [ceres_core::ppu::display::timing::check::Net]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 66:0-69:1 -/
+    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 74:0-78:1 -/
 structure ppu.display.timing.check.Net where
   lcd : ceres_netlist.lcd_timing.NetLcd
   control : ceres_netlist.lcd_control.NetLcdControl
+  mode0 : Bool
 
 /-- [ceres_core::ppu::display::timing::Phases]
     Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 100:0-120:1 -/

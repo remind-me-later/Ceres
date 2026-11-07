@@ -7,9 +7,9 @@
 //! 4` (mod 8), where LY = LYC is sampled and nype follows vclk, and falls at `h
 //! = 0` (mod 8), where vclk follows LX; the line's end (vclk, ceres's
 //! `line_end`) rises at 904, so that LY changes there and VBlank at 908. The
-//! proof is a bisimulation: from any pair of states that `related` matches, a
-//! half dot raises the STAT interrupt's line on both sides or on neither, and
-//! leaves them related.
+//! proof is a bisimulation: from any pair of states that `related` matches,
+//! an M-cycle raises the STAT interrupt's line in the same T-cycles, as IF
+//! tells them apart, and leaves them related.
 //!
 //! The CPU's phases are the clock's edges: D is `h = 0` (mod 8), E is `h = 1`,
 //! H `h = 4`. Ceres makes its access after the half dot at `h = 0` (at
@@ -47,13 +47,21 @@
 //! nor an interrupt (`hdl/check/lcd_on_lyc0.asm` enters the handler at the
 //! same instruction on both).
 //!
-//! What it does not cover yet: STAT's mode bits, the HBlank source
-//! (render.vhd's mode 0: its enable is held off here), and the pixel
-//! pipeline's resyncs on the other lines (at `h = 893`, where ceres's clock
-//! already is, in the traces measured).
+//! The HBlank source: render's mode 0, which rises as mode 3 ends and falls
+//! at the scan's line start (`h = 906`), VBlank masking it, is ceres's
+//! HBlank gate, which the pixel pipeline raises (`Ppu::timing_mode3_end`, a
+//! half dot before) and the line timing clears at `h = 906`. Where mode 3
+//! ends is an input of the step, the same on both sides
+//! (`mapping-mode3-end`): an even half dot of a visible line, before the
+//! line's end. A sprite at X 167 makes render's mode 0 pulse, which the
+//! input does not give (the fact `sprite-at-167-mode-0-pulse`).
+//!
+//! What it does not cover yet: STAT's mode bits (the scan's and the
+//! pixels'), the pixel pipeline itself, and its resyncs on the other lines
+//! (at `h = 893`, where ceres's clock already is, in the traces measured).
 
 use super::{
-    DMG_PHASES, LAST_LINE, LINE_END_H, LINE_H, LcdTiming, PendingWrite, Phases, VBLANK_H,
+    DMG_PHASES, LAST_LINE, LINE_END_H, LINE_H, LcdTiming, PendingWrite, Phases,
     check::{Access, Net, ly_at, off_related, related_at, step_agrees, vblank_at},
 };
 use crate::ppu::STAT_IF_LYC_B;
@@ -90,83 +98,7 @@ fn any_ceres() -> LcdTiming {
     t
 }
 
-/// The netlist's flip-flops for ceres's state; the LCD's pins' flip-flops,
-/// which nothing here reads, are left free.
-fn net_for(t: &LcdTiming) -> NetLcd {
-    NetLcd {
-        first_line: kani::any(),
-        ..net_at(t, t.line, t.h)
-    }
-}
-
-/// The netlist's flip-flops at half dot `h` of `line`, with ceres's LY,
-/// VBlank, LYC, LY = LYC flag and enables.
-fn net_at(t: &LcdTiming, line: u8, h: i32) -> NetLcd {
-    let phase = h & 7;
-    NetLcd {
-        clk: h & 1 != 0,
-        wuvu: h & 2 != 0,
-        vena: phase >= 4,
-        wosu: (h + 1) & 2 != 0,
-        lx: if (4..LINE_END_H).contains(&h) {
-            ((h - 4) / 8 + 1) as u8
-        } else {
-            0
-        },
-        vclk: h >= LINE_END_H,
-        nype: h >= VBLANK_H || h < 4,
-        ly: t.ly,
-        line_153: (line == LAST_LINE && h >= 4) || (line == 0 && h < 4),
-        first_line: (line == 0 && h >= 4) || (line == 1 && h < 4),
-        mode1: t.vblank,
-        frame: kani::any(),
-        line_parity: kani::any(),
-        cpg_lx: kani::any(),
-        lyc: t.lyc,
-        lyc_match: t.ly_match,
-        stat_enable: t.enables,
-    }
-}
-
-/// The states match at any half dot (`check::related_at`, both clocks at
-/// ceres's).
-fn related(net: &NetLcd, t: &LcdTiming) -> bool {
-    related_at(*net, t, t.line, t.h)
-}
-
-/// A half dot of a running LCD: the same rise of the STAT interrupt's line
-/// on both sides, and related states after it.
-// @assumes transcription-lcd
-// @assumes mapping-half-dot
-// @assumes resync-only-in-line-0
-// @assumes hblank-source-off
-#[kani::proof]
-fn netlist_lcd_half_dot() {
-    let mut t = any_ceres();
-    let mut net = net_for(&t);
-    kani::assume(related(&net, &t));
-    let ceres_rose = t.unit();
-    let net_rose = net.edge(false);
-    assert!(
-        ceres_rose == net_rose,
-        "the interrupt's line rises on one side only"
-    );
-    assert!(related(&net, &t), "the states part");
-    kani::cover!(
-        ceres_rose && t.h == VBLANK_H,
-        "the line rises as VBlank starts"
-    );
-    kani::cover!(
-        ceres_rose && t.h == LINE_END_H,
-        "the line rises at the line's end"
-    );
-    kani::cover!(
-        ceres_rose && t.h & 7 == 4 && t.h != VBLANK_H,
-        "LY = LYC raises the line"
-    );
-}
-
-/// Any access to STAT, LY or LYC.
+/// Any access to STAT, LY, LYC or LCDC.
 fn any_access() -> Access {
     match kani::any::<u8>() % 7 {
         0 => Access::None,
@@ -248,9 +180,10 @@ fn any_net_lcd() -> NetLcd {
 
 /// An M-cycle with any access to STAT, LY, LYC or LCDC, from every related
 /// pair (`check::step_agrees`): the LCD on, off, or in line 0 after it was
-/// turned on, with ceres's clock ahead until the resync. The same byte
-/// read, the same rises of the interrupt's line in the T-cycles IF tells
-/// apart, and related states after it. Within a T-cycle, an LYC write
+/// turned on, with ceres's clock ahead until the resync; and mode 3 ending
+/// at any half dot, render's mode 0 the HBlank source. The same byte read,
+/// the same rises of the interrupt's line in the T-cycles IF tells apart,
+/// and related states after it. Within a T-cycle, an LYC write
 /// raises ceres's line a half dot before the netlist's sample at H:
 /// ceres's comparison takes the new LYC at once.
 // @assumes transcription-lcd
@@ -260,7 +193,7 @@ fn any_net_lcd() -> NetLcd {
 // @assumes mapping-lcdc-write
 // @assumes resync-only-in-line-0
 // @assumes if-sees-rises-by-t-cycle
-// @assumes hblank-source-off
+// @assumes mapping-mode3-end
 // @assumes lcd-on-lyc0-invisible
 // @discharges lcd-step-agrees
 #[kani::proof]
@@ -269,8 +202,14 @@ fn netlist_lcd_access() {
     let net = Net {
         lcd: any_net_lcd(),
         control: NetLcdControl { lcdc: kani::any() },
+        mode0: kani::any(),
     };
-    assert!(step_agrees(net, any_lcd(), any_access()));
+    let mode3_end = if kani::any() {
+        Some(kani::any::<u8>() % 8)
+    } else {
+        None
+    };
+    assert!(step_agrees(net, any_lcd(), any_access(), mode3_end));
 }
 
 /// A DMG's LCD that is off, with any LYC, LY = LYC flag and enables but
