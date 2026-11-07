@@ -1,31 +1,29 @@
 //! Kani proofs that join the blocks' proofs against the netlist
-//! (`cargo kani -p ceres-core --harness netlist_timer_and_if`).
+//! (`cargo kani -p ceres-core --harness netlist_timer_and_if`), and that
+//! ceres's M-cycle of the two is the blocks' steps in sequence
+//! (`--harness ceres_timer_and_if_in_sequence`).
 //!
 //! Each block's proof leaves what comes from the other blocks free, and
-//! cuts the M-cycle where it suits it: the timer's
-//! (`timing/netlist_proofs.rs`) at the start of phase B, after the A edge,
-//! IF's (`interrupts/netlist_proofs.rs`) at the start of E, where ceres's
-//! M-cycle begins, with every source's rise free and each phase standing
-//! for one of ceres's T-cycles.
+//! cuts the M-cycle at the start of E, where ceres's begins: the timer's
+//! (`timing::check`) and IF's (`interrupts::check`), with every source's
+//! rise free and each phase standing for one of ceres's T-cycles.
 //!
 //! Joined, the timer's interrupt is no longer free. On the netlist the timer
 //! raises it at the A edge and IF sees it rise in phase A; on ceres the
-//! timer requests it in IF in a T-cycle of its own, as the machine does. The
-//! proof is a bisimulation of the two blocks together, cut at E: from any
-//! pair of states that the two proofs relate, an M-cycle with any access to
-//! the timer or to IF, and any rises of the other sources, gives the same
-//! reads and the same interrupt taken, and leaves the pair related. It also
-//! shows that the timer does nothing in B to D, so that its cut can move
-//! from B to E.
+//! timer requests it in IF in a T-cycle of its own, as the machine does
+//! (`check::ceres_m_cycle_joint`). `netlist_timer_and_if` proves the two
+//! blocks together: from any pair of states that the two proofs relate, an
+//! M-cycle with any access to the timer or to IF, and any rises of the
+//! other sources, gives the same reads and the same interrupt taken, and
+//! leaves the pair related. Lean (`lean/`) proves the same from the blocks'
+//! steps, wired together, and `ceres_timer_and_if_in_sequence`.
 
 use crate::{
-    interrupts::{
-        Interrupts,
-        netlist_proofs::{self as if_proof, A, NetIf, TIMER, ceres_boundary, lowest, requests},
-    },
+    check::{JointHost, ceres_m_cycle_joint, in_sequence},
+    interrupts::netlist_proofs::{self as if_proof, A, NetIf, TIMER, any_ints},
     timing::{
-        check::{ceres_access, known_difference, related},
-        netlist_proofs::{self as timer_proof, DmgHost, ceres_t_cycle},
+        check::{known_difference, related},
+        netlist_proofs::{self as timer_proof, any_clock},
     },
 };
 
@@ -41,19 +39,16 @@ use crate::{
 #[kani::unwind(9)]
 fn netlist_timer_and_if() {
     let mut net = timer_proof::any_net_timer();
-    let mut clock = timer_proof::any_clock();
+    let mut clock = any_clock();
     kani::assume(related(&net, &clock));
     let mut net_if = NetIf {
         flags: kani::any::<u8>() & crate::interrupts::INT_MASK,
         ie: kani::any(),
     };
-    let mut host = DmgHost {
-        serial_div_mask: kani::any(),
-        timer_interrupts: 0,
-        ints: Interrupts::default(),
-    };
-    host.ints.write_if(net_if.flags);
-    host.ints.write_ie(net_if.ie);
+    let mut ints = crate::interrupts::Interrupts::default();
+    ints.write_if(net_if.flags);
+    ints.write_ie(net_if.ie);
+    let mut host = JointHost::new(kani::any(), ints);
 
     // One access, to one block or the other.
     let on_timer: bool = kani::any();
@@ -74,29 +69,16 @@ fn netlist_timer_and_if() {
         *rise &= !TIMER;
     }
 
-    // The netlist: B to D change nothing, so the timer's M-cycle, cut at B,
-    // is the one cut at E; its interrupt rises at the A edge.
-    assert!(
-        net.quiet_until_e(timer_access),
-        "the timer changes in B to D"
-    );
+    // The netlist: the timer's interrupt rises at the A edge.
     let (net_timer_read, net_irq) = net.m_cycle(timer_access);
+    let mut net_rises = rises;
     if net_irq {
-        rises[A] |= TIMER;
+        net_rises[A] |= TIMER;
     }
-    let (net_if_read, net_taken) = net_if.m_cycle(if_access, rises);
+    let (net_if_read, net_taken) = net_if.m_cycle(if_access, net_rises);
 
-    // Ceres: the accesses at the boundary, then four T-cycles, in each of
-    // which the timer runs, then IF takes the other requests, the write and
-    // the acknowledge.
-    let ceres_timer_read = ceres_access(&mut clock, &mut host, timer_access);
-    let (ceres_if_read, queue) = ceres_boundary(&host.ints, if_access);
-    let ceres_taken = matches!(if_access, if_proof::Access::Entry).then_some(lowest(queue));
-    let other = requests(rises);
-    for (t, &request) in other.iter().enumerate() {
-        ceres_t_cycle(&mut clock, &mut host);
-        if_proof::ceres_t_cycle(&mut host.ints, if_access, t, request, queue);
-    }
+    let (ceres_timer_read, ceres_if_read, ceres_taken) =
+        ceres_m_cycle_joint(&mut clock, &mut host, timer_access, if_access, rises);
 
     assert!(
         net_timer_read == ceres_timer_read,
@@ -105,7 +87,7 @@ fn netlist_timer_and_if() {
     assert!(net_if_read == ceres_if_read, "IF's read differs");
     assert!(net_taken == ceres_taken, "the interrupt taken differs");
     assert!(
-        net_if.flags == host.ints.read_if() & crate::interrupts::INT_MASK,
+        net_if.flags == host.ints().read_if() & crate::interrupts::INT_MASK,
         "IF parts"
     );
     assert!(related(&net, &clock), "the timers part");
@@ -118,4 +100,24 @@ fn netlist_timer_and_if() {
         net_irq && matches!(if_access, if_proof::Access::Entry) && net_taken == Some(TIMER),
         "the timer's interrupt rises again as the entry takes it"
     );
+}
+
+/// Ceres's M-cycle of the timer and IF, T-cycle by T-cycle, is the timer's
+/// step and then IF's, from every state the timer's relation allows and
+/// with every input.
+// @discharges blocks-in-sequence
+#[kani::proof]
+#[kani::unwind(9)]
+fn ceres_timer_and_if_in_sequence() {
+    assert!(in_sequence(
+        timer_proof::any_net_timer(),
+        any_clock(),
+        any_clock(),
+        any_ints(),
+        any_ints(),
+        timer_proof::any_access(),
+        kani::any(),
+        if_proof::any_access(),
+        kani::any()
+    ));
 }

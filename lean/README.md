@@ -12,28 +12,29 @@ Each block's step is one Rust function in ceres-core, `step_agrees`
 from a pair of states that `related` matches (ceres's and the netlist's
 transcription, `ceres-netlist`), an M-cycle with any input gives the same
 outputs on both sides and leaves the pair related, unless it is a known
-difference (a fact of `doc/facts.toml`). Kani proves it true for every
-argument, every field of both states free (`netlist_timer_bisimulation`,
-`netlist_if_bisimulation`); Aeneas translates the same function to Lean
-(`Ceres/Gen`), where that is the hypothesis (`KaniTimer`, `KaniIf`).
+difference (a fact of `doc/facts.toml`). Both blocks' netlist M-cycles are
+cut at the start of E, where ceres's begins. Kani proves each step true for
+every argument, every field of both states free
+(`netlist_timer_bisimulation`, `netlist_if_bisimulation`), and also
+`check::in_sequence` (`ceres-core/src/check.rs`,
+`ceres_timer_and_if_in_sequence`): ceres's M-cycle of the two blocks, run
+T-cycle by T-cycle as ceres runs them, is the timer's step and then IF's.
+Aeneas translates the same functions to Lean (`Ceres/Gen`), where those are
+the hypotheses (`KaniTimer`, `KaniIf`, `KaniSeq`).
 
 - `Ceres/Bisim/Compose.lean`: `Agree`, the greatest relation such that,
   for related inputs, both steps succeed with related outputs and states
-  that agree again (a coinductive predicate), and `agree_wire`: if block A
-  agrees, and block B agrees on the inputs A's related outputs give it, A
-  wired into B agrees.
-- `Ceres/Bisim/TimerIf.lean`: the timer and IF each agree from any related
-  states, and so does the pair, the timer's interrupt wired into IF
-  (`timer_and_if_agree`).
+  that agree again (a coinductive predicate); `Steps`, one step from the
+  states an invariant relates, as Kani proves it; `Steps.agree` (the
+  coinduction), `Steps.wire` (block A's output wired into block B's input)
+  and `Steps.map_cer` (ceres's side replaced by a step that does the same).
+- `Ceres/Bisim/TimerIf.lean`: the timer's and IF's steps, wired together,
+  carried over to ceres's interleaved M-cycle (`ceresJoint`); from related
+  states, every M-cycle gives the same timer read, IF read and interrupt
+  taken (`timer_and_if_agree`).
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).
-
-What the theorems rest on is in `doc/assumptions.toml`, as for the Kani
-harnesses: each theorem names its assumptions with `@assumes` tags, and
-`hdl/knowledge.sh assumptions` follows them through the harnesses
-(`hdl/knowledge.sh open-assumptions` lists the open ones). Beyond those,
-the proofs trust Lean, Kani, and the translation by Charon and Aeneas.
 
 ## Building
 

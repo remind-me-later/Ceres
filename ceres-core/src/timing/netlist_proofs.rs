@@ -2,53 +2,8 @@
 //! (`cargo kani -p ceres-core --harness netlist`): `check::step_agrees`,
 //! from every pair of states.
 
-use super::{
-    check::step_agrees,
-    timer::{Clock, TimerHost},
-};
-use crate::interrupts::Interrupts;
+use super::{check::step_agrees, timer::Clock};
 pub(crate) use ceres_netlist::timer::{Access, NetTimer, Reg};
-
-/// A DMG in single speed that counts the timer interrupts, and requests them
-/// in IF as the machine does.
-pub(crate) struct DmgHost {
-    pub(crate) serial_div_mask: u16,
-    pub(crate) timer_interrupts: u32,
-    pub(crate) ints: Interrupts,
-}
-
-impl TimerHost for DmgHost {
-    fn is_cgb_hardware(&self) -> bool {
-        false
-    }
-
-    fn is_cgb_mode(&self) -> bool {
-        false
-    }
-
-    fn double_speed(&self) -> bool {
-        false
-    }
-
-    fn request_timer_interrupt(&mut self) {
-        self.timer_interrupts += 1;
-        self.ints.request_timer();
-    }
-
-    fn serial_div_mask(&self) -> u16 {
-        self.serial_div_mask
-    }
-
-    fn serial_clock_edge(&mut self) {}
-
-    fn apu_frame_sequencer_step(&mut self, _: &Clock) {}
-
-    fn apu_envelopes_armed(&mut self) {}
-
-    fn apu_delayed_envelope_tick(&mut self, _: &Clock) {}
-
-    fn apu_m_cycle(&mut self, _: &Clock) {}
-}
 
 fn any_reg() -> Reg {
     match kani::any::<u8>() & 3 {
@@ -65,11 +20,6 @@ pub(crate) fn any_access() -> Access {
         1 => Access::Read(any_reg()),
         _ => Access::Write(any_reg(), kani::any()),
     }
-}
-
-/// Ceres's T-cycle.
-pub(crate) fn ceres_t_cycle(clock: &mut Clock, host: &mut DmgHost) {
-    clock.run(host, 1);
 }
 
 /// Any netlist timer: every flip-flop free, so that a proof from it holds

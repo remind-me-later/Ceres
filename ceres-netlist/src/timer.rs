@@ -219,34 +219,25 @@ impl NetTimer {
         }
     }
 
-    /// An M-cycle: phases B to H with the access, then the next A edge.
-    /// Returns what a read reads and whether the interrupt was requested.
-    pub fn m_cycle(&mut self, access: Access) -> (Option<u8>, bool) {
-        let mut phase = Phase::B;
-        for _ in 0..7 {
-            self.phase(phase, access);
-            phase = phase.next();
-        }
+    /// An M-cycle cut where ceres's begins, and IF's: E to H with the
+    /// access, the read (in H), the A edge, where the interrupt rises, then B
+    /// to D, which no access reaches (a write latches in E to G). Returns
+    /// what a read reads and whether the interrupt was requested.
+    pub const fn m_cycle(&mut self, access: Access) -> (Option<u8>, bool) {
+        self.phase(Phase::E, access);
+        self.phase(Phase::F, access);
+        self.phase(Phase::G, access);
+        self.phase(Phase::H, access);
         let read = match access {
             Access::Read(reg) => Some(self.read(reg)),
-            _ => None,
+            Access::None | Access::Write(..) => None,
         };
         let before = self.int_timer;
         self.edge_a();
-        (read, !before & self.int_timer)
-    }
-
-    /// Whether phases B to D leave the timer as it is: then the M-cycle can
-    /// as well be cut at the start of E, where ceres's begins, as at the
-    /// start of B.
-    #[must_use]
-    pub fn quiet_until_e(&self, access: Access) -> bool {
-        let mut net = *self;
-        let mut phase = Phase::B;
-        for _ in 0..3 {
-            net.phase(phase, access);
-            phase = phase.next();
-        }
-        net == *self
+        let rose = !before & self.int_timer;
+        self.phase(Phase::B, Access::None);
+        self.phase(Phase::C, Access::None);
+        self.phase(Phase::D, Access::None);
+        (read, rose)
     }
 }

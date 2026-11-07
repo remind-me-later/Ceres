@@ -14,7 +14,8 @@
 //! T-cycles; the netlist's A edge comes in the third or the fourth (the
 //! divider counts in the fourth, the interrupt in the third), so at an
 //! M-cycle boundary ceres's T-cycle counter is four times the netlist's
-//! M-cycle counter.
+//! M-cycle counter. The netlist's M-cycle is cut where ceres's begins, at
+//! the start of E (`NetTimer::m_cycle`), as IF's is.
 //!
 //! Written as Aeneas takes it, as ceres-netlist is (see its crate
 //! documentation): booleans combine with `&` and `|`, and `Option`s are
@@ -31,13 +32,23 @@
     reason = "Aeneas (Lean) takes this module: a lazy && or || is a branch, and its symbolic execution forks on every one"
 )]
 
-use super::timer::{Clock, TimerHost};
+use super::timer::Clock;
+pub(crate) use super::timer::TimerHost;
 use ceres_netlist::timer::{Access, NetTimer, Reg};
 
 /// A DMG in single speed that counts the timer's interrupt requests.
 pub(crate) struct CheckHost {
     serial_div_mask: u16,
     timer_interrupts: u32,
+}
+
+impl CheckHost {
+    pub(crate) const fn new(serial_div_mask: u16) -> Self {
+        Self {
+            serial_div_mask,
+            timer_interrupts: 0,
+        }
+    }
 }
 
 impl TimerHost for CheckHost {
@@ -150,6 +161,28 @@ pub(crate) const fn same_interrupt(net: bool, ceres: Option<u8>) -> bool {
     }
 }
 
+/// Two ceres timers alike, field by field (`Clock` has no `PartialEq`).
+pub(crate) const fn same_clock(a: &Clock, b: &Clock) -> bool {
+    let late_bit = match (a.apu_late_bit, b.apu_late_bit) {
+        (Some(x), Some(y)) => x == y,
+        (None, None) => true,
+        _ => false,
+    };
+    (a.div == b.div)
+        & (a.tac == b.tac)
+        & (a.tima == b.tima)
+        & (a.tma == b.tma)
+        & (a.tima_reload_pending == b.tima_reload_pending)
+        & (a.tima_irq_countdown == b.tima_irq_countdown)
+        & (a.div_cycles == b.div_cycles)
+        & (a.div_state == b.div_state)
+        & (a.stopped == b.stopped)
+        & (a.during_div_write == b.during_div_write)
+        & (a.apu_delay == b.apu_delay)
+        & late_bit
+        & (a.apu_odd == b.apu_odd)
+}
+
 /// Two reads alike (Aeneas does not model `Option`'s equality).
 pub(crate) const fn same_read(a: Option<u8>, b: Option<u8>) -> bool {
     match (a, b) {
@@ -246,10 +279,7 @@ pub(crate) fn step_agrees(
     if !related(&net, &clock) | known_difference(&net, access) {
         return true;
     }
-    let mut host = CheckHost {
-        serial_div_mask,
-        timer_interrupts: 0,
-    };
+    let mut host = CheckHost::new(serial_div_mask);
     #[cfg(kani)]
     let (reloading, tma) = (net.int_timer, net.tma);
     let (net_read, net_irq) = net.m_cycle(access);

@@ -6,6 +6,8 @@ mod bootrom;
 mod cartridge;
 #[cfg(feature = "game_genie")]
 mod cheats;
+#[cfg(any(kani, feature = "check"))]
+mod check;
 mod cpu_bus;
 #[cfg(feature = "debug")]
 mod debug;

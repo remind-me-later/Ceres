@@ -34,6 +34,11 @@ pub(crate) const fn related(net: NetIf, ints: &Interrupts) -> bool {
     (net.flags & !INT_MASK == 0) & (ints.ifr == net.flags) & (ints.ie == net.ie)
 }
 
+/// Two IFs alike, IE and IF.
+pub(crate) const fn same_ints(a: &Interrupts, b: &Interrupts) -> bool {
+    (a.ie == b.ie) & (a.ifr == b.ifr)
+}
+
 /// The requests, by ceres's T-cycle, that the netlist's rises by phase
 /// stand for.
 pub(crate) const fn requests(rises: [u8; 8]) -> [u8; 4] {

@@ -1,8 +1,8 @@
 #!/bin/sh
-# Translates the steps that ceres-core's Kani proofs prove for every
-# argument, timing::check::step_agrees and interrupts::check::step_agrees,
-# with what they call (ceres-netlist's transcriptions included), to Lean:
-# Ceres/Gen.
+# Translates what ceres-core's Kani proofs prove for every argument,
+# timing::check::step_agrees, interrupts::check::step_agrees and
+# check::in_sequence, with what they call (ceres-netlist's transcriptions
+# included), to Lean: Ceres/Gen.
 #
 #   translate.sh         write Ceres/Gen
 #   translate.sh check   translate into a temporary folder and compare it
@@ -33,6 +33,7 @@ cd "$ROOT"
 CARGO_TARGET_DIR=$ROOT/target/charon "$CHARON" cargo --preset=aeneas \
 	--start-from crate::timing::check::step_agrees \
 	--start-from crate::interrupts::check::step_agrees \
+	--start-from crate::check::in_sequence \
 	--include ceres_netlist \
 	--dest-file "$work/ceres.llbc" -- -p ceres-core --features check >"$work/charon.log" 2>&1 || {
 	tail -n 30 "$work/charon.log" >&2

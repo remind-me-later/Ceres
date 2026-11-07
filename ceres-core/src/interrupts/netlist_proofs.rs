@@ -22,9 +22,17 @@
 //! read, the same interrupt taken, and equal IF after (`check::step_agrees`,
 //! which also takes the timer's interrupt).
 
-pub(crate) use super::check::{ceres_boundary, ceres_t_cycle, requests};
 use super::{Interrupts, check::step_agrees};
-pub(crate) use ceres_netlist::interrupts::{A, Access, NetIf, TIMER, lowest};
+pub(crate) use ceres_netlist::interrupts::{A, Access, NetIf, TIMER};
+
+/// Any IF and IE, every bit free.
+pub(crate) fn any_ints() -> Interrupts {
+    Interrupts {
+        ie: kani::any(),
+        ifr: kani::any(),
+        ..Interrupts::default()
+    }
+}
 
 pub(crate) fn any_access() -> Access {
     match kani::any::<u8>() & 3 {
@@ -50,14 +58,9 @@ fn netlist_if_bisimulation() {
         flags: kani::any(),
         ie: kani::any(),
     };
-    let ints = Interrupts {
-        ie: kani::any(),
-        ifr: kani::any(),
-        ..Interrupts::default()
-    };
     assert!(step_agrees(
         net,
-        ints,
+        any_ints(),
         any_access(),
         kani::any(),
         kani::any(),

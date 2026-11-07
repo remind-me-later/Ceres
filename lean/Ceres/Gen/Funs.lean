@@ -21,23 +21,6 @@ set_option maxRecDepth 2048
 
 namespace ceres_core
 
-/-- [ceres_netlist::clocks::{ceres_netlist::clocks::Phase}::next]:
-    Source: 'ceres-netlist/src/clocks.rs', lines 35:4-35:35
-    Name pattern: [ceres_netlist::clocks::{ceres_netlist::clocks::Phase}::next]
-    Visibility: public -/
-@[rust_fun "ceres_netlist::clocks::{ceres_netlist::clocks::Phase}::next"]
-def ceres_netlist.clocks.Phase.next
-  (self : ceres_netlist.clocks.Phase) : Result ceres_netlist.clocks.Phase := do
-  match self with
-  | ceres_netlist.clocks.Phase.A => ok ceres_netlist.clocks.Phase.B
-  | ceres_netlist.clocks.Phase.B => ok ceres_netlist.clocks.Phase.C
-  | ceres_netlist.clocks.Phase.C => ok ceres_netlist.clocks.Phase.D
-  | ceres_netlist.clocks.Phase.D => ok ceres_netlist.clocks.Phase.E
-  | ceres_netlist.clocks.Phase.E => ok ceres_netlist.clocks.Phase.F
-  | ceres_netlist.clocks.Phase.F => ok ceres_netlist.clocks.Phase.G
-  | ceres_netlist.clocks.Phase.G => ok ceres_netlist.clocks.Phase.H
-  | ceres_netlist.clocks.Phase.H => ok ceres_netlist.clocks.Phase.A
-
 /-- [ceres_netlist::interrupts::INT_MASK]
     Source: 'ceres-netlist/src/interrupts.rs', lines 18:0-18:18
     Name pattern: [ceres_netlist::interrupts::INT_MASK] -/
@@ -508,46 +491,8 @@ def ceres_netlist.timer.NetTimer.read
   | ceres_netlist.timer.Reg.Tma => ok self.tma
   | ceres_netlist.timer.Reg.Tac => ok self.tac
 
-/-- [ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle]: loop body 0:
-    Source: 'ceres-netlist/src/timer.rs', lines 226:8-229:9
-    Name pattern: [ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle]
-    Visibility: public -/
-@[rust_loop_body, rust_fun
-  "ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle"]
-def ceres_netlist.timer.NetTimer.m_cycle_loop.body
-  (access : ceres_netlist.timer.Access) (iter : core.ops.range.Range Std.I32)
-  (self : ceres_netlist.timer.NetTimer) (phase : ceres_netlist.clocks.Phase) :
-  Result (ControlFlow ((core.ops.range.Range Std.I32) ×
-    ceres_netlist.timer.NetTimer × ceres_netlist.clocks.Phase)
-    ceres_netlist.timer.NetTimer)
-  := do
-  let (o, iter1) ←
-    core.iter.range.IteratorRange.next core.iter.range.StepI32 iter
-  match o with
-  | none => ok (done self)
-  | some _ =>
-    let self1 ← ceres_netlist.timer.NetTimer.phase self phase access
-    let phase1 ← ceres_netlist.clocks.Phase.next phase
-    ok (cont (iter1, self1, phase1))
-
-/-- [ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle]: loop 0:
-    Source: 'ceres-netlist/src/timer.rs', lines 226:8-229:9
-    Name pattern: [ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle]
-    Visibility: public -/
-@[rust_loop, rust_fun
-  "ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle"]
-def ceres_netlist.timer.NetTimer.m_cycle_loop
-  (iter : core.ops.range.Range Std.I32) (self : ceres_netlist.timer.NetTimer)
-  (access : ceres_netlist.timer.Access) (phase : ceres_netlist.clocks.Phase) :
-  Result ceres_netlist.timer.NetTimer
-  := do
-  loop
-    (fun (iter1, self1, phase1) =>
-      ceres_netlist.timer.NetTimer.m_cycle_loop.body access iter1 self1 phase1)
-    (iter, self, phase)
-
 /-- [ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle]:
-    Source: 'ceres-netlist/src/timer.rs', lines 224:4-224:67
+    Source: 'ceres-netlist/src/timer.rs', lines 226:4-226:73
     Name pattern: [ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle]
     Visibility: public -/
 @[rust_fun "ceres_netlist::timer::{ceres_netlist::timer::NetTimer}::m_cycle"]
@@ -556,395 +501,151 @@ def ceres_netlist.timer.NetTimer.m_cycle
   Result (((Option Std.U8) × Bool) × ceres_netlist.timer.NetTimer)
   := do
   let self1 ←
-    ceres_netlist.timer.NetTimer.m_cycle_loop
-      { start := 0#i32, «end» := 7#i32 } self access
-      ceres_netlist.clocks.Phase.B
+    ceres_netlist.timer.NetTimer.phase self ceres_netlist.clocks.Phase.E access
+  let self2 ←
+    ceres_netlist.timer.NetTimer.phase self1 ceres_netlist.clocks.Phase.F
+      access
+  let self3 ←
+    ceres_netlist.timer.NetTimer.phase self2 ceres_netlist.clocks.Phase.G
+      access
+  let self4 ←
+    ceres_netlist.timer.NetTimer.phase self3 ceres_netlist.clocks.Phase.H
+      access
   let read ←
     match access with
     | ceres_netlist.timer.Access.None => ok none
     | ceres_netlist.timer.Access.Read reg =>
       do
-      let i ← ceres_netlist.timer.NetTimer.read self1 reg
+      let i ← ceres_netlist.timer.NetTimer.read self4 reg
       ok (some i)
     | ceres_netlist.timer.Access.Write _ _ => ok none
-  let self2 ← ceres_netlist.timer.NetTimer.edge_a self1
-  ok ((read, (¬ self1.int_timer) && self2.int_timer), self2)
+  let self5 ← ceres_netlist.timer.NetTimer.edge_a self4
+  let self6 ←
+    ceres_netlist.timer.NetTimer.phase self5 ceres_netlist.clocks.Phase.B
+      ceres_netlist.timer.Access.None
+  let self7 ←
+    ceres_netlist.timer.NetTimer.phase self6 ceres_netlist.clocks.Phase.C
+      ceres_netlist.timer.Access.None
+  let self8 ←
+    ceres_netlist.timer.NetTimer.phase self7 ceres_netlist.clocks.Phase.D
+      ceres_netlist.timer.Access.None
+  ok ((read, (¬ self4.int_timer) && self5.int_timer), self8)
 
-/-- [ceres_core::interrupts::INT_MASK]
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 13:0-13:37 -/
-@[global_simps, irreducible] def interrupts.INT_MASK : Std.U8 := 31#u8
-
-/-- [ceres_core::interrupts::check::related]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 33:0-35:1 -/
-def interrupts.check.related
-  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts) :
-  Result Bool
+/-- [ceres_core::check::{ceres_core::check::JointHost}::new]:
+    Source: 'ceres-core/src/check.rs', lines 42:4-47:5 -/
+def check.JointHost.new
+  (serial_div_mask : Std.U16) (ints : interrupts.Interrupts) :
+  Result check.JointHost
   := do
-  let i ← lift (~~~ interrupts.INT_MASK)
-  let i1 ← lift (net.flags &&& i)
-  ok (((i1 = 0#u8) && (ints.ifr = net.flags)) && (ints.ie = net.ie))
+  ok { serial_div_mask, ints }
 
-/-- [ceres_core::interrupts::check::requests]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 42:4-46:5 -/
-@[rust_loop_body]
-def interrupts.check.requests_loop.body
-  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
-  (i : Std.Usize) :
-  Result (ControlFlow ((Array Std.U8 4#usize) × Std.Usize) (Array Std.U8
-    4#usize))
-  := do
-  if i < 8#usize
-  then
-    let p ← Array.index_usize ceres_netlist.interrupts.PHASES i
-    let t ← ceres_netlist.interrupts.t_cycle p
-    let i1 ← Array.index_usize rises i
-    let i2 ← lift (i1 &&& interrupts.INT_MASK)
-    let i3 ← Array.index_usize requests t
-    let i4 ← lift (i3 ||| i2)
-    let a ← Array.update requests t i4
-    let i5 ← i + 1#usize
-    ok (cont (a, i5))
-  else ok (done requests)
-
-/-- [ceres_core::interrupts::check::requests]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 42:4-46:5 -/
-@[rust_loop]
-def interrupts.check.requests_loop
-  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
-  (i : Std.Usize) :
-  Result (Array Std.U8 4#usize)
-  := do
-  loop
-    (fun (requests1, i1) => interrupts.check.requests_loop.body rises requests1
-      i1)
-    (requests, i)
-
-/-- [ceres_core::interrupts::check::requests]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 39:0-48:1 -/
-def interrupts.check.requests
-  (rises : Array Std.U8 8#usize) : Result (Array Std.U8 4#usize) := do
-  let requests := Array.repeat 4#usize 0#u8
-  interrupts.check.requests_loop rises requests 0#usize
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_if]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 48:4-50:5 -/
-def interrupts.Interrupts.read_if
-  (self : interrupts.Interrupts) : Result Std.U8 := do
-  let i ← lift (~~~ interrupts.INT_MASK)
-  ok (self.ifr ||| i)
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_ie]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 43:4-45:5 -/
-def interrupts.Interrupts.read_ie
-  (self : interrupts.Interrupts) : Result Std.U8 := do
-  ok self.ie
-
-/-- [ceres_core::interrupts::check::ceres_boundary]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 52:0-59:1 -/
-def interrupts.check.ceres_boundary
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access) :
-  Result ((Option Std.U8) × Std.U8)
-  := do
-  let read ←
-    match access with
-    | ceres_netlist.interrupts.Access.None => ok none
-    | ceres_netlist.interrupts.Access.ReadIf =>
-      do
-      let i ← interrupts.Interrupts.read_if ints
-      ok (some i)
-    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
-    | ceres_netlist.interrupts.Access.Entry => ok none
-  let i ← interrupts.Interrupts.read_ie ints
-  let i1 ← lift (i &&& interrupts.INT_MASK)
-  let i2 ← interrupts.Interrupts.read_if ints
-  let i3 ← lift (i1 &&& i2)
-  let queue ← lift (i3 &&& interrupts.INT_MASK)
-  ok (read, queue)
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::write_if]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 86:4-88:5 -/
-def interrupts.Interrupts.write_if
-  (self : interrupts.Interrupts) (val : Std.U8) :
-  Result interrupts.Interrupts
-  := do
-  let i ← lift (val &&& interrupts.INT_MASK)
-  ok { self with ifr := i }
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::acknowledge_interrupt]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 29:4-31:5 -/
-def interrupts.Interrupts.acknowledge_interrupt
-  (self : interrupts.Interrupts) (int_bit : Std.U8) :
-  Result interrupts.Interrupts
-  := do
-  let i ← lift (~~~ int_bit)
-  let i1 ← lift (self.ifr &&& i)
-  ok { self with ifr := i1 }
-
-/-- [ceres_core::interrupts::check::ceres_t_cycle]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 63:0-84:1 -/
-def interrupts.check.ceres_t_cycle
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
-  (t : Std.Usize) (request : Std.U8) (queue : Std.U8) :
-  Result interrupts.Interrupts
-  := do
-  let i ← lift (ints.ifr ||| request)
-  match access with
-  | ceres_netlist.interrupts.Access.None => ok { ints with ifr := i }
-  | ceres_netlist.interrupts.Access.ReadIf => ok { ints with ifr := i }
-  | ceres_netlist.interrupts.Access.WriteIf val =>
-    if t = 0#usize
-    then interrupts.Interrupts.write_if { ints with ifr := i } val
-    else ok { ints with ifr := i }
-  | ceres_netlist.interrupts.Access.Entry =>
-    if (t = 1#usize) && (queue != 0#u8)
-    then
-      let i1 ← ceres_netlist.interrupts.lowest queue
-      interrupts.Interrupts.acknowledge_interrupt { ints with ifr := i } i1
-    else ok { ints with ifr := i }
-
-/-- [ceres_core::interrupts::check::net_step]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 88:0-99:1 -/
-def interrupts.check.net_step
-  (net : ceres_netlist.interrupts.NetIf)
-  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  (timer : Bool) :
-  Result (((Option Std.U8) × (Option Std.U8)) ×
-    ceres_netlist.interrupts.NetIf)
-  := do
-  let rises1 ←
-    if timer
-    then
-      do
-      let i ← Array.index_usize rises ceres_netlist.interrupts.A
-      let i1 ← lift (i ||| ceres_netlist.interrupts.TIMER)
-      Array.update rises ceres_netlist.interrupts.A i1
-    else ok rises
-  ceres_netlist.interrupts.NetIf.m_cycle net access rises1
-
-/-- [ceres_core::interrupts::check::ceres_step]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 119:4-122:5 -/
-@[rust_loop_body]
-def interrupts.check.ceres_step_loop.body
-  (access : ceres_netlist.interrupts.Access) (requests : Array Std.U8 4#usize)
-  (queue : Std.U8) (ints : interrupts.Interrupts) (t : Std.Usize) :
-  Result (ControlFlow (interrupts.Interrupts × Std.Usize)
-    interrupts.Interrupts)
-  := do
-  if t < 4#usize
-  then
-    let i ← Array.index_usize requests t
-    let ints1 ← interrupts.check.ceres_t_cycle ints access t i queue
-    let t1 ← t + 1#usize
-    ok (cont (ints1, t1))
-  else ok (done ints)
-
-/-- [ceres_core::interrupts::check::ceres_step]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 119:4-122:5 -/
-@[rust_loop]
-def interrupts.check.ceres_step_loop
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
-  (requests : Array Std.U8 4#usize) (queue : Std.U8) (t : Std.Usize) :
-  Result interrupts.Interrupts
-  := do
-  loop
-    (fun (ints1, t1) => interrupts.check.ceres_step_loop.body access requests
-      queue ints1 t1)
-    (ints, t)
-
-/-- [ceres_core::interrupts::check::ceres_step]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 103:0-124:1 -/
-def interrupts.check.ceres_step
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
-  (rises : Array Std.U8 8#usize) (timer : Option Std.U8) :
-  Result (((Option Std.U8) × (Option Std.U8)) × interrupts.Interrupts)
-  := do
-  let requests ← interrupts.check.requests rises
-  let requests1 ←
-    match timer with
-    | none => ok requests
-    | some t =>
-      do
-      let i ← lift (t &&& 3#u8)
-      let i1 ← lift (core.convert.num.FromUsizeU8.from i)
-      let i2 ← Array.index_usize requests i1
-      let i3 ← lift (i2 ||| ceres_netlist.interrupts.TIMER)
-      Array.update requests i1 i3
-  let (read, queue) ← interrupts.check.ceres_boundary ints access
-  let taken ←
-    match access with
-    | ceres_netlist.interrupts.Access.None => ok none
-    | ceres_netlist.interrupts.Access.ReadIf => ok none
-    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
-    | ceres_netlist.interrupts.Access.Entry =>
-      do
-      let i ← ceres_netlist.interrupts.lowest queue
-      ok (some i)
-  let ints1 ←
-    interrupts.check.ceres_step_loop ints access requests1 queue 0#usize
-  ok ((read, taken), ints1)
-
-/-- [ceres_core::timing::check::same_read]:
-    Source: 'ceres-core/src/timing/check.rs', lines 154:0-160:1 -/
-def timing.check.same_read
-  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
-  match a with
-  | none => match b with
-            | none => ok true
-            | some _ => ok false
-  | some x => match b with
-              | none => ok false
-              | some y => ok (x = y)
-
-/-- [ceres_core::timing::check::same_interrupt]:
-    Source: 'ceres-core/src/timing/check.rs', lines 146:0-151:1 -/
-def timing.check.same_interrupt
-  (net : Bool) (ceres : Option Std.U8) : Result Bool := do
-  match ceres with
-  | none => ok (¬ net)
-  | some t => ok (net && (t = 2#u8))
-
-/-- [ceres_core::interrupts::check::step_agrees]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 130:0-164:1 -/
-def interrupts.check.step_agrees
-  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts)
-  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  (net_timer : Bool) (ceres_timer : Option Std.U8) :
-  Result Bool
-  := do
-  let b ← interrupts.check.related net ints
-  let b1 ← timing.check.same_interrupt net_timer ceres_timer
-  if (¬ b) || (¬ b1)
-  then ok true
-  else
-    let ((net_read, net_taken), net1) ←
-      interrupts.check.net_step net access rises net_timer
-    let ((ceres_read, ceres_taken), ints1) ←
-      interrupts.check.ceres_step ints access rises ceres_timer
-    let b2 ← timing.check.same_read net_read ceres_read
-    let b3 ← timing.check.same_read net_taken ceres_taken
-    let b4 ← interrupts.check.related net1 ints1
-    ok ((b2 && b3) && b4)
-
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_m_cycle]:
-    Source: 'ceres-core/src/timing/check.rs', lines 72:4-72:43 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
-  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
-  Result timing.check.CheckHost
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_m_cycle]:
+    Source: 'ceres-core/src/check.rs', lines 83:4-83:43 -/
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+  (self : check.JointHost) (c : timing.timer.Clock) :
+  Result check.JointHost
   := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_delayed_envelope_tick]:
-    Source: 'ceres-core/src/timing/check.rs', lines 70:4-70:57 -/
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_delayed_envelope_tick]:
+    Source: 'ceres-core/src/check.rs', lines 81:4-81:57 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
-  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
-  Result timing.check.CheckHost
+  check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+  (self : check.JointHost) (c : timing.timer.Clock) :
+  Result check.JointHost
   := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_envelopes_armed]:
-    Source: 'ceres-core/src/timing/check.rs', lines 68:4-68:40 -/
-def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
-  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_envelopes_armed]:
+    Source: 'ceres-core/src/check.rs', lines 79:4-79:40 -/
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+  (self : check.JointHost) : Result check.JointHost := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_frame_sequencer_step]:
-    Source: 'ceres-core/src/timing/check.rs', lines 66:4-66:56 -/
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_frame_sequencer_step]:
+    Source: 'ceres-core/src/check.rs', lines 77:4-77:56 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
-  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
-  Result timing.check.CheckHost
+  check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+  (self : check.JointHost) (c : timing.timer.Clock) :
+  Result check.JointHost
   := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::serial_clock_edge]:
-    Source: 'ceres-core/src/timing/check.rs', lines 64:4-64:38 -/
-def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
-  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::serial_clock_edge]:
+    Source: 'ceres-core/src/check.rs', lines 75:4-75:38 -/
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+  (self : check.JointHost) : Result check.JointHost := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::serial_div_mask]:
-    Source: 'ceres-core/src/timing/check.rs', lines 60:4-62:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
-  (self : timing.check.CheckHost) : Result Std.U16 := do
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::serial_div_mask]:
+    Source: 'ceres-core/src/check.rs', lines 71:4-73:5 -/
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+  (self : check.JointHost) : Result Std.U16 := do
   ok self.serial_div_mask
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::request_timer_interrupt]:
-    Source: 'ceres-core/src/timing/check.rs', lines 56:4-58:5 -/
+/-- [ceres_core::interrupts::INT_TIMER_B]
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 9:0-9:29 -/
+@[global_simps, irreducible] def interrupts.INT_TIMER_B : Std.U8 := 4#u8
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::request_timer]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 74:4-76:5 -/
+def interrupts.Interrupts.request_timer
+  (self : interrupts.Interrupts) : Result interrupts.Interrupts := do
+  let i ← lift (self.ifr ||| interrupts.INT_TIMER_B)
+  ok { self with ifr := i }
+
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::request_timer_interrupt]:
+    Source: 'ceres-core/src/check.rs', lines 67:4-69:5 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
-  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
-  let i ← self.timer_interrupts + 1#u32
-  ok { self with timer_interrupts := i }
+  check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+  (self : check.JointHost) : Result check.JointHost := do
+  let i ← interrupts.Interrupts.request_timer self.ints
+  ok { self with ints := i }
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::double_speed]:
-    Source: 'ceres-core/src/timing/check.rs', lines 52:4-54:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
-  (self : timing.check.CheckHost) : Result Bool := do
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::double_speed]:
+    Source: 'ceres-core/src/check.rs', lines 63:4-65:5 -/
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+  (self : check.JointHost) : Result Bool := do
   ok false
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::is_cgb_mode]:
-    Source: 'ceres-core/src/timing/check.rs', lines 48:4-50:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
-  (self : timing.check.CheckHost) : Result Bool := do
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::is_cgb_mode]:
+    Source: 'ceres-core/src/check.rs', lines 59:4-61:5 -/
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+  (self : check.JointHost) : Result Bool := do
   ok false
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::is_cgb_hardware]:
-    Source: 'ceres-core/src/timing/check.rs', lines 44:4-46:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
-  (self : timing.check.CheckHost) : Result Bool := do
+/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::is_cgb_hardware]:
+    Source: 'ceres-core/src/check.rs', lines 55:4-57:5 -/
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+  (self : check.JointHost) : Result Bool := do
   ok false
 
-/-- Trait implementation: [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}]
-    Source: 'ceres-core/src/timing/check.rs', lines 43:0-73:1 -/
+/-- Trait implementation: [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}]
+    Source: 'ceres-core/src/check.rs', lines 54:0-84:1 -/
 @[reducible]
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost :
-  timing.timer.TimerHost timing.check.CheckHost := {
+def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost :
+  timing.timer.TimerHost check.JointHost := {
   is_cgb_hardware :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
   is_cgb_mode :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
   double_speed :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
   request_timer_interrupt :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
   serial_div_mask :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
   serial_clock_edge :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
   apu_frame_sequencer_step :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
   apu_envelopes_armed :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
   apu_delayed_envelope_tick :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
   apu_m_cycle :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
 }
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_tma]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 334:4-341:5 -/
-def timing.timer.Clock.write_tma
-  (self : timing.timer.Clock) (val : Std.U8) : Result timing.timer.Clock := do
-  if self.tima_reload_pending != 0#u8
-  then ok { self with tima := val, tma := val }
-  else ok { self with tma := val }
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_tima]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 314:4-332:5 -/
-def timing.timer.Clock.write_tima
-  (self : timing.timer.Clock) (val : Std.U8) : Result timing.timer.Clock := do
-  if self.tima_reload_pending >= 5#u8
-  then ok self
-  else
-    ok
-      {
-        self
-          with
-          tima := val, tima_reload_pending := 0#u8, tima_irq_countdown := 0#u8
-      }
 
 /-- [ceres_core::timing::timer::TAC_CLOCK]
     Source: 'ceres-core/src/timing/timer.rs', lines 9:0-9:38 -/
@@ -959,6 +660,17 @@ def timing.timer.Clock.sys_clk_tac_mux (tac : Std.U8) : Result Std.U16 := do
   | 1#uscalar => 1#u16 <<< 3#i32
   | 2#uscalar => 1#u16 <<< 5#i32
   | _ => 1#u16 <<< 7#i32
+
+/-- [ceres_core::timing::timer::TAC_ENABLE_B]
+    Source: 'ceres-core/src/timing/timer.rs', lines 7:0-7:41 -/
+@[global_simps, irreducible] def timing.timer.TAC_ENABLE_B : Std.U8 := 4#u8
+
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::is_tac_enabled]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 220:4-222:5 -/
+def timing.timer.Clock.is_tac_enabled
+  (self : timing.timer.Clock) : Result Bool := do
+  let i ← lift (self.tac &&& timing.timer.TAC_ENABLE_B)
+  ok (i != 0#u8)
 
 /-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::inc_tima]:
     Source: 'ceres-core/src/timing/timer.rs', lines 196:4-217:5 -/
@@ -991,47 +703,6 @@ def timing.timer.Clock.inc_tima
             tima_irq_countdown := 3#u8
         }
   else ok { self with tima := i }
-
-/-- [ceres_core::timing::timer::TAC_ENABLE_B]
-    Source: 'ceres-core/src/timing/timer.rs', lines 7:0-7:41 -/
-@[global_simps, irreducible] def timing.timer.TAC_ENABLE_B : Std.U8 := 4#u8
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_tac]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 299:4-312:5 -/
-def timing.timer.Clock.write_tac
-  {T0 : Type _} (TimerHostInst : timing.timer.TimerHost T0)
-  (self : timing.timer.Clock) (host : T0) (val : Std.U8) :
-  Result timing.timer.Clock
-  := do
-  let i ← lift (self.tac &&& timing.timer.TAC_ENABLE_B)
-  if i != 0#u8
-  then
-    let old_bit ← timing.timer.Clock.sys_clk_tac_mux self.tac
-    let i1 ← lift (self.div &&& old_bit)
-    if i1 != 0#u16
-    then
-      let i2 ← lift (val &&& timing.timer.TAC_ENABLE_B)
-      if i2 = 0#u8
-      then
-        let self1 ← timing.timer.Clock.inc_tima TimerHostInst self host
-        ok { self1 with tac := val }
-      else
-        let i3 ← timing.timer.Clock.sys_clk_tac_mux val
-        let i4 ← lift (self.div &&& i3)
-        if i4 = 0#u16
-        then
-          let self1 ← timing.timer.Clock.inc_tima TimerHostInst self host
-          ok { self1 with tac := val }
-        else ok { self with tac := val }
-    else ok { self with tac := val }
-  else ok { self with tac := val }
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::is_tac_enabled]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 220:4-222:5 -/
-def timing.timer.Clock.is_tac_enabled
-  (self : timing.timer.Clock) : Result Bool := do
-  let i ← lift (self.tac &&& timing.timer.TAC_ENABLE_B)
-  ok (i != 0#u8)
 
 /-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::timer_edges]:
     Source: 'ceres-core/src/timing/timer.rs', lines 345:4-357:5 -/
@@ -1115,113 +786,6 @@ def timing.timer.Clock.set_div
         let host2 ← TimerHostInst.apu_envelopes_armed host1
         ok ({ self1 with div := val, apu_late_bit := o1 }, host2)
       else ok ({ self1 with div := val, apu_late_bit := o1 }, host1)
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_div]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 264:4-276:5 -/
-def timing.timer.Clock.write_div
-  {T0 : Type _} (TimerHostInst : timing.timer.TimerHost T0)
-  (self : timing.timer.Clock) (host : T0) :
-  Result (timing.timer.Clock × T0)
-  := do
-  if self.apu_delay = 0#u16
-  then
-    let (self1, host1) ←
-      timing.timer.Clock.set_div TimerHostInst
-        { self with during_div_write := true } host 0#u16
-    ok ({ self1 with during_div_write := false }, host1)
-  else
-    let b ← TimerHostInst.double_speed host
-    let apu_bit ← timing.apu_div_bit b
-    let i ← lift (core.num.U16.wrapping_sub self.div self.apu_delay)
-    let i1 ← lift (i &&& apu_bit)
-    let (self1, host1) ←
-      timing.timer.Clock.timer_edges TimerHostInst
-        { self with during_div_write := true } host 0#u16
-    ok
-      ({
-         self1
-           with
-           div := 0#u16,
-           during_div_write := false,
-           apu_late_bit := (some (i1 != 0#u16))
-       }, host1)
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::read_tac]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 232:4-234:5 -/
-def timing.timer.Clock.read_tac
-  (self : timing.timer.Clock) : Result Std.U8 := do
-  let i ← lift (timing.timer.TAC_ENABLE_B ||| timing.timer.TAC_CLOCK)
-  let i1 ← lift (~~~ i)
-  ok (i1 ||| self.tac)
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::read_div]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 227:4-229:5 -/
-def timing.timer.Clock.read_div
-  (self : timing.timer.Clock) : Result Std.U8 := do
-  let i ← self.div >>> 8#i32
-  ok (UScalar.cast .U8 i)
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::tma]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 130:4-132:5 -/
-def timing.timer.Clock.impl.tma
-  (self : timing.timer.Clock) : Result Std.U8 := do
-  ok self.tma
-
-/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::tima]:
-    Source: 'ceres-core/src/timing/timer.rs', lines 120:4-128:5 -/
-def timing.timer.Clock.impl.tima
-  (self : timing.timer.Clock) : Result Std.U8 := do
-  let b ←
-    if 1#u8 <= self.tima_reload_pending
-    then if self.tima_reload_pending <= 4#u8
-         then ok true
-         else ok false
-    else ok false
-  if b
-  then ok 0#u8
-  else ok self.tima
-
-/-- [ceres_core::timing::check::ceres_access]:
-    Source: 'ceres-core/src/timing/check.rs', lines 76:0-104:1 -/
-def timing.check.ceres_access
-  {H : Type _} (timerTimerHostInst : timing.timer.TimerHost H)
-  (clock : timing.timer.Clock) (host : H) (access : ceres_netlist.timer.Access)
-  :
-  Result ((Option Std.U8) × timing.timer.Clock × H)
-  := do
-  match access with
-  | ceres_netlist.timer.Access.None => ok (none, clock, host)
-  | ceres_netlist.timer.Access.Read r =>
-    match r with
-    | ceres_netlist.timer.Reg.Div =>
-      let i ← timing.timer.Clock.read_div clock
-      ok (some i, clock, host)
-    | ceres_netlist.timer.Reg.Tima =>
-      let i ← timing.timer.Clock.impl.tima clock
-      ok (some i, clock, host)
-    | ceres_netlist.timer.Reg.Tma =>
-      let i ← timing.timer.Clock.impl.tma clock
-      ok (some i, clock, host)
-    | ceres_netlist.timer.Reg.Tac =>
-      let i ← timing.timer.Clock.read_tac clock
-      let i1 ← lift (i &&& 7#u8)
-      ok (some i1, clock, host)
-  | ceres_netlist.timer.Access.Write r val =>
-    match r with
-    | ceres_netlist.timer.Reg.Div =>
-      let (clock1, host1) ←
-        timing.timer.Clock.write_div timerTimerHostInst clock host
-      ok (none, clock1, host1)
-    | ceres_netlist.timer.Reg.Tima =>
-      let clock1 ← timing.timer.Clock.write_tima clock val
-      ok (none, clock1, host)
-    | ceres_netlist.timer.Reg.Tma =>
-      let clock1 ← timing.timer.Clock.write_tma clock val
-      ok (none, clock1, host)
-    | ceres_netlist.timer.Reg.Tac =>
-      let clock1 ←
-        timing.timer.Clock.write_tac timerTimerHostInst clock host val
-      ok (none, clock1, host)
 
 /-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::run]: loop body 0:
     Source: 'ceres-core/src/timing/timer.rs', lines 144:8-192:9 -/
@@ -1325,49 +889,356 @@ def timing.timer.Clock.run
     timing.timer.Clock.run_loop TimerHostInst
       { start := 0#i32, «end» := cpu_t_cycles } self host
 
-/-- [ceres_core::timing::check::ceres_t_cycle]:
-    Source: 'ceres-core/src/timing/check.rs', lines 125:0-142:1 -/
-def timing.check.ceres_t_cycle
-  (clock : timing.timer.Clock) (host : timing.check.CheckHost) (t : Std.U8)
-  (first : Option Std.U8) (twice : Bool) :
-  Result (((Option Std.U8) × Bool) × timing.timer.Clock ×
-    timing.check.CheckHost)
-  := do
-  let (clock1, host1) ←
-    timing.timer.Clock.run
-      timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
-      1#i32
-  if host1.timer_interrupts = host.timer_interrupts
-  then ok ((first, twice), clock1, host1)
-  else
-    match first with
-    | none => ok ((some t, twice), clock1, host1)
-    | some _ => ok ((first, true), clock1, host1)
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_tma]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 334:4-341:5 -/
+def timing.timer.Clock.write_tma
+  (self : timing.timer.Clock) (val : Std.U8) : Result timing.timer.Clock := do
+  if self.tima_reload_pending != 0#u8
+  then ok { self with tima := val, tma := val }
+  else ok { self with tma := val }
 
-/-- [ceres_core::timing::check::ceres_m_cycle]:
-    Source: 'ceres-core/src/timing/check.rs', lines 110:0-121:1 -/
-def timing.check.ceres_m_cycle
-  (clock : timing.timer.Clock) (host : timing.check.CheckHost)
-  (access : ceres_netlist.timer.Access) :
-  Result (((Option Std.U8) × (Option Std.U8) × Bool) × timing.timer.Clock ×
-    timing.check.CheckHost)
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_tima]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 314:4-332:5 -/
+def timing.timer.Clock.write_tima
+  (self : timing.timer.Clock) (val : Std.U8) : Result timing.timer.Clock := do
+  if self.tima_reload_pending >= 5#u8
+  then ok self
+  else
+    ok
+      {
+        self
+          with
+          tima := val, tima_reload_pending := 0#u8, tima_irq_countdown := 0#u8
+      }
+
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_tac]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 299:4-312:5 -/
+def timing.timer.Clock.write_tac
+  {T0 : Type _} (TimerHostInst : timing.timer.TimerHost T0)
+  (self : timing.timer.Clock) (host : T0) (val : Std.U8) :
+  Result timing.timer.Clock
   := do
-  let (read, clock1, host1) ←
+  let i ← lift (self.tac &&& timing.timer.TAC_ENABLE_B)
+  if i != 0#u8
+  then
+    let old_bit ← timing.timer.Clock.sys_clk_tac_mux self.tac
+    let i1 ← lift (self.div &&& old_bit)
+    if i1 != 0#u16
+    then
+      let i2 ← lift (val &&& timing.timer.TAC_ENABLE_B)
+      if i2 = 0#u8
+      then
+        let self1 ← timing.timer.Clock.inc_tima TimerHostInst self host
+        ok { self1 with tac := val }
+      else
+        let i3 ← timing.timer.Clock.sys_clk_tac_mux val
+        let i4 ← lift (self.div &&& i3)
+        if i4 = 0#u16
+        then
+          let self1 ← timing.timer.Clock.inc_tima TimerHostInst self host
+          ok { self1 with tac := val }
+        else ok { self with tac := val }
+    else ok { self with tac := val }
+  else ok { self with tac := val }
+
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::write_div]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 264:4-276:5 -/
+def timing.timer.Clock.write_div
+  {T0 : Type _} (TimerHostInst : timing.timer.TimerHost T0)
+  (self : timing.timer.Clock) (host : T0) :
+  Result (timing.timer.Clock × T0)
+  := do
+  if self.apu_delay = 0#u16
+  then
+    let (self1, host1) ←
+      timing.timer.Clock.set_div TimerHostInst
+        { self with during_div_write := true } host 0#u16
+    ok ({ self1 with during_div_write := false }, host1)
+  else
+    let b ← TimerHostInst.double_speed host
+    let apu_bit ← timing.apu_div_bit b
+    let i ← lift (core.num.U16.wrapping_sub self.div self.apu_delay)
+    let i1 ← lift (i &&& apu_bit)
+    let (self1, host1) ←
+      timing.timer.Clock.timer_edges TimerHostInst
+        { self with during_div_write := true } host 0#u16
+    ok
+      ({
+         self1
+           with
+           div := 0#u16,
+           during_div_write := false,
+           apu_late_bit := (some (i1 != 0#u16))
+       }, host1)
+
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::read_tac]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 232:4-234:5 -/
+def timing.timer.Clock.read_tac
+  (self : timing.timer.Clock) : Result Std.U8 := do
+  let i ← lift (timing.timer.TAC_ENABLE_B ||| timing.timer.TAC_CLOCK)
+  let i1 ← lift (~~~ i)
+  ok (i1 ||| self.tac)
+
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::read_div]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 227:4-229:5 -/
+def timing.timer.Clock.read_div
+  (self : timing.timer.Clock) : Result Std.U8 := do
+  let i ← self.div >>> 8#i32
+  ok (UScalar.cast .U8 i)
+
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::tma]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 130:4-132:5 -/
+def timing.timer.Clock.impl.tma
+  (self : timing.timer.Clock) : Result Std.U8 := do
+  ok self.tma
+
+/-- [ceres_core::timing::timer::{ceres_core::timing::timer::Clock}::tima]:
+    Source: 'ceres-core/src/timing/timer.rs', lines 120:4-128:5 -/
+def timing.timer.Clock.impl.tima
+  (self : timing.timer.Clock) : Result Std.U8 := do
+  let b ←
+    if 1#u8 <= self.tima_reload_pending
+    then if self.tima_reload_pending <= 4#u8
+         then ok true
+         else ok false
+    else ok false
+  if b
+  then ok 0#u8
+  else ok self.tima
+
+/-- [ceres_core::timing::check::ceres_access]:
+    Source: 'ceres-core/src/timing/check.rs', lines 87:0-115:1 -/
+def timing.check.ceres_access
+  {H : Type _} (timerTimerHostInst : timing.timer.TimerHost H)
+  (clock : timing.timer.Clock) (host : H) (access : ceres_netlist.timer.Access)
+  :
+  Result ((Option Std.U8) × timing.timer.Clock × H)
+  := do
+  match access with
+  | ceres_netlist.timer.Access.None => ok (none, clock, host)
+  | ceres_netlist.timer.Access.Read r =>
+    match r with
+    | ceres_netlist.timer.Reg.Div =>
+      let i ← timing.timer.Clock.read_div clock
+      ok (some i, clock, host)
+    | ceres_netlist.timer.Reg.Tima =>
+      let i ← timing.timer.Clock.impl.tima clock
+      ok (some i, clock, host)
+    | ceres_netlist.timer.Reg.Tma =>
+      let i ← timing.timer.Clock.impl.tma clock
+      ok (some i, clock, host)
+    | ceres_netlist.timer.Reg.Tac =>
+      let i ← timing.timer.Clock.read_tac clock
+      let i1 ← lift (i &&& 7#u8)
+      ok (some i1, clock, host)
+  | ceres_netlist.timer.Access.Write r val =>
+    match r with
+    | ceres_netlist.timer.Reg.Div =>
+      let (clock1, host1) ←
+        timing.timer.Clock.write_div timerTimerHostInst clock host
+      ok (none, clock1, host1)
+    | ceres_netlist.timer.Reg.Tima =>
+      let clock1 ← timing.timer.Clock.write_tima clock val
+      ok (none, clock1, host)
+    | ceres_netlist.timer.Reg.Tma =>
+      let clock1 ← timing.timer.Clock.write_tma clock val
+      ok (none, clock1, host)
+    | ceres_netlist.timer.Reg.Tac =>
+      let clock1 ←
+        timing.timer.Clock.write_tac timerTimerHostInst clock host val
+      ok (none, clock1, host)
+
+/-- [ceres_core::interrupts::INT_MASK]
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 13:0-13:37 -/
+@[global_simps, irreducible] def interrupts.INT_MASK : Std.U8 := 31#u8
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::write_if]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 86:4-88:5 -/
+def interrupts.Interrupts.write_if
+  (self : interrupts.Interrupts) (val : Std.U8) :
+  Result interrupts.Interrupts
+  := do
+  let i ← lift (val &&& interrupts.INT_MASK)
+  ok { self with ifr := i }
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::acknowledge_interrupt]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 29:4-31:5 -/
+def interrupts.Interrupts.acknowledge_interrupt
+  (self : interrupts.Interrupts) (int_bit : Std.U8) :
+  Result interrupts.Interrupts
+  := do
+  let i ← lift (~~~ int_bit)
+  let i1 ← lift (self.ifr &&& i)
+  ok { self with ifr := i1 }
+
+/-- [ceres_core::interrupts::check::ceres_t_cycle]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 68:0-89:1 -/
+def interrupts.check.ceres_t_cycle
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
+  (t : Std.Usize) (request : Std.U8) (queue : Std.U8) :
+  Result interrupts.Interrupts
+  := do
+  let i ← lift (ints.ifr ||| request)
+  match access with
+  | ceres_netlist.interrupts.Access.None => ok { ints with ifr := i }
+  | ceres_netlist.interrupts.Access.ReadIf => ok { ints with ifr := i }
+  | ceres_netlist.interrupts.Access.WriteIf val =>
+    if t = 0#usize
+    then interrupts.Interrupts.write_if { ints with ifr := i } val
+    else ok { ints with ifr := i }
+  | ceres_netlist.interrupts.Access.Entry =>
+    if (t = 1#usize) && (queue != 0#u8)
+    then
+      let i1 ← ceres_netlist.interrupts.lowest queue
+      interrupts.Interrupts.acknowledge_interrupt { ints with ifr := i } i1
+    else ok { ints with ifr := i }
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_if]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 48:4-50:5 -/
+def interrupts.Interrupts.read_if
+  (self : interrupts.Interrupts) : Result Std.U8 := do
+  let i ← lift (~~~ interrupts.INT_MASK)
+  ok (self.ifr ||| i)
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_ie]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 43:4-45:5 -/
+def interrupts.Interrupts.read_ie
+  (self : interrupts.Interrupts) : Result Std.U8 := do
+  ok self.ie
+
+/-- [ceres_core::interrupts::check::ceres_boundary]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 57:0-64:1 -/
+def interrupts.check.ceres_boundary
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access) :
+  Result ((Option Std.U8) × Std.U8)
+  := do
+  let read ←
+    match access with
+    | ceres_netlist.interrupts.Access.None => ok none
+    | ceres_netlist.interrupts.Access.ReadIf =>
+      do
+      let i ← interrupts.Interrupts.read_if ints
+      ok (some i)
+    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
+    | ceres_netlist.interrupts.Access.Entry => ok none
+  let i ← interrupts.Interrupts.read_ie ints
+  let i1 ← lift (i &&& interrupts.INT_MASK)
+  let i2 ← interrupts.Interrupts.read_if ints
+  let i3 ← lift (i1 &&& i2)
+  let queue ← lift (i3 &&& interrupts.INT_MASK)
+  ok (read, queue)
+
+/-- [ceres_core::interrupts::check::requests]: loop body 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 47:4-51:5 -/
+@[rust_loop_body]
+def interrupts.check.requests_loop.body
+  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
+  (i : Std.Usize) :
+  Result (ControlFlow ((Array Std.U8 4#usize) × Std.Usize) (Array Std.U8
+    4#usize))
+  := do
+  if i < 8#usize
+  then
+    let p ← Array.index_usize ceres_netlist.interrupts.PHASES i
+    let t ← ceres_netlist.interrupts.t_cycle p
+    let i1 ← Array.index_usize rises i
+    let i2 ← lift (i1 &&& interrupts.INT_MASK)
+    let i3 ← Array.index_usize requests t
+    let i4 ← lift (i3 ||| i2)
+    let a ← Array.update requests t i4
+    let i5 ← i + 1#usize
+    ok (cont (a, i5))
+  else ok (done requests)
+
+/-- [ceres_core::interrupts::check::requests]: loop 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 47:4-51:5 -/
+@[rust_loop]
+def interrupts.check.requests_loop
+  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
+  (i : Std.Usize) :
+  Result (Array Std.U8 4#usize)
+  := do
+  loop
+    (fun (requests1, i1) => interrupts.check.requests_loop.body rises requests1
+      i1)
+    (requests, i)
+
+/-- [ceres_core::interrupts::check::requests]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 44:0-53:1 -/
+def interrupts.check.requests
+  (rises : Array Std.U8 8#usize) : Result (Array Std.U8 4#usize) := do
+  let requests := Array.repeat 4#usize 0#u8
+  interrupts.check.requests_loop rises requests 0#usize
+
+/-- [ceres_core::check::ceres_m_cycle_joint]: loop body 0:
+    Source: 'ceres-core/src/check.rs', lines 106:4-110:5 -/
+@[rust_loop_body]
+def check.ceres_m_cycle_joint_loop.body
+  (if_access : ceres_netlist.interrupts.Access) (queue : Std.U8)
+  (other : Array Std.U8 4#usize) (clock : timing.timer.Clock) (i : Std.U16)
+  (i1 : interrupts.Interrupts) (t : Std.Usize) :
+  Result (ControlFlow (timing.timer.Clock × Std.U16 × interrupts.Interrupts
+    × Std.Usize) (timing.timer.Clock × Std.U16 × interrupts.Interrupts))
+  := do
+  if t < 4#usize
+  then
+    let (clock1, host) ←
+      timing.timer.Clock.run
+        check.JointHost.Insts.Ceres_coreTimingTimerTimerHost clock
+        { serial_div_mask := i, ints := i1 } 1#i32
+    let i2 ← Array.index_usize other t
+    let i3 ← interrupts.check.ceres_t_cycle host.ints if_access t i2 queue
+    let t1 ← t + 1#usize
+    ok (cont (clock1, host.serial_div_mask, i3, t1))
+  else ok (done (clock, i, i1))
+
+/-- [ceres_core::check::ceres_m_cycle_joint]: loop 0:
+    Source: 'ceres-core/src/check.rs', lines 106:4-110:5 -/
+@[rust_loop]
+def check.ceres_m_cycle_joint_loop
+  (clock : timing.timer.Clock) (i : Std.U16) (i1 : interrupts.Interrupts)
+  (if_access : ceres_netlist.interrupts.Access) (queue : Std.U8)
+  (other : Array Std.U8 4#usize) (t : Std.Usize) :
+  Result (timing.timer.Clock × Std.U16 × interrupts.Interrupts)
+  := do
+  loop
+    (fun (clock1, i2, i3, t1) => check.ceres_m_cycle_joint_loop.body if_access
+      queue other clock1 i2 i3 t1)
+    (clock, i, i1, t)
+
+/-- [ceres_core::check::ceres_m_cycle_joint]:
+    Source: 'ceres-core/src/check.rs', lines 91:0-112:1 -/
+def check.ceres_m_cycle_joint
+  (clock : timing.timer.Clock) (host : check.JointHost)
+  (timer_access : ceres_netlist.timer.Access)
+  (if_access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
+  :
+  Result (((Option Std.U8) × (Option Std.U8) × (Option Std.U8)) ×
+    timing.timer.Clock × check.JointHost)
+  := do
+  let (timer_read, clock1, host1) ←
     timing.check.ceres_access
-      timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
-      access
-  let ((first, twice), clock2, host2) ←
-    timing.check.ceres_t_cycle clock1 host1 0#u8 none false
-  let ((first1, twice1), clock3, host3) ←
-    timing.check.ceres_t_cycle clock2 host2 1#u8 first twice
-  let ((first2, twice2), clock4, host4) ←
-    timing.check.ceres_t_cycle clock3 host3 2#u8 first1 twice1
-  let ((first3, twice3), clock5, host5) ←
-    timing.check.ceres_t_cycle clock4 host4 3#u8 first2 twice2
-  ok ((read, first3, twice3), clock5, host5)
+      check.JointHost.Insts.Ceres_coreTimingTimerTimerHost clock host
+      timer_access
+  let (if_read, queue) ← interrupts.check.ceres_boundary host1.ints if_access
+  let taken ←
+    match if_access with
+    | ceres_netlist.interrupts.Access.None => ok none
+    | ceres_netlist.interrupts.Access.ReadIf => ok none
+    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
+    | ceres_netlist.interrupts.Access.Entry =>
+      do
+      let i ← ceres_netlist.interrupts.lowest queue
+      ok (some i)
+  let other ← interrupts.check.requests rises
+  let (clock2, i, i1) ←
+    check.ceres_m_cycle_joint_loop clock1 host1.serial_div_mask host1.ints
+      if_access queue other 0#usize
+  ok ((timer_read, if_read, taken), clock2,
+    { serial_div_mask := i, ints := i1 })
 
 /-- [ceres_core::timing::check::related]:
-    Source: 'ceres-core/src/timing/check.rs', lines 163:0-198:1 -/
+    Source: 'ceres-core/src/timing/check.rs', lines 196:0-231:1 -/
 def timing.check.related
   (net : ceres_netlist.timer.NetTimer) (clock : timing.timer.Clock) :
   Result Bool
@@ -1396,8 +1267,346 @@ def timing.check.related
     0#u16)) && b) && (net.timer_clock = b1)) && (¬ net.write_tma)) && (¬
     net.write_tac)) && (¬ net.enable_race_counts)) && timer)
 
+/-- [ceres_core::timing::check::same_read]:
+    Source: 'ceres-core/src/timing/check.rs', lines 187:0-193:1 -/
+def timing.check.same_read
+  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some x => match b with
+              | none => ok false
+              | some y => ok (x = y)
+
+/-- [ceres_core::timing::check::same_clock]:
+    Source: 'ceres-core/src/timing/check.rs', lines 165:0-184:1 -/
+def timing.check.same_clock
+  (a : timing.timer.Clock) (b : timing.timer.Clock) : Result Bool := do
+  let late_bit ←
+    match a.apu_late_bit with
+    | none => match b.apu_late_bit with
+              | none => ok true
+              | some _ => ok false
+    | some x =>
+      match b.apu_late_bit with
+      | none => ok false
+      | some y => ok (x = y)
+  ok (((((((((((((a.div = b.div) && (a.tac = b.tac)) && (a.tima = b.tima)) &&
+    (a.tma = b.tma)) && (a.tima_reload_pending = b.tima_reload_pending)) &&
+    (a.tima_irq_countdown = b.tima_irq_countdown)) && (a.div_cycles =
+    b.div_cycles)) && (a.div_state = b.div_state)) && (a.stopped = b.stopped))
+    && (a.during_div_write = b.during_div_write)) && (a.apu_delay =
+    b.apu_delay)) && late_bit) && (a.apu_odd = b.apu_odd))
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_m_cycle]:
+    Source: 'ceres-core/src/timing/check.rs', lines 83:4-83:43 -/
+def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
+  Result timing.check.CheckHost
+  := do
+  ok self
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_delayed_envelope_tick]:
+    Source: 'ceres-core/src/timing/check.rs', lines 81:4-81:57 -/
+def
+  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
+  Result timing.check.CheckHost
+  := do
+  ok self
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_envelopes_armed]:
+    Source: 'ceres-core/src/timing/check.rs', lines 79:4-79:40 -/
+def
+  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+  ok self
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_frame_sequencer_step]:
+    Source: 'ceres-core/src/timing/check.rs', lines 77:4-77:56 -/
+def
+  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
+  Result timing.check.CheckHost
+  := do
+  ok self
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::serial_clock_edge]:
+    Source: 'ceres-core/src/timing/check.rs', lines 75:4-75:38 -/
+def
+  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+  ok self
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::serial_div_mask]:
+    Source: 'ceres-core/src/timing/check.rs', lines 71:4-73:5 -/
+def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+  (self : timing.check.CheckHost) : Result Std.U16 := do
+  ok self.serial_div_mask
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::request_timer_interrupt]:
+    Source: 'ceres-core/src/timing/check.rs', lines 67:4-69:5 -/
+def
+  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+  let i ← self.timer_interrupts + 1#u32
+  ok { self with timer_interrupts := i }
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::double_speed]:
+    Source: 'ceres-core/src/timing/check.rs', lines 63:4-65:5 -/
+def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+  (self : timing.check.CheckHost) : Result Bool := do
+  ok false
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::is_cgb_mode]:
+    Source: 'ceres-core/src/timing/check.rs', lines 59:4-61:5 -/
+def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+  (self : timing.check.CheckHost) : Result Bool := do
+  ok false
+
+/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::is_cgb_hardware]:
+    Source: 'ceres-core/src/timing/check.rs', lines 55:4-57:5 -/
+def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+  (self : timing.check.CheckHost) : Result Bool := do
+  ok false
+
+/-- Trait implementation: [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}]
+    Source: 'ceres-core/src/timing/check.rs', lines 54:0-84:1 -/
+@[reducible]
+def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost :
+  timing.timer.TimerHost timing.check.CheckHost := {
+  is_cgb_hardware :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+  is_cgb_mode :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+  double_speed :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+  request_timer_interrupt :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+  serial_div_mask :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+  serial_clock_edge :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+  apu_frame_sequencer_step :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+  apu_envelopes_armed :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+  apu_delayed_envelope_tick :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+  apu_m_cycle :=
+    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+}
+
+/-- [ceres_core::timing::check::ceres_t_cycle]:
+    Source: 'ceres-core/src/timing/check.rs', lines 136:0-153:1 -/
+def timing.check.ceres_t_cycle
+  (clock : timing.timer.Clock) (host : timing.check.CheckHost) (t : Std.U8)
+  (first : Option Std.U8) (twice : Bool) :
+  Result (((Option Std.U8) × Bool) × timing.timer.Clock ×
+    timing.check.CheckHost)
+  := do
+  let (clock1, host1) ←
+    timing.timer.Clock.run
+      timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
+      1#i32
+  if host1.timer_interrupts = host.timer_interrupts
+  then ok ((first, twice), clock1, host1)
+  else
+    match first with
+    | none => ok ((some t, twice), clock1, host1)
+    | some _ => ok ((first, true), clock1, host1)
+
+/-- [ceres_core::timing::check::ceres_m_cycle]:
+    Source: 'ceres-core/src/timing/check.rs', lines 121:0-132:1 -/
+def timing.check.ceres_m_cycle
+  (clock : timing.timer.Clock) (host : timing.check.CheckHost)
+  (access : ceres_netlist.timer.Access) :
+  Result (((Option Std.U8) × (Option Std.U8) × Bool) × timing.timer.Clock ×
+    timing.check.CheckHost)
+  := do
+  let (read, clock1, host1) ←
+    timing.check.ceres_access
+      timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
+      access
+  let ((first, twice), clock2, host2) ←
+    timing.check.ceres_t_cycle clock1 host1 0#u8 none false
+  let ((first1, twice1), clock3, host3) ←
+    timing.check.ceres_t_cycle clock2 host2 1#u8 first twice
+  let ((first2, twice2), clock4, host4) ←
+    timing.check.ceres_t_cycle clock3 host3 2#u8 first1 twice1
+  let ((first3, twice3), clock5, host5) ←
+    timing.check.ceres_t_cycle clock4 host4 3#u8 first2 twice2
+  ok ((read, first3, twice3), clock5, host5)
+
+/-- [ceres_core::timing::check::{ceres_core::timing::check::CheckHost}::new]:
+    Source: 'ceres-core/src/timing/check.rs', lines 46:4-51:5 -/
+def timing.check.CheckHost.new
+  (serial_div_mask : Std.U16) : Result timing.check.CheckHost := do
+  ok { serial_div_mask, timer_interrupts := 0#u32 }
+
+/-- [ceres_core::interrupts::check::ceres_step]: loop body 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 124:4-127:5 -/
+@[rust_loop_body]
+def interrupts.check.ceres_step_loop.body
+  (access : ceres_netlist.interrupts.Access) (requests : Array Std.U8 4#usize)
+  (queue : Std.U8) (ints : interrupts.Interrupts) (t : Std.Usize) :
+  Result (ControlFlow (interrupts.Interrupts × Std.Usize)
+    interrupts.Interrupts)
+  := do
+  if t < 4#usize
+  then
+    let i ← Array.index_usize requests t
+    let ints1 ← interrupts.check.ceres_t_cycle ints access t i queue
+    let t1 ← t + 1#usize
+    ok (cont (ints1, t1))
+  else ok (done ints)
+
+/-- [ceres_core::interrupts::check::ceres_step]: loop 0:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 124:4-127:5 -/
+@[rust_loop]
+def interrupts.check.ceres_step_loop
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
+  (requests : Array Std.U8 4#usize) (queue : Std.U8) (t : Std.Usize) :
+  Result interrupts.Interrupts
+  := do
+  loop
+    (fun (ints1, t1) => interrupts.check.ceres_step_loop.body access requests
+      queue ints1 t1)
+    (ints, t)
+
+/-- [ceres_core::interrupts::check::ceres_step]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 108:0-129:1 -/
+def interrupts.check.ceres_step
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
+  (rises : Array Std.U8 8#usize) (timer : Option Std.U8) :
+  Result (((Option Std.U8) × (Option Std.U8)) × interrupts.Interrupts)
+  := do
+  let requests ← interrupts.check.requests rises
+  let requests1 ←
+    match timer with
+    | none => ok requests
+    | some t =>
+      do
+      let i ← lift (t &&& 3#u8)
+      let i1 ← lift (core.convert.num.FromUsizeU8.from i)
+      let i2 ← Array.index_usize requests i1
+      let i3 ← lift (i2 ||| ceres_netlist.interrupts.TIMER)
+      Array.update requests i1 i3
+  let (read, queue) ← interrupts.check.ceres_boundary ints access
+  let taken ←
+    match access with
+    | ceres_netlist.interrupts.Access.None => ok none
+    | ceres_netlist.interrupts.Access.ReadIf => ok none
+    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
+    | ceres_netlist.interrupts.Access.Entry =>
+      do
+      let i ← ceres_netlist.interrupts.lowest queue
+      ok (some i)
+  let ints1 ←
+    interrupts.check.ceres_step_loop ints access requests1 queue 0#usize
+  ok ((read, taken), ints1)
+
+/-- [ceres_core::interrupts::check::same_ints]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 38:0-40:1 -/
+def interrupts.check.same_ints
+  (a : interrupts.Interrupts) (b : interrupts.Interrupts) : Result Bool := do
+  ok ((a.ie = b.ie) && (a.ifr = b.ifr))
+
+/-- [ceres_core::check::in_sequence]:
+    Source: 'ceres-core/src/check.rs', lines 122:0-152:1 -/
+def check.in_sequence
+  (net : ceres_netlist.timer.NetTimer) (clock : timing.timer.Clock)
+  (clock_joint : timing.timer.Clock) (ints : interrupts.Interrupts)
+  (ints_joint : interrupts.Interrupts)
+  (timer_access : ceres_netlist.timer.Access) (serial_div_mask : Std.U16)
+  (if_access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
+  :
+  Result Bool
+  := do
+  let b ← timing.check.related net clock
+  let b1 ← timing.check.same_clock clock clock_joint
+  let b2 ← interrupts.check.same_ints ints ints_joint
+  if ((¬ b) || (¬ b1)) || (¬ b2)
+  then ok true
+  else
+    let host ← timing.check.CheckHost.new serial_div_mask
+    let ((timer_read, timer_irq, twice), clock1, _) ←
+      timing.check.ceres_m_cycle clock host timer_access
+    let ((if_read, taken), ints1) ←
+      interrupts.check.ceres_step ints if_access rises timer_irq
+    let joint ← check.JointHost.new serial_div_mask ints_joint
+    let ((joint_timer_read, joint_if_read, joint_taken), clock_joint1, joint1)
+      ←
+      check.ceres_m_cycle_joint clock_joint joint timer_access if_access rises
+    let b3 ← timing.check.same_read timer_read joint_timer_read
+    let b4 ← timing.check.same_read if_read joint_if_read
+    let b5 ← timing.check.same_read taken joint_taken
+    let b6 ← timing.check.same_clock clock1 clock_joint1
+    let b7 ← interrupts.check.same_ints ints1 joint1.ints
+    ok (twice || ((((b3 && b4) && b5) && b6) && b7))
+
+/-- [ceres_core::interrupts::check::related]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 33:0-35:1 -/
+def interrupts.check.related
+  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts) :
+  Result Bool
+  := do
+  let i ← lift (~~~ interrupts.INT_MASK)
+  let i1 ← lift (net.flags &&& i)
+  ok (((i1 = 0#u8) && (ints.ifr = net.flags)) && (ints.ie = net.ie))
+
+/-- [ceres_core::interrupts::check::net_step]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 93:0-104:1 -/
+def interrupts.check.net_step
+  (net : ceres_netlist.interrupts.NetIf)
+  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
+  (timer : Bool) :
+  Result (((Option Std.U8) × (Option Std.U8)) ×
+    ceres_netlist.interrupts.NetIf)
+  := do
+  let rises1 ←
+    if timer
+    then
+      do
+      let i ← Array.index_usize rises ceres_netlist.interrupts.A
+      let i1 ← lift (i ||| ceres_netlist.interrupts.TIMER)
+      Array.update rises ceres_netlist.interrupts.A i1
+    else ok rises
+  ceres_netlist.interrupts.NetIf.m_cycle net access rises1
+
+/-- [ceres_core::timing::check::same_interrupt]:
+    Source: 'ceres-core/src/timing/check.rs', lines 157:0-162:1 -/
+def timing.check.same_interrupt
+  (net : Bool) (ceres : Option Std.U8) : Result Bool := do
+  match ceres with
+  | none => ok (¬ net)
+  | some t => ok (net && (t = 2#u8))
+
+/-- [ceres_core::interrupts::check::step_agrees]:
+    Source: 'ceres-core/src/interrupts/check.rs', lines 135:0-169:1 -/
+def interrupts.check.step_agrees
+  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts)
+  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
+  (net_timer : Bool) (ceres_timer : Option Std.U8) :
+  Result Bool
+  := do
+  let b ← interrupts.check.related net ints
+  let b1 ← timing.check.same_interrupt net_timer ceres_timer
+  if (¬ b) || (¬ b1)
+  then ok true
+  else
+    let ((net_read, net_taken), net1) ←
+      interrupts.check.net_step net access rises net_timer
+    let ((ceres_read, ceres_taken), ints1) ←
+      interrupts.check.ceres_step ints access rises ceres_timer
+    let b2 ← timing.check.same_read net_read ceres_read
+    let b3 ← timing.check.same_read net_taken ceres_taken
+    let b4 ← interrupts.check.related net1 ints1
+    ok ((b2 && b3) && b4)
+
 /-- [ceres_core::timing::check::known_difference]:
-    Source: 'ceres-core/src/timing/check.rs', lines 201:0-234:1 -/
+    Source: 'ceres-core/src/timing/check.rs', lines 234:0-267:1 -/
 def timing.check.known_difference
   (net : ceres_netlist.timer.NetTimer) (access : ceres_netlist.timer.Access) :
   Result Bool
@@ -1444,7 +1653,7 @@ def timing.check.known_difference
     && (tma = 255#u8)) && (b && (¬ b1)))))
 
 /-- [ceres_core::timing::check::step_agrees]:
-    Source: 'ceres-core/src/timing/check.rs', lines 240:0-283:1 -/
+    Source: 'ceres-core/src/timing/check.rs', lines 273:0-313:1 -/
 def timing.check.step_agrees
   (net : ceres_netlist.timer.NetTimer) (clock : timing.timer.Clock)
   (access : ceres_netlist.timer.Access) (serial_div_mask : Std.U16) :
@@ -1455,11 +1664,11 @@ def timing.check.step_agrees
   if (¬ b) || b1
   then ok true
   else
+    let host ← timing.check.CheckHost.new serial_div_mask
     let ((net_read, net_irq), net1) ←
       ceres_netlist.timer.NetTimer.m_cycle net access
     let ((ceres_read, ceres_irq, twice), clock1, _) ←
-      timing.check.ceres_m_cycle clock
-        { serial_div_mask, timer_interrupts := 0#u32 } access
+      timing.check.ceres_m_cycle clock host access
     let b2 ← timing.check.same_read net_read ceres_read
     let b3 ← timing.check.same_interrupt net_irq ceres_irq
     let b4 ← timing.check.related net1 clock1

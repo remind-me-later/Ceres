@@ -100,11 +100,11 @@ structure interrupts.Interrupts where
   ie : Std.U8
   ifr : Std.U8
 
-/-- [ceres_core::timing::check::CheckHost]
-    Source: 'ceres-core/src/timing/check.rs', lines 38:0-41:1 -/
-structure timing.check.CheckHost where
+/-- [ceres_core::check::JointHost]
+    Source: 'ceres-core/src/check.rs', lines 36:0-39:1 -/
+structure check.JointHost where
   serial_div_mask : Std.U16
-  timer_interrupts : Std.U32
+  ints : interrupts.Interrupts
 
 /-- [ceres_core::timing::timer::Clock]
     Source: 'ceres-core/src/timing/timer.rs', lines 53:0-97:1 -/
@@ -136,5 +136,11 @@ structure timing.timer.TimerHost (Self : Type _) where
   apu_envelopes_armed : Self → Result Self
   apu_delayed_envelope_tick : Self → timing.timer.Clock → Result Self
   apu_m_cycle : Self → timing.timer.Clock → Result Self
+
+/-- [ceres_core::timing::check::CheckHost]
+    Source: 'ceres-core/src/timing/check.rs', lines 40:0-43:1 -/
+structure timing.check.CheckHost where
+  serial_div_mask : Std.U16
+  timer_interrupts : Std.U32
 
 end ceres_core
