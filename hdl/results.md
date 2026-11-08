@@ -661,8 +661,26 @@ netlist's state at 162, measured on all 644,588 background-only line
 starts of the sweep (mode 3 rising at 154 every time). Render's mode 0
 rises a half dot after ceres's `HBlankStart`. Planted faults are caught: a
 lead-in compare with SCX + 1, a push a dot early, the netlist's fine scroll
-compared with SCX + 1. Left out: the window, the objects, SCX written in
-mode 3, and line 0 after the LCD is turned on, whose loop starts at 169.
+compared with SCX + 1. Left out: the window, the objects, and line 0 after
+the LCD is turned on, whose loop starts at 169.
+
+SCX written during mode 3 is proved too. A write that changes SCX's low
+bits reaches ceres's mixer two half dots before the netlist's write strobe
+rises (all 184,785 such writes of the 134 ROMs that write SCX on a visible
+line, 110,344 of them in mode 3), so each of the netlist's fine scroll
+compares, two dots behind ceres's, uses the SCX ceres's used. The relation
+no longer ties a match to SCX: it keeps the netlist's two pending compares,
+the latch holding the mixer's SCX of the dot before, and that they come out
+as ceres's did; a write that makes ceres's lead-in miss every position
+sends it back to -16 (gambatte's `scx_m3_extend`), where the netlist's
+first fetch is long done. Kani found two buses the CPU does not drive: a
+strobe that leaves SCX's address as it rises, and one rising with the
+netlist's dot clock at `h = 167`, where the latch takes the bus's 0xFF a
+nanosecond before the fine scroll's first compare. `tests/render_edge.rs`
+now checks the strobes: all 179,262 of its 508 ROMs rise at `h = 1` (mod
+8) after an edge with SCX's address and 0xFF, and last three edges (with no
+difference on 783,279,398 edges). The dot takes 9 s; planted faults are
+caught (ceres's mixer a dot late, the netlist's latch shut in mode 3).
 
 ## The model's races
 

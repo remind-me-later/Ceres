@@ -7,9 +7,17 @@
 //! (`pipeline_for`): its fetcher's count, its first fetch's flip-flops and its
 //! fine scroll follow from the FIFO's length, which counts the dots of each
 //! tile; the pixel counter, and the fine scroll's discard, follow from the
-//! position. Neither depends on SCX: ceres's lead-in matches SCX's low bits two
-//! dots before the netlist's fine scroll does, and runs those two dots at
-//! positions -7 and -6, which the netlist spends discarding.
+//! position. Neither depends on SCX: ceres's lead-in compares SCX's low bits
+//! with the position two dots before the netlist's fine scroll compares them
+//! with its count, and spends the two dots after its match at positions -7
+//! and -6, which the netlist spends discarding.
+//!
+//! SCX can change between the two compares. Ceres's mixer takes a write a
+//! dot before the netlist's latch does (`mapping-scx-write`), so each of the
+//! netlist's compares uses the SCX ceres's compared with: after ceres's dot,
+//! the latch holds the mixer's SCX of the dot before, and takes this dot's in
+//! the next. The relation keeps the two compares the netlist still has to
+//! make, and that they come out as ceres's did (`reachable`).
 //!
 //! This holds while the window and the objects are idle: ceres's loop then
 //! pops a pixel and steps its fetcher every dot (`ceres_dot`).
@@ -23,10 +31,6 @@
 #![expect(
     clippy::needless_bitwise_bool,
     reason = "written for Aeneas (Lean), as `timing::check` is: a lazy && or || is a branch, and its symbolic execution forks on every one"
-)]
-#![expect(
-    clippy::verbose_bit_mask,
-    reason = "Aeneas models the mask, not trailing_zeros"
 )]
 
 use {
@@ -88,13 +92,20 @@ const fn first_round(bg: &Background) -> bool {
 }
 
 /// The netlist's pipeline after ceres's dot and its two edges, with its SCX
-/// and its inputs as they are.
+/// and its inputs as they are; `rerun` if the lead-in went back to its start
+/// (the netlist's first fetch long done, its fine scroll restarted the
+/// fetcher).
 #[expect(
     clippy::cast_sign_loss,
     clippy::cast_possible_truncation,
     reason = "the pixel counter, positive by then"
 )]
-pub(crate) const fn pipeline_for(bg: &Background, scx: u8, inputs: EdgeInputs) -> NetPipeline {
+pub(crate) const fn pipeline_for(
+    bg: &Background,
+    scx: u8,
+    inputs: EdgeInputs,
+    rerun: bool,
+) -> NetPipeline {
     let p = signed(bg.position);
     let len = bg.fifo.len();
     let mut fine = FINE_AHEAD.wrapping_sub(len) & 7;
@@ -112,7 +123,7 @@ pub(crate) const fn pipeline_for(bg: &Background, scx: u8, inputs: EdgeInputs) -
     let mut started = true;
     let mut ryfa = fine == 0;
     let mut rene = fine == 1;
-    if first_round(bg) {
+    if first_round(bg) & !rerun {
         // The first fetch's restart, not the fine scroll's, began the tile.
         rene = false;
         if len == 7 {
@@ -186,21 +197,29 @@ pub(crate) fn ceres_first_dot(bg: &mut Background, mixer_scx: u8) {
 
 /// The first dot from the netlist's state before it, and ceres's after the
 /// line before (its position back at the lead-in's start, and no blank pixel
-/// inserted: the window was idle): both related.
+/// inserted: the window was idle), with the mixer's SCX in the dot before
+/// (`last_scx`) and in this one: both related.
 pub(crate) fn start_agrees(
     bg: &mut Background,
     net: &mut NetPipeline,
+    last_scx: u8,
     mixer_scx: u8,
     rising: EdgeInputs,
     falling: EdgeInputs,
 ) -> bool {
     let before = !net.inputs.clk
         & quiet(&net.inputs)
-        & (net.scx & 7 == mixer_scx & 7)
+        & latch_holds(net)
         & (*net == before_start(net.scx, net.inputs))
         & (bg.position == pos(-16))
         & !bg.insert_blank;
-    if !(before & rising.clk & !falling.clk & quiet(&rising) & quiet(&falling)) {
+    if !(before
+        & rising.clk
+        & !falling.clk
+        & quiet(&rising)
+        & quiet(&falling)
+        & writes(net, &rising, &falling, last_scx))
+    {
         return true;
     }
     ceres_first_dot(bg, mixer_scx);
@@ -209,8 +228,11 @@ pub(crate) fn start_agrees(
     related(bg, net, mixer_scx)
 }
 
-/// The background's shapes a background-only line passes through.
-const fn reachable(bg: &Background, mixer_scx: u8) -> bool {
+/// The background's shapes a background-only line passes through, with the
+/// mixer's SCX in the last dot (`mixer_scx`) and the dot before (`latched`,
+/// which the netlist's latch holds), and `rerun` if the lead-in went back to
+/// its start.
+const fn reachable(bg: &Background, latched: u8, mixer_scx: u8, rerun: bool) -> bool {
     let p = signed(bg.position);
     let len = bg.fifo.len();
     let shapes = (len >= 1)
@@ -219,21 +241,40 @@ const fn reachable(bg: &Background, mixer_scx: u8) -> bool {
         & !bg.insert_blank
         & (p >= LEAD_IN)
         & (p <= PX_WIDTH as i16);
-    let lead_in = if p <= LAST_UNMATCHED {
-        // Unmatched: a pixel popped a dot since the start, and no earlier
-        // position matched.
-        first_round(bg)
-            & (p > LEAD_IN)
-            & (p + len as i16 == LEAD_IN + FULL as i16)
-            & (mixer_scx & 7 >= bg.position & 7)
+    let round = if p <= LAST_UNMATCHED {
+        // Unmatched: the position has gained a pixel for each one the FIFO
+        // lost since the round began, at -16 with the FIFO full.
+        first_round(bg) & ((p > LEAD_IN) | rerun) & (p + len as i16 == LEAD_IN + FULL as i16)
     } else {
-        // Matched at position m, m = SCX (mod 8): the position jumped to -8,
-        // and since then it has gained a pixel for each one the FIFO lost
-        // (and 8 for each row pushed), so that m = -16 - (p + len) (mod 8).
-        let since_match = p + len as i16 + (mixer_scx & 7) as i16;
-        (!first_round(bg) | (p > -8)) & (since_match & 7 == 0)
+        // Matched: the position jumped to -8 and gained a pixel.
+        !first_round(bg) | (p > -8)
     };
-    shapes & lead_in
+    shapes & round & pending_compares(bg, latched, mixer_scx, rerun)
+}
+
+/// The netlist's fine scroll still has to compare the positions ceres's
+/// last two dots compared, the one before with `latched` (its count is then
+/// 6 minus the FIFO's length), the last with `mixer_scx`: each matches if
+/// and only if ceres's did. Its first fetch not done (the FIFO's first pixel
+/// popped, `first_round`), its next dot does not compare.
+const fn pending_compares(bg: &Background, latched: u8, mixer_scx: u8, rerun: bool) -> bool {
+    let p = signed(bg.position);
+    let len = bg.fifo.len();
+    let count = FINE_AHEAD.wrapping_sub(len) & 7;
+    let compares = !(first_round(bg) & !rerun & (len == FULL - 1));
+    let next = compares & (count == latched & 7);
+    let after = (count + 1) & 7 == mixer_scx & 7;
+    if p > LAST_DISCARDED {
+        // The netlist has matched too, or matches in its next dot.
+        true
+    } else if p == LAST_DISCARDED {
+        // Ceres matched the dot before: the netlist matches in its next dot,
+        // and stops comparing.
+        next
+    } else {
+        // Ceres matched in its last dot (-7), or has not.
+        !next & (after == (p == LAST_DISCARDED - 1))
+    }
 }
 
 const fn matches_step(a: FetcherStep, b: FetcherStep) -> bool {
@@ -241,19 +282,59 @@ const fn matches_step(a: FetcherStep, b: FetcherStep) -> bool {
 }
 
 /// The netlist's inputs in a background-only mode 3: no reset, no line
-/// start, the scan stopped, and the CPU not addressing SCX.
+/// start, the scan stopped.
 const fn quiet(i: &EdgeInputs) -> bool {
-    !i.ppu_reset & !i.hard_reset & !i.line_start & !i.stop_scan & (i.addr != SCX)
+    !i.ppu_reset & !i.hard_reset & !i.line_start & !i.stop_scan
+}
+
+/// The CPU strobes SCX's address in this edge.
+const fn strobes_scx(i: &EdgeInputs) -> bool {
+    i.cpu_wr_sync & (i.addr == SCX)
+}
+
+/// A write strobe that rises while the bus is on SCX's address keeps it there
+/// (the edge before the strobe carries SCX's address, and 0xFF).
+const fn keeps_address(before: &EdgeInputs, now: &EdgeInputs) -> bool {
+    !(now.cpu_wr_sync & !before.cpu_wr_sync & (before.addr == SCX)) | (now.addr == SCX)
+}
+
+/// The write strobe does not rise with the dot's first edge where the
+/// netlist's dot clock starts (POKY rises with PYGO, in ceres's third dot of
+/// the line, at h = 167): the strobes rise at h = 1 (mod 8).
+const fn strobe_misses_start(net: &NetPipeline, rising: &EdgeInputs) -> bool {
+    !(net.mode3 & net.pory & !net.started & rising.cpu_wr_sync & !net.inputs.cpu_wr_sync)
+}
+
+/// The CPU writes SCX's low bits with `scx`'s in a dot's edges, if at all:
+/// while it strobes SCX's address the data bus carries them, and if they are
+/// not the latch's, the strobe comes with the dot's first edge.
+const fn writes(net: &NetPipeline, rising: &EdgeInputs, falling: &EdgeInputs, scx: u8) -> bool {
+    strobe_misses_start(net, rising)
+        & (!strobes_scx(rising) | (rising.data & 7 == scx & 7))
+        & (!strobes_scx(falling) | (falling.data & 7 == scx & 7))
+        & keeps_address(&net.inputs, rising)
+        & keeps_address(rising, falling)
+        & ((net.scx & 7 == scx & 7) | strobes_scx(rising))
+}
+
+/// SCX's latch holds what the last edge strobed into it.
+const fn latch_holds(net: &NetPipeline) -> bool {
+    !strobes_scx(&net.inputs) | (net.inputs.data == net.scx)
 }
 
 /// Ceres's background and the netlist's pipeline after a dot (at even `h`),
-/// with the mixer's SCX.
+/// with the mixer's SCX in the dot: the lead-in went back to its start or
+/// not.
 pub(crate) fn related(bg: &Background, net: &NetPipeline, mixer_scx: u8) -> bool {
-    reachable(bg, mixer_scx)
-        & !net.inputs.clk
+    !net.inputs.clk
         & quiet(&net.inputs)
-        & (net.scx & 7 == mixer_scx & 7)
-        & (*net == pipeline_for(bg, net.scx, net.inputs))
+        & latch_holds(net)
+        & (related_in(bg, net, mixer_scx, false) | related_in(bg, net, mixer_scx, true))
+}
+
+fn related_in(bg: &Background, net: &NetPipeline, mixer_scx: u8, rerun: bool) -> bool {
+    reachable(bg, net.scx, mixer_scx, rerun)
+        & (*net == pipeline_for(bg, net.scx, net.inputs, rerun))
 }
 
 /// A dot of ceres's mode 3 loop with the window and the objects idle
@@ -264,17 +345,24 @@ pub(crate) fn ceres_dot(bg: &mut Background, mixer_scx: u8) {
     bg.advance(false, None);
 }
 
-/// A dot from related states: both stay related, and mode 3 goes on; or,
+/// A dot from related states, with the mixer's SCX in the dot before
+/// (`last_scx`) and in this one: both stay related, and mode 3 goes on; or,
 /// once ceres has drawn the line (its `HBlankStart` runs in this dot's first
 /// half dot), the netlist's mode 3 stops at the dot's second edge.
 pub(crate) fn step_agrees(
     bg: &mut Background,
     net: &mut NetPipeline,
+    last_scx: u8,
     mixer_scx: u8,
     rising: EdgeInputs,
     falling: EdgeInputs,
 ) -> bool {
-    if !(related(bg, net, mixer_scx) & rising.clk & !falling.clk & quiet(&rising) & quiet(&falling))
+    if !(related(bg, net, last_scx)
+        & rising.clk
+        & !falling.clk
+        & quiet(&rising)
+        & quiet(&falling)
+        & writes(net, &rising, &falling, last_scx))
     {
         return true;
     }

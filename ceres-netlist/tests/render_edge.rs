@@ -7,7 +7,11 @@
 //! `background::check::before_start`): on a visible line, render's mode 3
 //! rises at `h = 154` (the line timing's half dot, `h = 904` where vclk
 //! rises), and at `h = 162`, the end of the dot before ceres's mode 3 loop
-//! starts, the pipeline is `BEFORE_START`, whatever SCX is.
+//! starts, the pipeline is `BEFORE_START`, whatever SCX is. And where the
+//! CPU's writes to SCX reach the latch (ceres-core's
+//! `background::check::writes`): the write strobe on SCX's address rises
+//! with the clock at `h = 1 (mod 8)`, after an edge that carries SCX's
+//! address and 0xFF, and stays up three edges.
 //!
 //! `TEST_ROOT=<a checkout with external/> cargo test -p ceres-netlist
 //! --release --test render_edge -- --ignored --nocapture`, with the ROMs of
@@ -56,6 +60,13 @@ const LINE_H: u32 = 912;
 const MODE3_RISE_H: u32 = 154;
 const BEFORE_START_H: u32 = 162;
 
+/// A write strobe on SCX's address: the half dot (mod 8) it rises at, and the
+/// edges it lasts.
+const STROBE_PHASE: u32 = 1;
+const STROBE_EDGES: u32 = 3;
+/// SCX's address.
+const SCX: u16 = 0xFF43;
+
 /// The pipeline at `BEFORE_START_H` (its SCX and inputs aside): ceres-core's
 /// `background::check::before_start`.
 const BEFORE_START: NetPipeline = NetPipeline {
@@ -89,7 +100,9 @@ const BEFORE_START: NetPipeline = NetPipeline {
 
 /// What a ROM's run found: the edges compared, those in mode 3, and the
 /// first difference; the background-only lines whose mode 3 started as
-/// `BEFORE_START` has it, and the first that did not.
+/// `BEFORE_START` has it, and the first that did not; the SCX write strobes,
+/// and the first that did not rise or last as `STROBE_PHASE` and
+/// `STROBE_EDGES` have it.
 struct Found {
     rom: String,
     compared: u64,
@@ -97,6 +110,8 @@ struct Found {
     first: Option<String>,
     starts: u64,
     first_start: Option<String>,
+    strobes: u64,
+    first_strobe: Option<String>,
 }
 
 fn roms(root: &Path) -> Vec<String> {
@@ -122,11 +137,16 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
         first: None,
         starts: 0,
         first_start: None,
+        strobes: 0,
+        first_strobe: None,
     };
     // The line timing's half dot (once vclk has risen), and where mode 3
     // rose in this line, if the window and the sprites were idle.
     let mut h: Option<u32> = None;
     let mut rose_at: Option<u32> = None;
+    // The edges the SCX write strobe has been up, and whether it rose as it
+    // should.
+    let mut strobe: Option<(u32, bool)> = None;
     while run.edge < edges {
         let before = run.chip.render;
         let vclk = run.chip.lcd.vclk;
@@ -140,6 +160,26 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
         if after.inputs.ppu_reset {
             h = None;
         }
+        let (b, i) = (&before.inputs, &after.inputs);
+        let strobed = i.cpu_wr_sync && i.addr == SCX;
+        strobe = match (strobe, strobed, h) {
+            (None, true, Some(h)) => {
+                found.strobes += 1;
+                let bus = b.addr == SCX && b.data == 0xFF && !b.cpu_wr_sync;
+                Some((1, h % 8 == STROBE_PHASE && i.clk && bus))
+            }
+            (Some((n, ok)), true, _) => Some((n + 1, ok)),
+            (Some((n, ok)), false, _) => {
+                if (!ok || n != STROBE_EDGES) && found.first_strobe.is_none() {
+                    found.first_strobe = Some(format!(
+                        "edge {} ly {}: SCX strobe of {n} edges ending at h = {h:?}, rose as it should: {ok}",
+                        run.edge, run.chip.lcd.ly
+                    ));
+                }
+                None
+            }
+            (None, _, _) => None,
+        };
         if !before.mode3 && after.mode3 && idle(after) {
             rose_at = h;
         }
@@ -266,11 +306,12 @@ fn pipeline_follows_render() {
     let mut differ = 0;
     for (_, found) in &results {
         eprintln!(
-            "{}: {} edges compared, {} in mode 3, {} starts{}{}",
+            "{}: {} edges compared, {} in mode 3, {} starts, {} SCX writes{}{}{}",
             found.rom,
             found.compared,
             found.in_mode3,
             found.starts,
+            found.strobes,
             if found.first.is_some() {
                 ", DIFFERS"
             } else {
@@ -280,6 +321,11 @@ fn pipeline_follows_render() {
                 ", START DIFFERS"
             } else {
                 ""
+            },
+            if found.first_strobe.is_some() {
+                ", WRITE DIFFERS"
+            } else {
+                ""
             }
         );
         if let Some(first) = &found.first {
@@ -287,6 +333,10 @@ fn pipeline_follows_render() {
             eprintln!("  {first}");
         }
         if let Some(first) = &found.first_start {
+            differ += 1;
+            eprintln!("  {first}");
+        }
+        if let Some(first) = &found.first_strobe {
             differ += 1;
             eprintln!("  {first}");
         }
