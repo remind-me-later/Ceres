@@ -149,8 +149,9 @@ impl Ppu {
         address
     }
 
-    /// The fetcher's read of this dot, and its step after it.
-    pub(super) fn advance_fetcher(&mut self) {
+    /// The fetcher's read of this dot (mode 3's loop steps it after,
+    /// `Background::advance`).
+    pub(super) fn read_tile(&mut self) {
         match self.d.bg.fetcher.step {
             FetcherStep::GetTileT1 => {
                 self.update_wx_glitch();
@@ -252,14 +253,12 @@ impl Ppu {
             }
             FetcherStep::Push => {}
         }
-        let insertion_wx = self.insertion_glitch_wx();
-        self.d.bg.advance(self.d.window.cgb_wx_glitch, insertion_wx);
     }
 
     /// WX, if the DMG's window insertion glitch can happen as the fetcher
     /// pushes: the window triggered on WY but is off, and its disable did
     /// not land during a window tile's fetch.
-    const fn insertion_glitch_wx(&self) -> Option<u8> {
+    pub(super) const fn insertion_glitch_wx(&self) -> Option<u8> {
         if self.d.window.wy_triggered
             && self.lcdc & LCDC_WIN_EN_B == 0
             && !self.is_cgb_hardware()

@@ -8,7 +8,9 @@
 
 use {
     super::{
-        LAST_LINE, LINE_LENGTH, LINES, MODE2_LENGTH, mode3::Mode3Flow, model_ge_cgb_d, pos,
+        LAST_LINE, LINE_LENGTH, LINES, MODE2_LENGTH,
+        mode3::{Mode3Flow, mode3},
+        model_ge_cgb_d, pos,
         window::Window,
     },
     crate::{
@@ -87,12 +89,8 @@ pub(crate) enum State {
 impl Ppu {
     /// Runs the code of the states whose sleep ended, until the next sleep.
     pub(super) fn step_state_machine(&mut self, ints: &mut Interrupts) {
-        // Sleeping: `wait` dots remain, resume when it reaches zero.
-        if self.d.wait > 0 {
-            self.d.wait -= 1;
-            if self.d.wait > 0 {
-                return;
-            }
+        if !self.d.wake() {
+            return;
         }
 
         let mut state = self.d.state;
@@ -121,7 +119,7 @@ impl Ppu {
                 | State::Mode3ObjectLow
                 | State::Mode3ObjectHigh
                 | State::Mode3Pixel => {
-                    if matches!(self.mode3(state), Mode3Flow::Done) {
+                    if matches!(mode3(self, state), Mode3Flow::Done) {
                         self.mode3_done();
                     }
                     None

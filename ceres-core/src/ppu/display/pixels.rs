@@ -16,12 +16,9 @@ use {
 };
 
 impl Ppu {
-    pub(super) fn render_pixel_if_possible(&mut self) -> Option<PixelOut> {
-        let obj_en = self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware();
-        if obj_en && self.d.objs.next().is_some_and(|e| e.x == 0) {
-            return None;
-        }
-        let (fifo_item, popped) = self.d.bg.pop(self.mixer_scx, self.d.window.being_fetched)?;
+    /// The background FIFO's pixel (mode 3's loop popped it), mixed with the
+    /// object FIFO's: the pixel for the LCD, if it is shown.
+    pub(super) fn mixed_pixel(&mut self, fifo_item: Item, popped: Popped) -> Option<PixelOut> {
         let mut bg_priority = fifo_item.bg_priority;
         let mut oam_item = Item::default();
         let mut draw_oam = false;

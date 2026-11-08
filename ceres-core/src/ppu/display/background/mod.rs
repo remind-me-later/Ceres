@@ -73,6 +73,13 @@ impl Background {
         self.fetcher.step = FetcherStep::GetTileT1;
     }
 
+    /// The X an object must have to be fetched at this position: the
+    /// position plus 8, and 0 in the lead-in.
+    pub(super) const fn object_match_x(&self) -> u8 {
+        let x = self.position.wrapping_add(8);
+        if x > 240 { 0 } else { x }
+    }
+
     /// The position goes back to the lead-in's start, for the next line.
     pub(super) const fn restart_line(&mut self) {
         self.position = pos(-16);

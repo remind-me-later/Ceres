@@ -143,6 +143,30 @@ impl Default for Display {
 }
 
 impl Display {
+    /// Sleep for `n` dots; the code of state `id` runs afterwards.
+    #[inline]
+    pub(super) const fn sleep(&mut self, id: State, n: i32) {
+        self.state = id;
+        self.wait = n;
+    }
+
+    /// Sleep for `n` dots that count towards the length of the line.
+    #[inline]
+    pub(super) const fn sleep_in_line(&mut self, id: State, n: i32) {
+        self.cfl += n;
+        self.sleep(id, n);
+    }
+
+    /// A dot of the sleep passes: whether it ended, and the code that follows
+    /// it runs (`wait` dots remain, it ends when they reach zero).
+    #[inline]
+    pub(super) const fn wake(&mut self) -> bool {
+        if self.wait > 0 {
+            self.wait -= 1;
+        }
+        self.wait == 0
+    }
+
     pub(super) const fn restart(&mut self) {
         self.state = State::LcdOn;
         self.wait = 0;
@@ -255,15 +279,13 @@ impl Ppu {
     /// Sleep for `n` dots; the code of state `id` runs afterwards.
     #[inline]
     pub(super) const fn sleep(&mut self, id: State, n: i32) {
-        self.d.state = id;
-        self.d.wait = n;
+        self.d.sleep(id, n);
     }
 
     /// Sleep for `n` dots that count towards the length of the line.
     #[inline]
     pub(super) const fn sleep_in_line(&mut self, id: State, n: i32) {
-        self.d.cfl += n;
-        self.sleep(id, n);
+        self.d.sleep_in_line(id, n);
     }
 
     pub(in crate::ppu) const fn lcd_off(&mut self) {

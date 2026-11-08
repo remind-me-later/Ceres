@@ -1,7 +1,10 @@
 //! Mode 3: the loop that fetches objects and pushes pixels to the LCD.
 
 use {
-    super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, state::State, window::Window},
+    super::{
+        Display, LINES, background::Popped, fetcher::FetcherStep, fifo::Item, model_ge_cgb_d,
+        state::State, window::Window,
+    },
     crate::ppu::{
         ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
         LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
@@ -36,6 +39,265 @@ enum Step {
     AfterPixel,
 }
 
+/// What mode 3's loop asks of the PPU besides the display's state: the
+/// window, the fetchers' reads, the object's row and the pixels. `Ppu` does
+/// them; the proofs against the netlist (`background::check`) run the loop
+/// with the window idle and nothing read.
+pub(super) trait Mode3Ppu {
+    /// The display's state.
+    fn d(&mut self) -> &mut Display;
+    /// The objects are drawn (LCDC's bit 1, always on the CGB).
+    fn objects_enabled(&self) -> bool;
+    /// SCX as the pixel mixer sees it.
+    fn mixer_scx(&self) -> u8;
+    /// The window's check at the top of the loop: whether it started, and
+    /// the loop sleeps (`Mode3WindowDelay`).
+    fn window_check(&mut self) -> bool;
+    /// The window starts after its delay.
+    fn window_activated(&mut self);
+    /// A blank pixel inserted at the FIFO's end, as the window starts there.
+    fn window_pixel_insertion(&mut self);
+    /// The tile fetcher's read of this dot, and the window's glitches its
+    /// step takes (`Background::advance`).
+    fn fetcher_read(&mut self);
+    fn fetcher_glitches(&self) -> (bool, Option<u8>);
+    /// The object fetch's reads: its attributes, its row's two bytes.
+    fn read_object_attributes(&mut self);
+    fn read_object_low(&mut self);
+    fn read_object_high(&mut self);
+    /// The fetched object's row onto the object FIFO.
+    fn push_object(&mut self);
+    /// The background FIFO's pixel, mixed and drawn.
+    fn mix_pixel(&mut self, item: Item, popped: Popped);
+    /// The HBlank interrupt's source, before the STAT mode (`timing.rs`).
+    fn signal_mode3_end(&mut self);
+
+    /// The tile fetcher's read, then its step.
+    fn advance_fetcher(&mut self) {
+        self.fetcher_read();
+        let (cgb_wx_glitch, insertion_wx) = self.fetcher_glitches();
+        self.d().bg.advance(cgb_wx_glitch, insertion_wx);
+    }
+}
+
+/// Runs the mode 3 loop from `resume` (the sleep that ended) until it sleeps
+/// again or the line is drawn.
+#[expect(
+    clippy::too_many_lines,
+    reason = "SameBoy's mode 3 loop: one arm per step"
+)]
+pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
+    // On the DMG, disabling objects aborts an object fetch (see
+    // `abort_object_fetch_on_obj_disable`).
+    let unless_aborted = |ppu: &mut P, step| {
+        if ppu.d().obj_fetch.aborted {
+            Step::OutputPixel
+        } else {
+            step
+        }
+    };
+    let mut step = match resume {
+        State::Mode3WindowDelay => {
+            p.window_activated();
+            Step::Objects
+        }
+        State::Mode3ObjectWait => unless_aborted(p, Step::WaitForTile),
+        State::Mode3ObjectFetch => unless_aborted(p, Step::ReadObjectAttributes),
+        State::Mode3ObjectAttributes => unless_aborted(p, Step::ReadObjectLow),
+        State::Mode3ObjectLow => unless_aborted(p, Step::ReadObjectHigh),
+        State::Mode3ObjectHigh => Step::PushObject,
+        State::Mode3Pixel => Step::AfterPixel,
+        _ => Step::WindowCheck,
+    };
+    loop {
+        step = match step {
+            Step::WindowCheck => {
+                if p.window_check() {
+                    return Mode3Flow::Slept;
+                }
+                Step::Objects
+            }
+            Step::Objects => {
+                p.window_pixel_insertion();
+                // Drop the objects left of the current position.
+                let d = p.d();
+                while d.objs.next().is_some_and(|e| e.x < d.bg.object_match_x()) {
+                    d.objs.count -= 1;
+                }
+                d.obj_fetch.active = true;
+                Step::NextObject
+            }
+            Step::NextObject => {
+                let enabled = p.objects_enabled();
+                let d = p.d();
+                if let Some(obj) = d.objs.next()
+                    && enabled
+                    && obj.x == d.bg.object_match_x()
+                {
+                    if obj.x == 167 {
+                        // The HBlank interrupt does not wait for the fetch of an
+                        // object at the right edge, unlike the STAT mode.
+                        p.signal_mode3_end();
+                    }
+                    Step::WaitForTile
+                } else {
+                    Step::OutputPixel
+                }
+            }
+            Step::WaitForTile => {
+                let d = p.d();
+                if mem::take(&mut d.window.started_after_line) {
+                    // The window's start restarted the fetcher: the
+                    // object waits for the window's first tile and the
+                    // next one (the line ends after it, whatever the
+                    // fetcher holds).
+                    d.sleep_in_line(State::Mode3ObjectFetch, 1 + WINDOW_TILES_BEFORE_OBJECT);
+                    return Mode3Flow::Slept;
+                }
+                // The background fetcher finishes its tile first.
+                let next = if d.bg.fetcher.step < FetcherStep::DataHighT2 || d.bg.fifo.is_empty() {
+                    State::Mode3ObjectWait
+                } else {
+                    State::Mode3ObjectFetch
+                };
+                p.advance_fetcher();
+                p.d().sleep_in_line(next, 1);
+                return Mode3Flow::Slept;
+            }
+            Step::ReadObjectAttributes => {
+                p.advance_fetcher();
+                p.read_object_attributes();
+                p.d().sleep_in_line(State::Mode3ObjectAttributes, 2);
+                return Mode3Flow::Slept;
+            }
+            Step::ReadObjectLow => {
+                p.read_object_low();
+                p.d().sleep_in_line(State::Mode3ObjectLow, 2);
+                return Mode3Flow::Slept;
+            }
+            Step::ReadObjectHigh => {
+                p.d().obj_fetch.active = false;
+                p.read_object_high();
+                p.d().sleep_in_line(State::Mode3ObjectHigh, 1);
+                return Mode3Flow::Slept;
+            }
+            Step::PushObject => {
+                p.push_object();
+                p.d().objs.count -= 1;
+                Step::NextObject
+            }
+            Step::OutputPixel => {
+                let enabled = p.objects_enabled();
+                let scx = p.mixer_scx();
+                let d = p.d();
+                d.obj_fetch.aborted = false;
+                d.obj_fetch.active = false;
+                // An object at X 0, not fetched yet, holds the pixels back.
+                let held = enabled && d.objs.next().is_some_and(|e| e.x == 0);
+                if !held && let Some((item, popped)) = d.bg.pop(scx, d.window.being_fetched) {
+                    p.mix_pixel(item, popped);
+                }
+                p.advance_fetcher();
+                if p.d().bg.position == PX_WIDTH {
+                    return Mode3Flow::Done;
+                }
+                p.d().sleep_in_line(State::Mode3Pixel, 1);
+                return Mode3Flow::Slept;
+            }
+            Step::AfterPixel => {
+                if p.d().window.wx_166_interrupt_glitch {
+                    p.signal_mode3_end();
+                }
+                Step::WindowCheck
+            }
+        };
+    }
+}
+
+impl Mode3Ppu for Ppu {
+    #[inline]
+    fn d(&mut self) -> &mut Display {
+        &mut self.d
+    }
+
+    #[inline]
+    fn objects_enabled(&self) -> bool {
+        self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware()
+    }
+
+    #[inline]
+    fn mixer_scx(&self) -> u8 {
+        self.mixer_scx
+    }
+
+    fn window_check(&mut self) -> bool {
+        self.mode3_window()
+    }
+
+    fn window_activated(&mut self) {
+        self.mode3_window_activated();
+    }
+
+    fn window_pixel_insertion(&mut self) {
+        // Insert a pixel right at the FIFO's end.
+        let hw = self.is_cgb_hardware();
+        if self.wx == self.d.bg.position.wrapping_add(7)
+            && (!hw || self.wx == 0)
+            && self.d.window.wx_triggered
+            && !self.d.window.being_fetched
+            && self.d.bg.fetcher.step == FetcherStep::GetTileT1
+            && self.d.bg.fifo.len() == 8
+        {
+            self.d.bg.insert_blank = true;
+        }
+    }
+
+    fn fetcher_read(&mut self) {
+        self.read_tile();
+    }
+
+    #[inline]
+    fn fetcher_glitches(&self) -> (bool, Option<u8>) {
+        (self.d.window.cgb_wx_glitch, self.insertion_glitch_wx())
+    }
+
+    fn read_object_attributes(&mut self) {
+        let base = u16::from(self.d.objs.fetched().index) * Oam::ENTRY_SIZE;
+        // The tile and the attributes go through the latches the search
+        // reads Y and X into, and stay there.
+        self.d.obj_fetch.tile = self.oam_read_fetch(base + Oam::ENTRY_TILE);
+        self.d.obj_fetch.flags = self.oam_read_fetch(base + Oam::ENTRY_ATTRIBUTES);
+        self.d.objs.y_bus = self.d.obj_fetch.tile;
+        self.d.objs.x_bus = self.d.obj_fetch.flags;
+    }
+
+    fn read_object_low(&mut self) {
+        self.d.obj_fetch.line_address = self.current_object_line_address();
+        self.d.obj_fetch.data[0] = self.vram_read(self.d.obj_fetch.line_address);
+    }
+
+    fn read_object_high(&mut self) {
+        self.d.obj_fetch.line_address = self.current_object_line_address();
+        self.d.obj_fetch.data[1] = self.vram_read(self.d.obj_fetch.line_address + 1);
+    }
+
+    fn push_object(&mut self) {
+        self.overlay_object_row();
+    }
+
+    fn mix_pixel(&mut self, item: Item, popped: Popped) {
+        if let Some(out) = self.mixed_pixel(item, popped) {
+            #[cfg(feature = "debug")]
+            self.trace_pixel(out.lx);
+            self.output_pixel(out);
+        }
+    }
+
+    fn signal_mode3_end(&mut self) {
+        self.timing_mode3_end();
+    }
+}
+
 impl Ppu {
     pub(super) fn mode3_start(&mut self) {
         self.d.window.no_pixel_insertion_glitch = false;
@@ -53,158 +315,6 @@ impl Ppu {
         }
     }
 
-    /// Runs the mode 3 loop from `resume` (the sleep that ended) until it
-    /// sleeps again or the line is drawn.
-    #[expect(
-        clippy::too_many_lines,
-        reason = "SameBoy's mode 3 loop: one arm per step"
-    )]
-    pub(super) fn mode3(&mut self, resume: State) -> Mode3Flow {
-        // On the DMG, disabling objects aborts an object fetch (see
-        // `abort_object_fetch_on_obj_disable`).
-        let unless_aborted = |ppu: &Self, step| {
-            if ppu.d.obj_fetch.aborted {
-                Step::OutputPixel
-            } else {
-                step
-            }
-        };
-        let mut step = match resume {
-            State::Mode3WindowDelay => {
-                self.mode3_window_activated();
-                Step::Objects
-            }
-            State::Mode3ObjectWait => unless_aborted(self, Step::WaitForTile),
-            State::Mode3ObjectFetch => unless_aborted(self, Step::ReadObjectAttributes),
-            State::Mode3ObjectAttributes => unless_aborted(self, Step::ReadObjectLow),
-            State::Mode3ObjectLow => unless_aborted(self, Step::ReadObjectHigh),
-            State::Mode3ObjectHigh => Step::PushObject,
-            State::Mode3Pixel => Step::AfterPixel,
-            _ => Step::WindowCheck,
-        };
-        loop {
-            step = match step {
-                Step::WindowCheck => {
-                    if self.mode3_window() {
-                        return Mode3Flow::Slept;
-                    }
-                    Step::Objects
-                }
-                Step::Objects => {
-                    // Insert a pixel right at the FIFO's end.
-                    let hw = self.is_cgb_hardware();
-                    if self.wx == self.d.bg.position.wrapping_add(7)
-                        && (!hw || self.wx == 0)
-                        && self.d.window.wx_triggered
-                        && !self.d.window.being_fetched
-                        && self.d.bg.fetcher.step == FetcherStep::GetTileT1
-                        && self.d.bg.fifo.len() == 8
-                    {
-                        self.d.bg.insert_blank = true;
-                    }
-
-                    // Drop the objects left of the current position.
-                    while self
-                        .d
-                        .objs
-                        .next()
-                        .is_some_and(|e| e.x < self.x_for_object_match())
-                    {
-                        self.d.objs.count -= 1;
-                    }
-                    self.d.obj_fetch.active = true;
-                    Step::NextObject
-                }
-                Step::NextObject => {
-                    if let Some(obj) = self.d.objs.next()
-                        && (self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware())
-                        && obj.x == self.x_for_object_match()
-                    {
-                        if obj.x == 167 {
-                            // The HBlank interrupt does not wait for the fetch of an
-                            // object at the right edge, unlike the STAT mode.
-                            self.timing_mode3_end();
-                        }
-                        Step::WaitForTile
-                    } else {
-                        Step::OutputPixel
-                    }
-                }
-                Step::WaitForTile => {
-                    if mem::take(&mut self.d.window.started_after_line) {
-                        // The window's start restarted the fetcher: the
-                        // object waits for the window's first tile and the
-                        // next one (the line ends after it, whatever the
-                        // fetcher holds).
-                        self.sleep_in_line(State::Mode3ObjectFetch, 1 + WINDOW_TILES_BEFORE_OBJECT);
-                        return Mode3Flow::Slept;
-                    }
-                    // The background fetcher finishes its tile first.
-                    let next = if self.d.bg.fetcher.step < FetcherStep::DataHighT2
-                        || self.d.bg.fifo.is_empty()
-                    {
-                        State::Mode3ObjectWait
-                    } else {
-                        State::Mode3ObjectFetch
-                    };
-                    self.advance_fetcher();
-                    self.sleep_in_line(next, 1);
-                    return Mode3Flow::Slept;
-                }
-                Step::ReadObjectAttributes => {
-                    self.advance_fetcher();
-                    let base = u16::from(self.d.objs.fetched().index) * Oam::ENTRY_SIZE;
-                    // The tile and the attributes go through the latches the
-                    // search reads Y and X into, and stay there.
-                    self.d.obj_fetch.tile = self.oam_read_fetch(base + Oam::ENTRY_TILE);
-                    self.d.obj_fetch.flags = self.oam_read_fetch(base + Oam::ENTRY_ATTRIBUTES);
-                    self.d.objs.y_bus = self.d.obj_fetch.tile;
-                    self.d.objs.x_bus = self.d.obj_fetch.flags;
-                    self.sleep_in_line(State::Mode3ObjectAttributes, 2);
-                    return Mode3Flow::Slept;
-                }
-                Step::ReadObjectLow => {
-                    self.d.obj_fetch.line_address = self.current_object_line_address();
-                    self.d.obj_fetch.data[0] = self.vram_read(self.d.obj_fetch.line_address);
-                    self.sleep_in_line(State::Mode3ObjectLow, 2);
-                    return Mode3Flow::Slept;
-                }
-                Step::ReadObjectHigh => {
-                    self.d.obj_fetch.active = false;
-                    self.d.obj_fetch.line_address = self.current_object_line_address();
-                    self.d.obj_fetch.data[1] = self.vram_read(self.d.obj_fetch.line_address + 1);
-                    self.sleep_in_line(State::Mode3ObjectHigh, 1);
-                    return Mode3Flow::Slept;
-                }
-                Step::PushObject => {
-                    self.push_object();
-                    Step::NextObject
-                }
-                Step::OutputPixel => {
-                    self.d.obj_fetch.aborted = false;
-                    self.d.obj_fetch.active = false;
-                    if let Some(out) = self.render_pixel_if_possible() {
-                        #[cfg(feature = "debug")]
-                        self.trace_pixel(out.lx);
-                        self.output_pixel(out);
-                    }
-                    self.advance_fetcher();
-                    if self.d.bg.position == PX_WIDTH {
-                        return Mode3Flow::Done;
-                    }
-                    self.sleep_in_line(State::Mode3Pixel, 1);
-                    return Mode3Flow::Slept;
-                }
-                Step::AfterPixel => {
-                    if self.d.window.wx_166_interrupt_glitch {
-                        self.timing_mode3_end();
-                    }
-                    Step::WindowCheck
-                }
-            };
-        }
-    }
-
     fn current_object_line_address(&self) -> u16 {
         self.object_line_address(
             self.d.objs.fetched().y,
@@ -214,7 +324,7 @@ impl Ppu {
     }
 
     /// Overlays the fetched object row on the object FIFO.
-    fn push_object(&mut self) {
+    fn overlay_object_row(&mut self) {
         let flags = self.d.obj_fetch.flags;
         let palette = if self.cgb_mode_on() {
             flags & ATTR_CGB_PALETTE
@@ -240,7 +350,6 @@ impl Ppu {
         } else {
             self.vram_raw(self.d.obj_fetch.line_address + 1)
         };
-        self.d.objs.count -= 1;
     }
 
     /// Code after the mode-3 loop breaks (`skip_slow_mode_3`).

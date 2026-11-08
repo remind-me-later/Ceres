@@ -335,11 +335,6 @@ impl Ppu {
         }
     }
 
-    pub(super) const fn x_for_object_match(&self) -> u8 {
-        let ret = self.d.bg.position.wrapping_add(8);
-        if ret > 240 { 0 } else { ret }
-    }
-
     pub(super) fn object_line_address(&self, y: u8, tile: u8, flags: u8) -> u16 {
         let height_16 = self.d.obj_fetch.size_16;
         let mut tile_y = self.d.current_line.wrapping_sub(y) & if height_16 { 0xF } else { 7 };
