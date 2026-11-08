@@ -140,7 +140,7 @@ how = "Gambatte's DMG late_sp traces: the run rose in index k's window and ceres
 [mapping-mode3-end]
 title = "Render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (timing_mode3_end), on an even half dot of a visible line, before its end; it falls at the scan's line start (h = 906), but after line 143, where VBlank masks it; it pulses only for a sprite at X 167"
 evidence = "measured"
-how = "Model traces of 13 ROMs (gbmicrotest's hblank_int_scx0 to 7, gambatte's sprite m0irq, m0stat and m3stat ROMs) against ceres's timing_mode3_end (a temporary trace event): 11,020 lines a half dot after, 23 in line 0 after the LCD is turned on (ceres 2 half dots ahead), and 14 with a sprite at X 167 pulsing; rises at h = 500 to 720, all even; 12,859 falls at 906 and 85 at line 143's 908. Proved for the lines where the window and the objects are idle (mode3-end-background)."
+how = "Model traces of 13 ROMs (gbmicrotest's hblank_int_scx0 to 7, gambatte's sprite m0irq, m0stat and m3stat ROMs) against ceres's timing_mode3_end (a temporary trace event): 11,020 lines a half dot after, 23 in line 0 after the LCD is turned on (ceres 2 half dots ahead), and 14 with a sprite at X 167 pulsing; rises at h = 500 to 720, all even; 12,859 falls at 906 and 85 at line 143's 908. Proved for the lines where the window is idle, with objects at X 8 or more (mode3-end-background)."
 rests_on = ["readable-model-is-dmg-sim"]
 facts = ["sprite-at-167-mode-0-pulse"]
 
@@ -157,7 +157,7 @@ how = "The netlist: tests/render_edge.rs checks every strobe of its sweep (trans
 rests_on = ["readable-model-is-dmg-sim"]
 
 [mode3-end-background]
-title = "On a line where the window and the objects are idle, but line 0 after the LCD is turned on, render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (HBlankStart, the dot after its position reaches 160), whatever SCX is and whenever the CPU writes it"
+title = "On a line where the window is idle, but line 0 after the LCD is turned on, render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (HBlankStart, the dot after its position reaches 160), whatever SCX is and whenever the CPU writes it, with any objects at X 8 or more while LCDC's object bit holds"
 evidence = "proved"
 
 [resync-only-in-line-0]

@@ -696,6 +696,35 @@ the suites unchanged). The background proof passes on it (the dot in 27 s,
 the start in 22 s), and catches a loop that steps the fetcher before the
 pop.
 
+The objects are proved too, at X 8 or more with LCDC's object bit held
+(those in the lead-in, an object's mode 0 pulse at X 167 and the bit's
+writes are left out). Ceres stops for an object as its position plus 8
+reaches the object's X; the netlist's pixel counter, 6 ahead of the
+position, reaches it two dots later, and goes on two dots after ceres's
+push. In between, the netlist's pixels stand still while its fetcher
+counts on, and its sprite fetch's steps are locked to ceres's reads
+(SOBU in the attributes' second dot, its last step and the slot fetched a
+dot after ceres's push). Joined dumps of both (ceres's loop state after
+each dot, the netlist's pipeline at the dot's end) over 103 sprite ROMs
+showed the netlist a function of ceres's state and of a history neither
+keeps, which the proof carries as a ghost, updated from ceres's dot alone:
+the pixels the netlist drew past ceres's (0 to 2), whether they stood
+still in the last dot, the netlist's fetcher's age in its tile, and the
+dots since ceres's last push. The ghost's rules reproduce the netlist on
+all 35,503,862 joined dots but those of five ROMs outside the proof's
+scope (objects at X 1, and `oam_sprite_trashing`, whose CPU corrupts OAM
+during the scan). The relation then is the background's at the position
+plus the extra pixels, the fetcher's flip-flops from its age, RENE taking
+RYFA while the pixels stand still, and the sprite fetch from ceres's
+phase; the netlist's store holds, X by X, the objects ceres has left (and
+the one it pushed in this dot). Kani's counterexamples gave the ghost's
+consistency with ceres's phase and where ceres's fetcher can be (each
+checked on the dumps first). One harness took over 9 GB, so the dot is
+proved in eleven, one per ceres sleep (and the fetch's start by the dots
+since the last push), each 5 to 7.7 GB and 1 to 21 minutes; the start
+takes any objects the scan found. Planted faults are caught: ceres's low
+byte read a dot short, and the netlist's SOBU without TAKA.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses
