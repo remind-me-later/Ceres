@@ -3,6 +3,12 @@
 //! window and the sprites are idle, the pipeline steps from render's state
 //! before it and must reach render's after it.
 //!
+//! It also measures where mode 3 starts (ceres-core's
+//! `background::check::before_start`): on a visible line, render's mode 3
+//! rises at `h = 154` (the line timing's half dot, `h = 904` where vclk
+//! rises), and at `h = 162`, the end of the dot before ceres's mode 3 loop
+//! starts, the pipeline is `BEFORE_START`, whatever SCX is.
+//!
 //! `TEST_ROOT=<a checkout with external/> cargo test -p ceres-netlist
 //! --release --test render_edge -- --ignored --nocapture`, with the ROMs of
 //! `hdl/tests.txt`, or `ROMS=a.gb,b.gb` (paths under `TEST_ROOT`), each run
@@ -43,13 +49,54 @@ const fn idle(r: &NetRender) -> bool {
         && !r.wires.x_match_held
 }
 
+/// The line timing's half dot at which vclk rises (after its edge).
+const LINE_END_H: u32 = 904;
+const LINE_H: u32 = 912;
+/// Where render's mode 3 rises, and the end of the dot before ceres's loop.
+const MODE3_RISE_H: u32 = 154;
+const BEFORE_START_H: u32 = 162;
+
+/// The pipeline at `BEFORE_START_H` (its SCX and inputs aside): ceres-core's
+/// `background::check::before_start`.
+const BEFORE_START: NetPipeline = NetPipeline {
+    mode3: true,
+    voga: false,
+    px: 0,
+    fetch_count: 4,
+    lyzu: true,
+    nyka: false,
+    pory: false,
+    pygo: false,
+    started: false,
+    fine: 0,
+    puxa: false,
+    nyze: false,
+    discard: true,
+    ryfa: false,
+    rene: false,
+    scx: 0,
+    inputs: EdgeInputs {
+        clk: false,
+        ppu_reset: false,
+        hard_reset: false,
+        line_start: false,
+        stop_scan: false,
+        cpu_wr_sync: false,
+        addr: 0,
+        data: 0,
+    },
+};
+
 /// What a ROM's run found: the edges compared, those in mode 3, and the
-/// first difference.
+/// first difference; the background-only lines whose mode 3 started as
+/// `BEFORE_START` has it, and the first that did not.
 struct Found {
     rom: String,
     compared: u64,
     in_mode3: u64,
     first: Option<String>,
+    starts: u64,
+    first_start: Option<String>,
 }
 
 fn roms(root: &Path) -> Vec<String> {
@@ -73,11 +120,48 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
         compared: 0,
         in_mode3: 0,
         first: None,
+        starts: 0,
+        first_start: None,
     };
+    // The line timing's half dot (once vclk has risen), and where mode 3
+    // rose in this line, if the window and the sprites were idle.
+    let mut h: Option<u32> = None;
+    let mut rose_at: Option<u32> = None;
     while run.edge < edges {
         let before = run.chip.render;
+        let vclk = run.chip.lcd.vclk;
         run.step();
         let after = &run.chip.render;
+        h = if !vclk & run.chip.lcd.vclk {
+            Some(LINE_END_H)
+        } else {
+            h.map(|h| (h + 1) % LINE_H)
+        };
+        if after.inputs.ppu_reset {
+            h = None;
+        }
+        if !before.mode3 && after.mode3 && idle(after) {
+            rose_at = h;
+        }
+        if let (Some(BEFORE_START_H), Some(rose)) = (h, rose_at) {
+            rose_at = None;
+            let mut pipeline = NetPipeline::of(after);
+            pipeline.scx = 0;
+            pipeline.inputs = BEFORE_START.inputs;
+            let quiet = !after.inputs.ppu_reset && !after.inputs.stop_scan && !after.inputs.clk;
+            if quiet && idle(after) && run.chip.lcd.ly < 144 {
+                found.starts += 1;
+                if (rose != MODE3_RISE_H || pipeline != BEFORE_START) && found.first_start.is_none()
+                {
+                    found.first_start = Some(format!(
+                        "edge {} ly {}: mode 3 rose at h = {rose}\n  pipeline {:?}",
+                        run.edge,
+                        run.chip.lcd.ly,
+                        Fields(&NetPipeline::of(after)),
+                    ));
+                }
+            }
+        }
         if !(idle(&before) && idle(after)) {
             continue;
         }
@@ -182,17 +266,27 @@ fn pipeline_follows_render() {
     let mut differ = 0;
     for (_, found) in &results {
         eprintln!(
-            "{}: {} edges compared, {} in mode 3{}",
+            "{}: {} edges compared, {} in mode 3, {} starts{}{}",
             found.rom,
             found.compared,
             found.in_mode3,
+            found.starts,
             if found.first.is_some() {
                 ", DIFFERS"
+            } else {
+                ""
+            },
+            if found.first_start.is_some() {
+                ", START DIFFERS"
             } else {
                 ""
             }
         );
         if let Some(first) = &found.first {
+            differ += 1;
+            eprintln!("  {first}");
+        }
+        if let Some(first) = &found.first_start {
             differ += 1;
             eprintln!("  {first}");
         }

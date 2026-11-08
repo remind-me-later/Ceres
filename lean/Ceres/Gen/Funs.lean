@@ -2588,7 +2588,7 @@ def memory.dma.check.step_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::LINE_LENGTH]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 53:0-53:40 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 54:0-54:40 -/
 @[global_simps, irreducible] def ppu.display.LINE_LENGTH : Std.I32 := 456#i32
 
 /-- [ceres_core::ppu::PX_HEIGHT]
@@ -2597,11 +2597,11 @@ def memory.dma.check.step_agrees
 @[global_simps, irreducible] def ppu.PX_HEIGHT : Std.U8 := 144#u8
 
 /-- [ceres_core::ppu::display::LINES]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 55:0-55:39 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 56:0-56:39 -/
 @[global_simps, irreducible] def ppu.display.LINES : Std.U8 := ppu.PX_HEIGHT
 
 /-- [ceres_core::ppu::display::LAST_LINE]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 57:0-57:37 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 58:0-58:37 -/
 @[global_simps, irreducible] def ppu.display.LAST_LINE : Std.U8 := 153#u8
 
 /-- [ceres_core::ppu::display::timing::check::LCDC_EARLY]

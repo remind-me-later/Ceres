@@ -79,6 +79,12 @@ evidence = "replayed"
 how = "netlist_replay over the 123 ROMs traced with the scan, the phases where the CPU addresses OAM left out (its read strobe is not traced): no difference."
 rests_on = ["readable-model-is-dmg-sim"]
 
+[transcription-render-edge]
+title = "NetPipeline is NetRender's background pipeline (the pixel counter, the fetcher's count, the first fetch's flip-flops, the fine scroll, mode 3's latch and SCX), edge by edge, while the window and the sprites are idle"
+evidence = "replayed"
+how = "ceres-netlist's tests/render_edge.rs steps it from NetRender's state at every edge of NetChip's runs where LCDC's bits 1 and 5 are clear, WY has not matched and no X matches, and compares it with NetRender's after the edge: 503 ROMs (hdl/tests.txt, gambatte's scx_during_m3, scy, m0int_m0stat, m2int_m3stat, m0enable, bgen, dmgpalette_during_m3 and enable_display, mealybug's m3_scx, m3_scy and m3_bgp, gbmicrotest), 0.2 s each: 774,877,134 edges, 228,708,634 in mode 3, no difference. NetRender, the delta-cycle transcription of render.vhd, is what netlist_replay replays through render's traces."
+rests_on = ["readable-model-is-dmg-sim"]
+
 # How ceres's time maps onto the netlist's
 
 [mapping-m-cycle-at-e]
@@ -134,9 +140,19 @@ how = "Gambatte's DMG late_sp traces: the run rose in index k's window and ceres
 [mapping-mode3-end]
 title = "Render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (timing_mode3_end), on an even half dot of a visible line, before its end; it falls at the scan's line start (h = 906), but after line 143, where VBlank masks it; it pulses only for a sprite at X 167"
 evidence = "measured"
-how = "Model traces of 13 ROMs (gbmicrotest's hblank_int_scx0 to 7, gambatte's sprite m0irq, m0stat and m3stat ROMs) against ceres's timing_mode3_end (a temporary trace event): 11,020 lines a half dot after, 23 in line 0 after the LCD is turned on (ceres 2 half dots ahead), and 14 with a sprite at X 167 pulsing; rises at h = 500 to 720, all even; 12,859 falls at 906 and 85 at line 143's 908."
+how = "Model traces of 13 ROMs (gbmicrotest's hblank_int_scx0 to 7, gambatte's sprite m0irq, m0stat and m3stat ROMs) against ceres's timing_mode3_end (a temporary trace event): 11,020 lines a half dot after, 23 in line 0 after the LCD is turned on (ceres 2 half dots ahead), and 14 with a sprite at X 167 pulsing; rises at h = 500 to 720, all even; 12,859 falls at 906 and 85 at line 143's 908. Proved for the lines where the window and the objects are idle (mode3-end-background)."
 rests_on = ["readable-model-is-dmg-sim"]
 facts = ["sprite-at-167-mode-0-pulse"]
+
+[mapping-mode3-start]
+title = "On a visible line, but line 0 after the LCD is turned on, ceres's mode 3 loop starts at h = 163 with its position at -16 and no blank pixel inserted, where render's mode 3 rose at h = 154 and its pipeline is as background::check::before_start has it at h = 162, whatever SCX is"
+evidence = "measured"
+how = "The netlist: tests/render_edge.rs over the 503 ROMs of transcription-render-edge, 644,588 line starts with the window and the sprites idle, all rising at 154 and as before_start at 162. Ceres: the first tile fetch of each line (the loop's first dot) over the same ROMs, 12 frames each: 596,900 lines after line 0 and 4,064 line 0s at h = 163, and 508 line 0s after the LCD was turned on at 169. Mode3Start follows OamScanObject's fixed sleeps, and end_line or the first line puts the position back at -16."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[mode3-end-background]
+title = "On a line where the window and the objects are idle, but line 0 after the LCD is turned on, render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (HBlankStart, the dot after its position reaches 160), whatever SCX is, if the CPU does not write SCX during mode 3"
+evidence = "proved"
 
 [resync-only-in-line-0]
 title = "The pixel pipeline's line-end resync moves ceres's clock only in line 0 after the LCD is turned on (895 to 893); on the other lines it finds 893"
@@ -203,7 +219,6 @@ title = "Ceres's object search keeps the first ten sprites on the line: a step a
 evidence = "proved"
 
 # What the proofs leave out
-
 
 [cpu-does-not-address-oam]
 title = "The CPU does not address OAM (FExx) during the OAM scan"

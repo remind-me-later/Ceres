@@ -522,7 +522,8 @@ same on both sides: render's mode 0 rises a half dot after ceres's pixel
 pipeline ends mode 3 (11,020 lines of 13 ROMs' traces, all on even half
 dots between 500 and 720), and falls at the scan's line start, 906, but
 after line 143, where VBlank masks it at 908. STAT's mode bits (the OAM
-scan's and render's) and the pixel pipeline itself are not proved yet.
+scan's and render's) are not proved yet, nor the pixel pipeline with the
+window or the objects (its background part is, below).
 
 ## Ceres's transcription of the OAM scan
 
@@ -628,6 +629,40 @@ Ceres follows the netlist in all three since 2026-10-29 (facts
   the scan compares the held Y; ceres's DMG skipped the search there (from
   SameBoy, which notes that units before the CGB vary). The CGBs keep that
   rule. `netlist_scan_dma` covers a halt of any length during the DMA.
+
+## Ceres's background pipeline
+
+Kani cannot run `NetRender`, which settles each edge delta cycle by delta
+cycle: one edge, all of it concrete, did not finish in six minutes (5 GB).
+`NetPipeline` (`ceres-netlist/src/render_edge.rs`) is the part of render
+that decides where mode 3 ends while the window and the sprites are idle
+(the pixel counter, the fetcher's count, the first fetch's flip-flops, the
+fine scroll, mode 3's latch, SCX), settled in nanosecond stages as the
+inputs arrive; Kani steps it from any state in under a second.
+`tests/render_edge.rs` steps it from `NetRender`'s state at every such edge
+of `NetChip`'s runs of 503 ROMs and finds `NetRender`'s after it on all
+774,877,134 (228,708,634 in mode 3). Ceres's side ran no better
+symbolically on the whole PPU (a dot with its position, FIFO and SCX free:
+over ten minutes, 9 GB), so its pipeline moved into `Background`
+(`ceres-core/src/ppu/display/background/`), which the PPU calls in the same
+order (the A/V hash of 190 game runs and the suites unchanged).
+
+After each dot (both edges), the netlist's pipeline is a function of
+ceres's `Background`, the same for every SCX (all 1,364 dumped dots of
+`hblank_int_scx0` to 7): the fetcher's count, the first fetch's flip-flops
+and the fine scroll follow from the FIFO's length, the pixel counter (6
+ahead) and the discard from the position. Ceres's lead-in matches SCX's low
+bits two dots before the netlist's fine scroll does, and spends them at
+positions -7 and -6, which the netlist spends discarding. With the
+invariant that ties a match to the FIFO (`p + len + SCX = 0`, mod 8),
+`netlist_background_dot` proves a dot from every related pair (7 s), and
+`netlist_background_start` the loop's first dot (`h = 163`) from the
+netlist's state at 162, measured on all 644,588 background-only line
+starts of the sweep (mode 3 rising at 154 every time). Render's mode 0
+rises a half dot after ceres's `HBlankStart`. Planted faults are caught: a
+lead-in compare with SCX + 1, a push a dot early, the netlist's fine scroll
+compared with SCX + 1. Left out: the window, the objects, SCX written in
+mode 3, and line 0 after the LCD is turned on, whose loop starts at 169.
 
 ## The model's races
 
