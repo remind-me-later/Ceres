@@ -80,9 +80,9 @@ how = "netlist_replay over the 123 ROMs traced with the scan, the phases where t
 rests_on = ["readable-model-is-dmg-sim"]
 
 [transcription-render-edge]
-title = "NetPipeline is NetRender's background pipeline (the pixel counter, the fetcher's count, the first fetch's flip-flops, the fine scroll, mode 3's latch and SCX), edge by edge, while the window and the sprites are idle"
+title = "NetPipeline is NetRender's background pipeline and sprite fetch (the pixel counter, the fetcher's count, the first fetch's flip-flops, the fine scroll, mode 3's latch, SCX, the sprite store's X and fetched slots, the fetch's steps), edge by edge, while the window is idle and the scan saves no sprite"
 evidence = "replayed"
-how = "ceres-netlist's tests/render_edge.rs steps it from NetRender's state at every edge of NetChip's runs where LCDC's bits 1 and 5 are clear, WY has not matched and no X matches, and compares it with NetRender's after the edge: 508 ROMs (hdl/tests.txt, gambatte's scx_during_m3, scy, m0int_m0stat, m2int_m3stat, m0enable, bgen, dmgpalette_during_m3 and enable_display, mealybug's m3_scx, m3_scy and m3_bgp, gbmicrotest), 0.2 s each: 783,279,398 edges, 230,852,373 in mode 3, with 179,262 SCX writes, no difference. NetRender, the delta-cycle transcription of render.vhd, is what netlist_replay replays through render's traces."
+how = "ceres-netlist's tests/render_edge.rs steps it from NetRender's state at every edge of NetChip's runs where LCDC's bit 5 is clear, WY has not matched and the OAM scan saves no sprite, and compares it with NetRender's after the edge: 638 ROMs (hdl/tests.txt, gambatte's scx_during_m3, scy, sprites, m0int_m0stat, m2int_m3stat, m0enable, bgen, dmgpalette_during_m3 and enable_display, mealybug's ppu ROMs, gbmicrotest, dmg-acid2, mooneye's ppu tests), 0.2 s each: 1,046,338,660 edges, 307,450,280 in mode 3, with 32,402 sprite fetches (135 ROMs) and 181,606 SCX writes, no difference. NetRender, the delta-cycle transcription of render.vhd, is what netlist_replay replays through render's traces."
 rests_on = ["readable-model-is-dmg-sim"]
 
 # How ceres's time maps onto the netlist's
@@ -145,15 +145,15 @@ rests_on = ["readable-model-is-dmg-sim"]
 facts = ["sprite-at-167-mode-0-pulse"]
 
 [mapping-mode3-start]
-title = "On a visible line, but line 0 after the LCD is turned on, ceres's mode 3 loop starts at h = 163 with its position at -16 and no blank pixel inserted, where render's mode 3 rose at h = 154 and its pipeline is as background::check::before_start has it at h = 162, whatever SCX is"
+title = "On a visible line, but line 0 after the LCD is turned on, ceres's mode 3 loop starts at h = 163 with its position at -16 and no blank pixel inserted, where render's mode 3 rose at h = 154 and its pipeline is as background::check::before_start has it at h = 162 (the sprite fetch at rest), whatever SCX is and whatever sprites the scan found"
 evidence = "measured"
-how = "The netlist: tests/render_edge.rs over the 508 ROMs of transcription-render-edge, 650,744 line starts with the window and the sprites idle, all rising at 154 and as before_start at 162. Ceres: the first tile fetch of each line (the loop's first dot) over the same ROMs, 12 frames each: 596,900 lines after line 0 and 4,064 line 0s at h = 163, and 508 line 0s after the LCD was turned on at 169. Mode3Start follows OamScanObject's fixed sleeps, and end_line or the first line puts the position back at -16."
+how = "The netlist: tests/render_edge.rs over the 638 ROMs of transcription-render-edge, 868,141 line starts with the window idle, all rising at 154 and as before_start at 162. Ceres: the first tile fetch of each line (the loop's first dot) over 508 of those ROMs, 12 frames each: 596,900 lines after line 0 and 4,064 line 0s at h = 163, and 508 line 0s after the LCD was turned on at 169. Mode3Start follows OamScanObject's fixed sleeps, and end_line or the first line puts the position back at -16."
 rests_on = ["readable-model-is-dmg-sim"]
 
 [mapping-scx-write]
 title = "On the DMG, a CPU write that changes SCX's low bits reaches ceres's pixel mixer from the dot at h = H - 2, where the netlist's write strobe on SCX's address rises at H with the clock (H = 1 mod 8) and stays up three edges with the value on the data bus; the edge before carries SCX's address and 0xFF"
 evidence = "measured"
-how = "The netlist: tests/render_edge.rs checks every strobe of its sweep (transcription-render-edge, 508 ROMs): 179,262 SCX writes in 146 of them, all rising at h = 1 (mod 8) after an edge on SCX's address with 0xFF and lasting three edges. Ceres: the mixer's SCX after each unit (a temporary trace) over the 134 ROMs that write SCX on a visible line (gambatte's scx_during_m3, mealybug's m3_scx, gbmicrotest), paired in order with the netlist's strobes: all 184,785 writes that change the low bits (110,344 in mode 3) reach the mixer two half dots before the strobe rises; ceres's write lands for the fetcher at H - 5 and cpu_bus::write holds the mixer's low bits a T-cycle more. The netlist's dot clock starts at h = 167 (= 7 mod 8), so no strobe rises with it (background::check::writes)."
+how = "The netlist: tests/render_edge.rs checks every strobe of its sweep (transcription-render-edge, 638 ROMs): 181,606 SCX writes in 154 of them, all rising at h = 1 (mod 8) after an edge on SCX's address with 0xFF and lasting three edges. Ceres: the mixer's SCX after each unit (a temporary trace) over the 134 ROMs that write SCX on a visible line (gambatte's scx_during_m3, mealybug's m3_scx, gbmicrotest), paired in order with the netlist's strobes: all 184,785 writes that change the low bits (110,344 in mode 3) reach the mixer two half dots before the strobe rises; ceres's write lands for the fetcher at H - 5 and cpu_bus::write holds the mixer's low bits a T-cycle more. The netlist's dot clock starts at h = 167 (= 7 mod 8), so no strobe rises with it (background::check::writes)."
 rests_on = ["readable-model-is-dmg-sim"]
 
 [mode3-end-background]

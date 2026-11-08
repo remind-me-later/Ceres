@@ -3,9 +3,9 @@
 //! (`cargo kani -p ceres-core --harness netlist_background`).
 //!
 //! `NetPipeline` (`ceres_netlist::render_edge`) is render's background
-//! pipeline edge by edge; ceres-netlist's `tests/render_edge.rs` checks it
-//! against the delta-cycle transcription, `NetRender`, at every edge where
-//! the window and the sprites are idle. Ceres's mode 3 loop runs a dot's
+//! pipeline and sprite fetch edge by edge; ceres-netlist's
+//! `tests/render_edge.rs` checks it against the delta-cycle transcription,
+//! `NetRender`, at every edge where the window is idle. Ceres's mode 3 loop runs a dot's
 //! work in its first half dot, the netlist's pipeline takes the dot's two
 //! edges; after both, the netlist's pipeline is a function of ceres's
 //! `Background` (`check::pipeline_for`): the fetcher's count, the first
@@ -34,20 +34,25 @@
 //! dot's second edge, a half dot later (`mode3-end-background`, the part of
 //! `mapping-mode3-end` it proves).
 //!
-//! What it does not cover yet: the window and the objects; line 0 after the
-//! LCD is turned on, whose loop starts elsewhere; how a write reaches
-//! ceres's mixer (`cpu_bus::write`'s hold of SCX's low bits, measured); and
-//! the order of the loop's steps, which `check::ceres_dot` follows
-//! (`Step::OutputPixel`: the FIFO's pixel, then the fetcher) as
-//! `timing::check` follows the timing's, with the line drawn ending in
-//! `HBlankStart` a dot later (`mode3_done`).
+//! Ceres's side is its mode 3 loop (`mode3::mode3`), run on the display's
+//! state alone (`check::Mode3Loop`): the reads, the object's row and the
+//! pixels' mixing do nothing there, and the window's hooks are as an idle
+//! window leaves them. `check::ceres_dot` wakes it as `step_state_machine`
+//! does, and takes `mode3_done`'s sleep into `HBlankStart`.
+//!
+//! What it does not cover yet: the window and the objects (both off); line
+//! 0 after the LCD is turned on, whose loop starts elsewhere; how a write
+//! reaches ceres's mixer (`cpu_bus::write`'s hold of SCX's low bits,
+//! measured); that an idle window's hooks do nothing; and the dispatch
+//! around the loop (`ceres_dot`'s, copied from `step_state_machine` and
+//! `mode3_done`, as `timing::check` copies the timing's).
 
 use {
     super::{
         Background,
-        check::{start_agrees, step_agrees},
+        check::{Mode3Loop, start_agrees, step_agrees},
     },
-    crate::ppu::display::{fetcher::FetcherStep, fifo::Fifo},
+    crate::ppu::display::{Display, fetcher::FetcherStep, fifo::Fifo, state::State},
     ceres_netlist::render_edge::{EdgeInputs, NetPipeline},
 };
 
@@ -56,8 +61,10 @@ fn any_inputs() -> EdgeInputs {
         clk: kani::any(),
         ppu_reset: kani::any(),
         hard_reset: kani::any(),
+        lcdc: kani::any(),
         line_start: kani::any(),
         stop_scan: kani::any(),
+        ceno: kani::any(),
         cpu_wr_sync: kani::any(),
         addr: kani::any(),
         data: kani::any(),
@@ -82,6 +89,16 @@ fn any_pipeline() -> NetPipeline {
         ryfa: kani::any(),
         rene: kani::any(),
         scx: kani::any(),
+        xs: kani::any(),
+        fetched: kani::any(),
+        sobu: kani::any(),
+        suda: kani::any(),
+        sprite_step: kani::any(),
+        busy: kani::any(),
+        tobu: kani::any(),
+        vonu: kani::any(),
+        seba: kani::any(),
+        tyfo: kani::any(),
         inputs: any_inputs(),
     }
 }
@@ -121,20 +138,50 @@ fn any_background() -> Background {
     bg
 }
 
+/// Any of mode 3's sleeps, or the one after it, a few dots long.
+fn any_sleep() -> (State, i32) {
+    let state = match kani::any::<u8>() % 8 {
+        0 => State::Mode3Pixel,
+        1 => State::Mode3ObjectWait,
+        2 => State::Mode3ObjectFetch,
+        3 => State::Mode3ObjectAttributes,
+        4 => State::Mode3ObjectLow,
+        5 => State::Mode3ObjectHigh,
+        6 => State::HBlankStart,
+        _ => State::Mode3,
+    };
+    let wait: i32 = kani::any();
+    kani::assume((0..=3).contains(&wait));
+    (state, wait)
+}
+
+/// Ceres's loop with any background, sleep and mixer's SCX, the window
+/// idle and nothing else on the line.
+fn any_loop() -> Mode3Loop {
+    let mut d = Display::default();
+    d.bg = any_background();
+    (d.state, d.wait) = any_sleep();
+    Mode3Loop {
+        d,
+        mixer_scx: kani::any(),
+        objects_enabled: kani::any(),
+    }
+}
+
 /// A dot from every related pair.
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
 // @discharges mode3-end-background
 #[kani::proof]
-#[kani::unwind(10)]
+#[kani::unwind(12)]
 fn netlist_background_dot() {
-    let mut bg = any_background();
+    let mut l = any_loop();
     let mut net = any_pipeline();
-    let last_scx: u8 = kani::any();
-    let scx: u8 = kani::any();
+    let last_scx = l.mixer_scx;
+    let bg = &l.d.bg;
     let p = super::check::signed(bg.position);
-    let related = super::check::related(&bg, &net, last_scx);
+    let related = super::check::related(&l, &net);
     kani::cover!(related & (p == -15), "unmatched lead-in");
     kani::cover!(related & (p == -16), "lead-in restarted");
     kani::cover!(
@@ -145,10 +192,9 @@ fn netlist_background_dot() {
     kani::cover!(related & (p == 160), "line drawn");
     kani::cover!(related & (bg.fifo.len() == 1) & (p > 0), "push next dot");
     assert!(step_agrees(
-        &mut bg,
+        &mut l,
         &mut net,
-        last_scx,
-        scx,
+        kani::any(),
         any_inputs(),
         any_inputs()
     ));
@@ -159,14 +205,13 @@ fn netlist_background_dot() {
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
 #[kani::proof]
-#[kani::unwind(10)]
+#[kani::unwind(12)]
 fn netlist_background_start() {
-    let mut bg = any_background();
+    let mut l = any_loop();
     let mut net = any_pipeline();
     assert!(start_agrees(
-        &mut bg,
+        &mut l,
         &mut net,
-        kani::any(),
         kani::any(),
         any_inputs(),
         any_inputs()

@@ -682,6 +682,20 @@ now checks the strobes: all 179,262 of its 508 ROMs rise at `h = 1` (mod
 difference on 783,279,398 edges). The dot takes 9 s; planted faults are
 caught (ceres's mixer a dot late, the netlist's latch shut in mode 3).
 
+For the objects, `NetPipeline` takes render's sprite fetch too: the sprite
+store's X and fetched slots, SOBU and SUDA, the fetch's steps, TAKA, TOBU,
+VONU, SEBA and TYFO, and the match's 4 ns to mode 3's stop. It matches
+`NetRender` on every edge with the window idle and no sprite saved, over
+638 ROMs (1,046,338,660 edges, 32,402 sprite fetches), and every
+window-idle line start (868,141) is `before_start` with the fetch at rest
+(its steps at 5, TAKA and TYFO set). On ceres's side the proofs now run
+its mode 3 loop itself: `mode3::mode3` is generic over what it asks of the
+PPU (`Mode3Ppu`), and `background::check::Mode3Loop` runs it on a
+`Display` alone, with nothing read and the window idle (the A/V hash and
+the suites unchanged). The background proof passes on it (the dot in 27 s,
+the start in 22 s), and catches a loop that steps the fetcher before the
+pop.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses
