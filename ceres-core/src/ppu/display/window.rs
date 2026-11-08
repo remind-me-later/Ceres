@@ -132,11 +132,11 @@ impl Ppu {
             self.d.window.cgb_wx_glitch = false;
             return;
         }
-        let position = self.d.position_in_line;
+        let position = self.d.bg.position;
         if self.wx == 0 {
             // (position + 16 <= 8) in u8 arithmetic
-            self.d.window.cgb_wx_glitch = position.wrapping_add(16) <= 8
-                || (position == pos(-7) && self.d.line_has_fractional_scrolling);
+            self.d.window.cgb_wx_glitch =
+                position.wrapping_add(16) <= 8 || (position == pos(-7) && self.d.bg.fractional);
             return;
         }
         self.d.window.cgb_wx_glitch = position
@@ -156,7 +156,7 @@ impl Ppu {
             && self.lcdc & LCDC_WIN_EN_B != 0
             && !self.d.window.enable_pending
         {
-            let position = self.d.position_in_line;
+            let position = self.d.bg.position;
             let hw = self.is_cgb_hardware();
             let should_activate = if self.wx == 0 {
                 position == pos(-7)
@@ -187,8 +187,8 @@ impl Ppu {
             if should_activate {
                 self.d.window.line = self.d.window.line.wrapping_add(1);
                 self.d.window.tile_x = 0;
-                self.d.window.saved = hw.then(|| (self.d.bg_fifo, self.d.fetcher.clone()));
-                self.d.bg_fifo.clear();
+                self.d.window.saved = hw.then(|| (self.d.bg.fifo, self.d.bg.fetcher.clone()));
+                self.d.bg.fifo.clear();
                 if self.wx == 0 && self.mixer_scx & 7 != 0 && !hw {
                     self.sleep_in_line(State::Mode3WindowDelay, 1);
                     return true;
@@ -215,7 +215,7 @@ impl Ppu {
 
     pub(super) const fn mode3_window_activated(&mut self) {
         self.d.window.wx_triggered = true;
-        self.d.fetcher.step = FetcherStep::GetTileT1;
+        self.d.bg.fetcher.step = FetcherStep::GetTileT1;
         self.d.window.being_fetched = true;
     }
 
@@ -226,13 +226,13 @@ impl Ppu {
         let window = &mut self.d.window;
         if window.being_fetched
             && window.wx_triggered
-            && self.d.bg_fifo.is_empty()
+            && self.d.bg.fifo.is_empty()
             && let Some((fifo, fetcher)) = window.saved.take()
         {
             window.wx_triggered = false;
 
-            self.d.bg_fifo = fifo;
-            self.d.fetcher = fetcher;
+            self.d.bg.fifo = fifo;
+            self.d.bg.fetcher = fetcher;
         }
     }
 

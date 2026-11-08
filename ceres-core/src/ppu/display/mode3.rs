@@ -1,7 +1,7 @@
 //! Mode 3: the loop that fetches objects and pushes pixels to the LCD.
 
 use {
-    super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, pos, state::State, window::Window},
+    super::{LINES, fetcher::FetcherStep, model_ge_cgb_d, state::State, window::Window},
     crate::ppu::{
         ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
         LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
@@ -39,12 +39,9 @@ enum Step {
 impl Ppu {
     pub(super) fn mode3_start(&mut self) {
         self.d.window.no_pixel_insertion_glitch = false;
-        self.d.bg_fifo.clear();
+        self.d.bg.start();
         self.d.oam_fifo.clear();
-        // Fill the FIFO with 8 pixels of "junk", it's going to be dropped anyway.
-        self.d.bg_fifo.push_bg_row(0, 0, 0, false, false);
         self.d.lcd_x = 0;
-        self.d.fetcher.step = FetcherStep::GetTileT1;
         self.d.window.started_after_line = false;
         // The DMG's WX match at the last line's end is held (PYCO, NUNU)
         // until this line's first pixel; LCDC bit 5 holds the window off
@@ -96,14 +93,14 @@ impl Ppu {
                 Step::Objects => {
                     // Insert a pixel right at the FIFO's end.
                     let hw = self.is_cgb_hardware();
-                    if self.wx == self.d.position_in_line.wrapping_add(7)
+                    if self.wx == self.d.bg.position.wrapping_add(7)
                         && (!hw || self.wx == 0)
                         && self.d.window.wx_triggered
                         && !self.d.window.being_fetched
-                        && self.d.fetcher.step == FetcherStep::GetTileT1
-                        && self.d.bg_fifo.len() == 8
+                        && self.d.bg.fetcher.step == FetcherStep::GetTileT1
+                        && self.d.bg.fifo.len() == 8
                     {
-                        self.d.insert_bg_pixel = true;
+                        self.d.bg.insert_blank = true;
                     }
 
                     // Drop the objects left of the current position.
@@ -143,8 +140,8 @@ impl Ppu {
                         return Mode3Flow::Slept;
                     }
                     // The background fetcher finishes its tile first.
-                    let next = if self.d.fetcher.step < FetcherStep::DataHighT2
-                        || self.d.bg_fifo.is_empty()
+                    let next = if self.d.bg.fetcher.step < FetcherStep::DataHighT2
+                        || self.d.bg.fifo.is_empty()
                     {
                         State::Mode3ObjectWait
                     } else {
@@ -192,7 +189,7 @@ impl Ppu {
                         self.output_pixel(out);
                     }
                     self.advance_fetcher();
-                    if self.d.position_in_line == PX_WIDTH {
+                    if self.d.bg.position == PX_WIDTH {
                         return Mode3Flow::Done;
                     }
                     self.sleep_in_line(State::Mode3Pixel, 1);
@@ -238,7 +235,7 @@ impl Ppu {
             priority,
             flags & ATTR_X_FLIP_B != 0,
         );
-        self.d.fetcher.sel_glitch_data = if self.d.bus.vram_ppu_blocked {
+        self.d.bg.fetcher.sel_glitch_data = if self.d.bus.vram_ppu_blocked {
             0xFF
         } else {
             self.vram_raw(self.d.obj_fetch.line_address + 1)
@@ -248,16 +245,7 @@ impl Ppu {
 
     /// Code after the mode-3 loop breaks (`skip_slow_mode_3`).
     pub(super) fn mode3_done(&mut self) {
-        self.d.position_in_line = pos(-16);
-        self.d.line_has_fractional_scrolling = false;
-
-        if matches!(
-            self.d.fetcher.step,
-            FetcherStep::DataHighT1 | FetcherStep::DataHighT2
-        ) {
-            // Make sure current_tile_data[1] holds the last tile data byte read.
-            self.d.fetcher.data[1] = self.d.fetcher.data[0];
-        }
+        self.d.bg.end_line();
 
         // The PPU and LCD desynced: fill the rest of the line with the last colour.
         self.fill_desynced_line();

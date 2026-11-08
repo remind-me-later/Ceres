@@ -336,7 +336,7 @@ impl Ppu {
     }
 
     pub(super) const fn x_for_object_match(&self) -> u8 {
-        let ret = self.d.position_in_line.wrapping_add(8);
+        let ret = self.d.bg.position.wrapping_add(8);
         if ret > 240 { 0 } else { ret }
     }
 

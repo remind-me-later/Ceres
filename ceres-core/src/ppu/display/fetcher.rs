@@ -5,8 +5,8 @@ use {
     crate::{
         Model,
         ppu::{
-            ATTR_BANK_B, ATTR_CGB_PALETTE, ATTR_PRIORITY_B, ATTR_X_FLIP_B, ATTR_Y_FLIP_B,
-            LCDC_BG_MAP_B, LCDC_TILE_SEL_B, LCDC_WIN_EN_B, LCDC_WIN_MAP_B, Ppu,
+            ATTR_BANK_B, ATTR_Y_FLIP_B, LCDC_BG_MAP_B, LCDC_TILE_SEL_B, LCDC_WIN_EN_B,
+            LCDC_WIN_MAP_B, Ppu,
         },
     },
 };
@@ -96,18 +96,18 @@ impl Ppu {
     /// How this tile data read goes (SameBoy's `data_for_tile_sel_glitch`).
     /// On the CGB-D it moves `data_address` into the unsigned tile area.
     pub(super) fn tile_sel_glitch(&mut self) -> TileSelGlitch {
-        if !self.d.fetcher.tile_sel_glitch {
+        if !self.d.bg.fetcher.tile_sel_glitch {
             return TileSelGlitch::ReadVram;
         }
-        if !self.d.fetcher.last_tileset {
-            return TileSelGlitch::Use(self.d.fetcher.sel_glitch_data);
+        if !self.d.bg.fetcher.last_tileset {
+            return TileSelGlitch::Use(self.d.bg.fetcher.sel_glitch_data);
         }
         if self.model == Model::CgbD {
-            self.d.fetcher.data_address &= !TILE_DATA_SIGNED;
+            self.d.bg.fetcher.data_address &= !TILE_DATA_SIGNED;
             return TileSelGlitch::CgbD;
         }
-        if self.d.fetcher.tile & 0x80 == 0 {
-            TileSelGlitch::Use(self.d.fetcher.tile)
+        if self.d.bg.fetcher.tile & 0x80 == 0 {
+            TileSelGlitch::Use(self.d.bg.fetcher.tile)
         } else {
             TileSelGlitch::ReadVram
         }
@@ -123,7 +123,7 @@ impl Ppu {
         } else {
             TILE_MAP_0
         };
-        let position = self.d.position_in_line;
+        let position = self.d.bg.position;
         let x: u16 = if window {
             u16::from(self.d.window.tile_x)
         } else if position.wrapping_add(16) < 8 {
@@ -136,22 +136,22 @@ impl Ppu {
     }
 
     pub(super) fn tile_address(&self) -> u16 {
-        let mut address = if self.d.fetcher.last_tileset {
-            u16::from(self.d.fetcher.tile) * TILE_BYTES
+        let mut address = if self.d.bg.fetcher.last_tileset {
+            u16::from(self.d.bg.fetcher.tile) * TILE_BYTES
         } else {
             TILE_DATA_SIGNED.wrapping_add_signed(
-                i16::from(self.d.fetcher.tile.cast_signed()) * TILE_BYTES.cast_signed(),
+                i16::from(self.d.bg.fetcher.tile.cast_signed()) * TILE_BYTES.cast_signed(),
             )
         };
-        if self.d.fetcher.attributes & ATTR_BANK_B != 0 {
+        if self.d.bg.fetcher.attributes & ATTR_BANK_B != 0 {
             address += VRAM_BANK1;
         }
         address
     }
 
-    #[expect(clippy::too_many_lines, reason = "SameBoy's fetcher: one arm per step")]
+    /// The fetcher's read of this dot, and its step after it.
     pub(super) fn advance_fetcher(&mut self) {
-        match self.d.fetcher.step {
+        match self.d.bg.fetcher.step {
             FetcherStep::GetTileT1 => {
                 self.update_wx_glitch();
                 if self.lcdc & LCDC_WIN_EN_B == 0 {
@@ -163,138 +163,111 @@ impl Ppu {
                 let y = self.fetcher_y_value();
                 if model_ge_cgb_d(self.model) {
                     // Cached on CGB-D and newer, so it cannot mix tiles.
-                    self.d.fetcher.y = y;
+                    self.d.bg.fetcher.y = y;
                 }
                 let window = self.d.window.wx_triggered;
-                self.d.fetcher.window_tile = window;
-                self.d.fetcher.tile_index_address = self.tile_index_address(window, y);
+                self.d.bg.fetcher.window_tile = window;
+                self.d.bg.fetcher.tile_index_address = self.tile_index_address(window, y);
                 // Where the tile would be if the window were off by the time
                 // it is read (see `GetTileT2`).
-                self.d.fetcher.bg_index_address =
+                self.d.bg.fetcher.bg_index_address =
                     self.tile_index_address(false, self.d.current_line.wrapping_add(self.scy));
-                self.d.fetcher.step = self.d.fetcher.step.next();
             }
             FetcherStep::GetTileT2 => {
-                if self.d.window.cgb_wx_glitch {
-                    self.d.fetcher.step = self.d.fetcher.step.next();
-                    return;
+                if !self.d.window.cgb_wx_glitch {
+                    // The DMG picks the map at the moment of the read, and "in
+                    // window" fell with LCDC bit 5: the tile comes from the
+                    // background's map.
+                    let address = if self.d.bg.fetcher.window_tile
+                        && self.lcdc & LCDC_WIN_EN_B == 0
+                        && !self.is_cgb_hardware()
+                    {
+                        self.d.bg.fetcher.bg_index_address
+                    } else {
+                        self.d.bg.fetcher.tile_index_address
+                    };
+                    self.d.bg.fetcher.tile = self.vram_read(address);
+                    if self.is_cgb_hardware() {
+                        self.d.bg.fetcher.attributes = self.vram_read(address + VRAM_BANK1);
+                    }
                 }
-                // The DMG picks the map at the moment of the read, and "in
-                // window" fell with LCDC bit 5: the tile comes from the
-                // background's map.
-                let address = if self.d.fetcher.window_tile
-                    && self.lcdc & LCDC_WIN_EN_B == 0
-                    && !self.is_cgb_hardware()
-                {
-                    self.d.fetcher.bg_index_address
-                } else {
-                    self.d.fetcher.tile_index_address
-                };
-                self.d.fetcher.tile = self.vram_read(address);
-                if self.is_cgb_hardware() {
-                    self.d.fetcher.attributes = self.vram_read(address + VRAM_BANK1);
-                }
-                self.d.fetcher.step = self.d.fetcher.step.next();
             }
             FetcherStep::DataLowT1 | FetcherStep::DataHighT1 => {
                 self.update_wx_glitch();
                 let y = if model_ge_cgb_d(self.model) {
-                    self.d.fetcher.y
+                    self.d.bg.fetcher.y
                 } else {
                     self.fetcher_y_value()
                 };
-                self.d.fetcher.last_tileset = self.lcdc & LCDC_TILE_SEL_B != 0;
+                self.d.bg.fetcher.last_tileset = self.lcdc & LCDC_TILE_SEL_B != 0;
                 let tile_address = self.tile_address();
-                let y_flip = if self.d.fetcher.attributes & ATTR_Y_FLIP_B != 0 {
+                let y_flip = if self.d.bg.fetcher.attributes & ATTR_Y_FLIP_B != 0 {
                     7
                 } else {
                     0
                 };
-                let low = self.d.fetcher.step == FetcherStep::DataLowT1;
-                self.d.fetcher.data_address =
+                let low = self.d.bg.fetcher.step == FetcherStep::DataLowT1;
+                self.d.bg.fetcher.data_address =
                     tile_address + u16::from((y & 7) ^ y_flip) * 2 + u16::from(!low);
-                self.d.fetcher.step = self.d.fetcher.step.next();
             }
             FetcherStep::DataLowT2 => {
                 if self.d.window.cgb_wx_glitch {
-                    self.d.fetcher.data[0] = self.d.fetcher.data[1];
-                    self.d.fetcher.step = self.d.fetcher.step.next();
-                    return;
-                }
-                self.d.fetcher.data[0] = match self.tile_sel_glitch() {
-                    TileSelGlitch::Use(data) => data,
-                    TileSelGlitch::ReadVram | TileSelGlitch::CgbD => {
-                        self.vram_read(self.d.fetcher.data_address)
+                    self.d.bg.fetcher.data[0] = self.d.bg.fetcher.data[1];
+                } else {
+                    self.d.bg.fetcher.data[0] = match self.tile_sel_glitch() {
+                        TileSelGlitch::Use(data) => data,
+                        TileSelGlitch::ReadVram | TileSelGlitch::CgbD => {
+                            self.vram_read(self.d.bg.fetcher.data_address)
+                        }
+                    };
+                    if self.d.bg.fetcher.last_tileset && self.d.bg.fetcher.tile_sel_glitch {
+                        self.d.bg.fetcher.sel_glitch_data =
+                            self.vram_read(self.d.bg.fetcher.data_address);
                     }
-                };
-                if self.d.fetcher.last_tileset && self.d.fetcher.tile_sel_glitch {
-                    self.d.fetcher.sel_glitch_data = self.vram_read(self.d.fetcher.data_address);
                 }
-                self.d.fetcher.step = self.d.fetcher.step.next();
             }
             FetcherStep::DataHighT2 => {
                 if self.d.window.cgb_wx_glitch {
-                    self.d.fetcher.data[1] = self.d.fetcher.data[0];
-                    self.d.fetcher.step = self.d.fetcher.step.next();
-                    if self.d.window.wx_triggered {
-                        self.d.window.tile_x = (self.d.window.tile_x + 1) & 0x1F;
-                    }
-                    return;
-                }
-                let glitch = self.tile_sel_glitch();
-                if glitch == TileSelGlitch::CgbD {
-                    self.d.fetcher.data_address -= 1;
-                }
-                if let TileSelGlitch::Use(data) = glitch {
-                    self.d.fetcher.data[1] = data;
+                    self.d.bg.fetcher.data[1] = self.d.bg.fetcher.data[0];
                 } else {
-                    let value = self.vram_read(self.d.fetcher.data_address);
-                    self.d.fetcher.data[1] = value;
-                    self.d.fetcher.sel_glitch_data = value;
-                }
-                if self.d.fetcher.last_tileset && self.d.fetcher.tile_sel_glitch {
-                    self.d.fetcher.sel_glitch_data = self.vram_read(self.d.fetcher.data_address);
+                    let glitch = self.tile_sel_glitch();
+                    if glitch == TileSelGlitch::CgbD {
+                        self.d.bg.fetcher.data_address -= 1;
+                    }
+                    if let TileSelGlitch::Use(data) = glitch {
+                        self.d.bg.fetcher.data[1] = data;
+                    } else {
+                        let value = self.vram_read(self.d.bg.fetcher.data_address);
+                        self.d.bg.fetcher.data[1] = value;
+                        self.d.bg.fetcher.sel_glitch_data = value;
+                    }
+                    if self.d.bg.fetcher.last_tileset && self.d.bg.fetcher.tile_sel_glitch {
+                        self.d.bg.fetcher.sel_glitch_data =
+                            self.vram_read(self.d.bg.fetcher.data_address);
+                    }
                 }
                 if self.d.window.wx_triggered {
                     self.d.window.tile_x = (self.d.window.tile_x + 1) & 0x1F;
                 }
-                self.fetcher_push();
             }
-            FetcherStep::Push => self.fetcher_push(),
+            FetcherStep::Push => {}
         }
+        let insertion_wx = self.insertion_glitch_wx();
+        self.d.bg.advance(self.d.window.cgb_wx_glitch, insertion_wx);
     }
 
-    pub(super) fn fetcher_push(&mut self) {
-        self.d.fetcher.step = FetcherStep::Push;
-        if !self.d.bg_fifo.is_empty() {
-            return;
-        }
-
+    /// WX, if the DMG's window insertion glitch can happen as the fetcher
+    /// pushes: the window triggered on WY but is off, and its disable did
+    /// not land during a window tile's fetch.
+    const fn insertion_glitch_wx(&self) -> Option<u8> {
         if self.d.window.wy_triggered
             && self.lcdc & LCDC_WIN_EN_B == 0
             && !self.is_cgb_hardware()
             && !self.d.window.no_pixel_insertion_glitch
         {
-            // See https://github.com/LIJI32/SameBoy/issues/278
-            let mut logical_position = self.d.position_in_line.wrapping_add(7);
-            if logical_position > 167 {
-                logical_position = 0;
-            }
-            if self.wx == logical_position {
-                self.d.bg_fifo.rewind_to_blank_pixel();
-                return;
-            }
+            Some(self.wx)
+        } else {
+            None
         }
-
-        let attr = self.d.fetcher.attributes;
-        let [low, high] = self.d.fetcher.data;
-        self.d.bg_fifo.push_bg_row(
-            low,
-            high,
-            attr & ATTR_CGB_PALETTE,
-            attr & ATTR_PRIORITY_B != 0,
-            attr & ATTR_X_FLIP_B != 0,
-        );
-        self.d.fetcher.step = FetcherStep::GetTileT1;
     }
 }

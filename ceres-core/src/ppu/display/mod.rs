@@ -16,6 +16,7 @@
 //! - `bus.rs`: the PPU's own memory accesses, the DMA/HDMA bus conflicts and
 //!   the CPU-visible access locks
 
+mod background;
 mod bus;
 mod cgb_c;
 mod fetcher;
@@ -30,10 +31,10 @@ mod window;
 
 use {
     crate::{CgbMode, Model, interrupts::Interrupts},
+    background::Background,
     bus::{CpuAccess, PpuBus},
     cgb_c::CgbC,
     core::mem,
-    fetcher::Fetcher,
     fifo::Fifo,
     objects::{ObjectFetch, ObjectSearch},
     window::Window,
@@ -75,10 +76,7 @@ pub(super) struct Display {
     line_clock: i32,
 
     current_line: u8,
-    /// `position_in_line`: wraps like SameBoy's `uint8_t` (240..=255 is -16..=-1).
-    position_in_line: u8,
     lcd_x: u8,
-    line_has_fractional_scrolling: bool,
 
     /// The PPU entered `HBlank` (SameBoy state 33); consumed by the HDMA.
     hblank_hdma_edge: bool,
@@ -90,13 +88,11 @@ pub(super) struct Display {
     /// The LCD was switched off with a non-zero STAT mode; consumed by the HDMA.
     lcd_off_hdma_edge: bool,
 
-    bg_fifo: Fifo,
+    bg: Background,
     oam_fifo: Fifo,
-    insert_bg_pixel: bool,
 
     objs: ObjectSearch,
     obj_fetch: ObjectFetch,
-    fetcher: Fetcher,
     window: Window,
     /// The line the WY check compares with on the DMG and in double speed
     /// (SameBoy's `ly_for_comparison`); `-1` around LY changes.
@@ -126,19 +122,15 @@ impl Default for Display {
             cfl: 0,
             line_clock: 0,
             current_line: 0,
-            position_in_line: pos(-16),
             lcd_x: 0,
-            line_has_fractional_scrolling: false,
             hblank_hdma_edge: false,
             hblank_hdma_delay: 0,
             line_clock_valid: false,
             lcd_off_hdma_edge: false,
-            bg_fifo: Fifo::default(),
+            bg: Background::default(),
             oam_fifo: Fifo::default(),
-            insert_bg_pixel: false,
             objs: ObjectSearch::default(),
             obj_fetch: ObjectFetch::default(),
-            fetcher: Fetcher::default(),
             window: Window::default(),
             ly_for_comparison: 0,
             line153_compare_pending: false,
@@ -181,7 +173,7 @@ impl Display {
     }
 
     pub(super) const fn position_in_line(&self) -> u8 {
-        self.position_in_line
+        self.bg.position
     }
 
     /// The OAM row the PPU is reading (for the OAM bug).
@@ -199,7 +191,7 @@ impl Display {
     }
 
     pub(super) const fn set_tile_sel_glitch(&mut self, active: bool) {
-        self.fetcher.tile_sel_glitch = active;
+        self.bg.fetcher.tile_sel_glitch = active;
     }
 
     pub(super) const fn set_wx_just_changed(&mut self, active: bool) {

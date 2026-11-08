@@ -183,8 +183,7 @@ impl Ppu {
                 self.d.current_line = 0;
                 self.d.window.line = Window::NO_LINE;
                 self.d.window.wy_triggered = false;
-                self.d.position_in_line = pos(-16);
-                self.d.line_has_fractional_scrolling = false;
+                self.d.bg.restart_line();
                 self.d.ly_for_comparison = 0;
                 self.stat &= !STAT_MODE_B;
                 self.d.cpu.unlock_all();
@@ -354,13 +353,12 @@ impl Ppu {
                     self.sleep(State::AbortedLineStart, 2);
                     return None;
                 }
-                self.d.position_in_line = pos(-16);
-                self.d.line_has_fractional_scrolling = false;
+                self.d.bg.restart_line();
                 Some(State::VBlankLine)
             }
             State::AbortedLineStart => {
                 self.ly = self.d.current_line;
-                self.d.position_in_line = pos(-15);
+                self.d.bg.position = pos(-15);
                 self.mode3_start();
                 Some(State::Mode3)
             }

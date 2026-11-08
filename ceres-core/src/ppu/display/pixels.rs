@@ -3,8 +3,8 @@
 use {
     super::{
         LINES,
+        background::Popped,
         fifo::{Item, ObjPixel, PixelOut},
-        pos,
     },
     crate::{
         CgbMode,
@@ -21,16 +21,7 @@ impl Ppu {
         if obj_en && self.d.objs.next().is_some_and(|e| e.x == 0) {
             return None;
         }
-        if self.d.bg_fifo.is_empty() {
-            return None;
-        }
-
-        let fifo_item = if self.d.insert_bg_pixel {
-            self.d.insert_bg_pixel = false;
-            Item::default()
-        } else {
-            self.d.bg_fifo.pop()
-        };
+        let (fifo_item, popped) = self.d.bg.pop(self.mixer_scx, self.d.window.being_fetched)?;
         let mut bg_priority = fifo_item.bg_priority;
         let mut oam_item = Item::default();
         let mut draw_oam = false;
@@ -42,29 +33,11 @@ impl Ppu {
                 bg_priority |= oam_item.bg_priority;
             }
         }
-
-        // (position + 16 < 8) in u8 arithmetic: the lead-in range.
-        let position = self.d.position_in_line;
-        if position.wrapping_add(16) < 8 {
-            if position == pos(-17) {
-                self.d.position_in_line = pos(-16);
-            } else if position & 7 == self.mixer_scx & 7
-                || self.d.window.being_fetched && position & 7 == 6 && self.mixer_scx & 7 == 7
-            {
-                self.d.position_in_line = pos(-8);
-            } else if position == pos(-9) {
-                self.d.position_in_line = pos(-16);
-                return None;
-            } else {
-                self.d.line_has_fractional_scrolling = true;
-            }
+        if popped == Popped::Restarted {
+            return None;
         }
-
         self.d.window.being_fetched = false;
-
-        // Drop pixels for scrolling (negative positions compare >= 160 in u8).
-        if self.d.position_in_line >= PX_WIDTH {
-            self.d.position_in_line = self.d.position_in_line.wrapping_add(1);
+        if popped == Popped::Dropped {
             return None;
         }
 
@@ -90,7 +63,6 @@ impl Ppu {
             }),
         };
 
-        self.d.position_in_line = self.d.position_in_line.wrapping_add(1);
         self.d.lcd_x = self.d.lcd_x.wrapping_add(1);
         Some(out)
     }
