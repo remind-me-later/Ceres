@@ -75,6 +75,7 @@ pub mod lcd_timing;
 pub mod oam;
 pub mod oam_scan;
 pub mod render;
+pub mod render_edge;
 pub mod run;
 pub mod sm83;
 pub mod timer;
