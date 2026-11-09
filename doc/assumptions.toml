@@ -160,6 +160,10 @@ rests_on = ["readable-model-is-dmg-sim"]
 title = "On a line where the window is idle, but line 0 after the LCD is turned on, render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (HBlankStart, the dot after its position reaches 160), whatever SCX is and whenever the CPU writes it, with any objects at X 8 or more while LCDC's object bit holds"
 evidence = "proved"
 
+[mode3-window-armed]
+title = "On a line where the window is armed (LCDC's bit 5 set, WY matched in the frame on both sides, WX held between 7 and 165), ceres's mode 3 loop and render's pipeline stay related dot by dot while ceres's window check is short of WX, whatever SCX is and whenever the CPU writes it, with any objects at X 8 or more while LCDC's object bit holds: neither side starts the window before"
+evidence = "proved"
+
 [resync-only-in-line-0]
 title = "The pixel pipeline's line-end resync moves ceres's clock only in line 0 after the LCD is turned on (895 to 893); on the other lines it finds 893"
 evidence = "measured"

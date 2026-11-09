@@ -31,9 +31,12 @@
 //! checked them.
 //!
 //! Ceres's side is its mode 3 loop itself (`mode3::mode3`), on the display's
-//! state alone (`Mode3Loop`): with the window idle, the fetchers' reads, the
-//! object's row and the pixels' mixing, which do not decide when the pixels
-//! come out, do nothing.
+//! state alone (`Mode3Loop`): the fetchers' reads, the object's row and the
+//! pixels' mixing, which do not decide when the pixels come out, do nothing.
+//! The window is off, or armed and not started (`window_agrees`): ceres's
+//! check compares WX with its position plus 7, the netlist's with its pixel
+//! counter (6 ahead) at the dot's rise, and neither matches before ceres's
+//! check reaches WX.
 #![cfg_attr(
     not(kani),
     expect(
@@ -67,13 +70,16 @@ use {
     ceres_netlist::render_edge::{EdgeInputs, NO_X, NetPipeline, SLOTS},
 };
 
-/// Ceres's mode 3 loop on the display's state alone: the window idle,
-/// nothing read, no pixel drawn.
+/// Ceres's mode 3 loop on the display's state alone: nothing read, no pixel
+/// drawn.
 pub(crate) struct Mode3Loop {
     pub d: Display,
-    /// SCX as the pixel mixer sees it, and LCDC's object enable.
+    /// SCX as the pixel mixer sees it, LCDC's object and window enables, and
+    /// WX.
     pub mixer_scx: u8,
     pub objects_enabled: bool,
+    pub window_enabled: bool,
+    pub wx: u8,
 }
 
 impl Mode3Ppu for Mode3Loop {
@@ -90,10 +96,13 @@ impl Mode3Ppu for Mode3Loop {
     }
 
     fn window_check(&mut self) -> bool {
-        false
+        self.d
+            .mode3_window(self.window_enabled, self.wx, self.mixer_scx, false)
     }
 
-    fn window_activated(&mut self) {}
+    fn window_activated(&mut self) {
+        self.d.mode3_window_activated();
+    }
 
     fn window_pixel_insertion(&mut self) {}
 
@@ -150,8 +159,9 @@ const fn drawn(d: &Display) -> bool {
     matches!(d.state, State::HBlankStart)
 }
 
-/// SCX's address.
+/// SCX's and WX's addresses.
 const SCX: u16 = 0xFF43;
+const WX: u16 = 0xFF4B;
 /// LCDC's object and window enables.
 const LCDC_OBJ_EN: u8 = 2;
 const LCDC_WIN_EN: u8 = 0x20;
@@ -507,19 +517,20 @@ pub(crate) fn start_agrees(
     falling: EdgeInputs,
 ) -> bool {
     let before = !net.inputs.clk
-        & quiet(&net.inputs, l.objects_enabled)
+        & !l.window_enabled
+        & quiet(&net.inputs, l)
         & latch_holds(net)
         & (*net == before_start(net))
         & (l.d.bg.position == pos(-16))
         & !l.d.bg.insert_blank
         & store_holds(net)
-        & net_window_off(net)
+        & window_agrees(l, net)
         & starting_objects(l, net);
     if !(before
         & rising.clk
         & !falling.clk
-        & quiet(&rising, l.objects_enabled)
-        & quiet(&falling, l.objects_enabled)
+        & quiet(&rising, l)
+        & quiet(&falling, l)
         & writes(net, &rising, &falling, last_scx))
     {
         return true;
@@ -896,29 +907,76 @@ const fn matches_step(a: FetcherStep, b: FetcherStep) -> bool {
 }
 
 /// The netlist's inputs in mode 3: no reset, no line start, the scan
-/// stopped (CENO low), the objects on or off as ceres has them, the window
-/// off.
-const fn quiet(i: &EdgeInputs, objects: bool) -> bool {
+/// stopped (CENO low), the objects and the window on or off as ceres has
+/// them; with the window on, not in VBlank and WX not written.
+const fn quiet(i: &EdgeInputs, l: &Mode3Loop) -> bool {
     !i.ppu_reset
         & !i.hard_reset
         & !i.line_start
         & !i.stop_scan
         & !i.ceno
-        & ((i.lcdc & LCDC_OBJ_EN != 0) == objects)
-        & (i.lcdc & LCDC_WIN_EN == 0)
+        & ((i.lcdc & LCDC_OBJ_EN != 0) == l.objects_enabled)
+        & ((i.lcdc & LCDC_WIN_EN != 0) == l.window_enabled)
+        & (!l.window_enabled | !i.mode1 & !(i.cpu_wr_sync & (i.addr == WX)))
+}
+
+/// The write strobe does not latch WX in an edge: the bus changes its
+/// address a few nanoseconds after the strobe, so the strobe meets the
+/// address of the edge before too.
+const fn holds_wx(before: &EdgeInputs, now: &EdgeInputs) -> bool {
+    !now.cpu_wr_sync | ((before.addr != WX) & (now.addr != WX))
 }
 
 /// The netlist's window at rest: no WY match in the frame, not in it, its
 /// first tile not wanted.
 const fn net_window_off(net: &NetPipeline) -> bool {
-    !net.sary
-        & !net.wy_latch
-        & !net.pyco
-        & !net.nunu
-        & !net.nopa
-        & !net.in_window
-        & !net.rydy
-        & !net.sovy
+    !net.sary & !net.wy_latch & net_window_waits(net)
+}
+
+/// The netlist's window not started on this line: no WX match, not in it,
+/// its first tile not wanted, its column at 0.
+const fn net_window_waits(net: &NetPipeline) -> bool {
+    !net.pyco & !net.nunu & !net.nopa & !net.in_window & !net.rydy & !net.sovy & (net.win_x == 0)
+}
+
+/// The WX the armed window takes: it starts at a pixel of the line, past
+/// the lead-in.
+const FIRST_WX: u8 = 7;
+const LAST_WX: u8 = 165;
+/// Ceres's window check compares WX with its position plus this.
+const WX_AHEAD: i16 = 7;
+
+/// Ceres's window not started on this line, and no write to it landing;
+/// `wy_triggered` as the phase has it.
+const fn ceres_window_waits(l: &Mode3Loop, wy_triggered: bool) -> bool {
+    let w = &l.d.window;
+    (w.wy_triggered == wy_triggered)
+        & !w.wx_triggered
+        & !w.being_fetched
+        & !w.started_after_line
+        & !w.wx_166_interrupt_glitch
+        & !w.enable_pending
+        & !w.wy_just_checked
+        & !w.wx_just_changed
+}
+
+/// The window on both sides: off (LCDC's bit 5 clear, and no WY match in
+/// the frame), or armed: on, WY matched in the frame (ceres's
+/// `wy_triggered`, the netlist's REJO), WX held between `FIRST_WX` and
+/// `LAST_WX`, and ceres's check not past it (at it, the window starts in
+/// the next dot).
+const fn window_agrees(l: &Mode3Loop, net: &NetPipeline) -> bool {
+    if l.window_enabled {
+        ceres_window_waits(l, true)
+            & net.wy_latch
+            & net_window_waits(net)
+            & (net.wx == l.wx)
+            & (l.wx >= FIRST_WX)
+            & (l.wx <= LAST_WX)
+            & (signed(l.d.bg.position) + WX_AHEAD <= l.wx as i16)
+    } else {
+        ceres_window_waits(l, false) & net_window_off(net)
+    }
 }
 
 /// The CPU strobes SCX's address in this edge.
@@ -960,10 +1018,10 @@ const fn latch_holds(net: &NetPipeline) -> bool {
 /// the mixer's SCX in the dot and the ghost.
 pub(crate) fn related(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
     !net.inputs.clk
-        & quiet(&net.inputs, l.objects_enabled)
+        & quiet(&net.inputs, l)
         & latch_holds(net)
         & store_holds(net)
-        & net_window_off(net)
+        & window_agrees(l, net)
         & between_dots(&l.d)
         & (drawn(&l.d) == (l.d.bg.position == PX_WIDTH))
         & !l.d.obj_fetch.aborted
@@ -998,9 +1056,10 @@ pub(crate) fn step_agrees(
     if !(related(l, net, g)
         & rising.clk
         & !falling.clk
-        & quiet(&rising, l.objects_enabled)
-        & quiet(&falling, l.objects_enabled)
-        & writes(net, &rising, &falling, l.mixer_scx))
+        & quiet(&rising, l)
+        & quiet(&falling, l)
+        & writes(net, &rising, &falling, l.mixer_scx)
+        & (!l.window_enabled | holds_wx(&net.inputs, &rising) & holds_wx(&rising, &falling)))
     {
         return true;
     }

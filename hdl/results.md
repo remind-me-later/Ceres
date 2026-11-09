@@ -739,6 +739,21 @@ scan saves no sprite over 803 ROMs (1,349,372,892 edges, 89,648,743 with
 the window in 198 ROMs). The mode 3 proof takes the window off for now
 (LCDC's bit 5 clear, the netlist's window at rest).
 
+The window's first phase is proved: armed, before it starts
+(`mode3-window-armed`). With LCDC's bit 5 set, WY matched in the frame on
+both sides (ceres's `wy_triggered`, the netlist's REJO) and WX held
+between 7 and 165, ceres's loop runs its own window check
+(`Display::mode3_window`, moved off `Ppu` with LCDC's bit, WX and the
+mixer's SCX as arguments; the A/V hash is unchanged), and both stay related
+dot by dot, the netlist's window waiting, until ceres's check reaches WX.
+The eight `netlist_mode3_armed_*` harnesses, one per sleep of the loop
+(none for a drawn line: the window starts first), take 4 to 18 minutes
+and 7 to 8.7 GB each. The one counterexample was a write: a strobe that
+rises while the bus still carries WX's address from the edge before writes
+WX, which the scope excludes (`holds_wx`). Not proved yet: the window's
+start and its pixels, and how a line starts armed (WY's trigger against
+REJO).
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

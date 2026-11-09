@@ -231,11 +231,13 @@ impl Mode3Ppu for Ppu {
     }
 
     fn window_check(&mut self) -> bool {
-        self.mode3_window()
+        let hw = self.is_cgb_hardware();
+        self.d
+            .mode3_window(self.lcdc & LCDC_WIN_EN_B != 0, self.wx, self.mixer_scx, hw)
     }
 
     fn window_activated(&mut self) {
-        self.mode3_window_activated();
+        self.d.mode3_window_activated();
     }
 
     fn window_pixel_insertion(&mut self) {

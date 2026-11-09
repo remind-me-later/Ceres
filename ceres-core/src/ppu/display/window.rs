@@ -2,6 +2,7 @@
 
 use {
     super::{
+        Display,
         fetcher::{Fetcher, FetcherStep},
         fifo::Fifo,
         pos,
@@ -145,80 +146,6 @@ impl Ppu {
             == self.wx;
     }
 
-    /// Window activation check at the top of a mode-3 iteration. Returns
-    /// `true` if the engine went to sleep (state 42).
-    pub(super) fn mode3_window(&mut self) -> bool {
-        self.d.window.wx_166_interrupt_glitch = false;
-        if self.d.window.wy_just_checked {
-            self.d.window.wy_just_checked = false;
-        } else if !self.d.window.wx_triggered
-            && self.d.window.wy_triggered
-            && self.lcdc & LCDC_WIN_EN_B != 0
-            && !self.d.window.enable_pending
-        {
-            let position = self.d.bg.position;
-            let hw = self.is_cgb_hardware();
-            let should_activate = if self.wx == 0 {
-                position == pos(-7)
-                    || position == pos(-16) && self.mixer_scx & 7 != 0
-                    || (pos(-15)..=pos(-8)).contains(&position)
-            } else if u16::from(self.wx) < 166 + u16::from(hw) {
-                if self.wx == position.wrapping_add(7) {
-                    true
-                } else if !hw
-                    && self.wx == position.wrapping_add(6)
-                    && !self.d.window.wx_just_changed
-                {
-                    // The window starts a pixel after its WX matched, because
-                    // it was off then (or WY had not triggered). SameBoy
-                    // also steps the LCD column back here ("horizontal
-                    // desync"), so that the window's first pixel overwrites
-                    // the one before it; the DMG does not: the netlist and
-                    // the screenshot of m3_lcdc_win_en_change_multiple_wx
-                    // keep that pixel, and the window starts after it.
-                    true
-                } else {
-                    false
-                }
-            } else {
-                false
-            };
-
-            if should_activate {
-                self.d.window.line = self.d.window.line.wrapping_add(1);
-                self.d.window.tile_x = 0;
-                self.d.window.saved = hw.then(|| (self.d.bg.fifo, self.d.bg.fetcher.clone()));
-                self.d.bg.fifo.clear();
-                if self.wx == 0 && self.mixer_scx & 7 != 0 && !hw {
-                    self.sleep_in_line(State::Mode3WindowDelay, 1);
-                    return true;
-                } else if self.wx == 166 {
-                    self.d.window.wx_166_interrupt_glitch = true;
-                } else {
-                    // Nothing special about this window start.
-                }
-                self.mode3_window_activated();
-            } else if !hw && self.wx == 166 && self.wx == position.wrapping_add(7) {
-                // The DMG starts the window after the last pixel (its WX
-                // match is latched at the last dot): only an object fetch
-                // after it sees the window's fetches.
-                self.d.window.line = self.d.window.line.wrapping_add(1);
-                self.d.window.started_after_line = true;
-            } else {
-                // The window does not start here.
-            }
-        } else {
-            // The window is already on, or is not being checked.
-        }
-        false
-    }
-
-    pub(super) const fn mode3_window_activated(&mut self) {
-        self.d.window.wx_triggered = true;
-        self.d.bg.fetcher.step = FetcherStep::GetTileT1;
-        self.d.window.being_fetched = true;
-    }
-
     /// On CGB, disabling the window while its start is still in progress (its
     /// first tile not pushed yet) calls it off: the pixels go on from the
     /// background where they were instead of waiting for the window's tile.
@@ -242,5 +169,78 @@ impl Ppu {
         if old & LCDC_WIN_EN_B != 0 && new & LCDC_WIN_EN_B == 0 && self.d.window.being_fetched {
             self.d.window.no_pixel_insertion_glitch = true;
         }
+    }
+}
+
+impl Display {
+    /// Window activation check at the top of a mode-3 iteration, with LCDC's
+    /// window enable, WX and the mixer's SCX as the PPU has them. Returns
+    /// `true` if the engine went to sleep (state 42).
+    pub(super) fn mode3_window(&mut self, enabled: bool, wx: u8, mixer_scx: u8, hw: bool) -> bool {
+        self.window.wx_166_interrupt_glitch = false;
+        if self.window.wy_just_checked {
+            self.window.wy_just_checked = false;
+        } else if !self.window.wx_triggered
+            && self.window.wy_triggered
+            && enabled
+            && !self.window.enable_pending
+        {
+            let position = self.bg.position;
+            let should_activate = if wx == 0 {
+                position == pos(-7)
+                    || position == pos(-16) && mixer_scx & 7 != 0
+                    || (pos(-15)..=pos(-8)).contains(&position)
+            } else if u16::from(wx) < 166 + u16::from(hw) {
+                if wx == position.wrapping_add(7) {
+                    true
+                } else if !hw && wx == position.wrapping_add(6) && !self.window.wx_just_changed {
+                    // The window starts a pixel after its WX matched, because
+                    // it was off then (or WY had not triggered). SameBoy
+                    // also steps the LCD column back here ("horizontal
+                    // desync"), so that the window's first pixel overwrites
+                    // the one before it; the DMG does not: the netlist and
+                    // the screenshot of m3_lcdc_win_en_change_multiple_wx
+                    // keep that pixel, and the window starts after it.
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+
+            if should_activate {
+                self.window.line = self.window.line.wrapping_add(1);
+                self.window.tile_x = 0;
+                self.window.saved = hw.then(|| (self.bg.fifo, self.bg.fetcher.clone()));
+                self.bg.fifo.clear();
+                if wx == 0 && mixer_scx & 7 != 0 && !hw {
+                    self.sleep_in_line(State::Mode3WindowDelay, 1);
+                    return true;
+                } else if wx == 166 {
+                    self.window.wx_166_interrupt_glitch = true;
+                } else {
+                    // Nothing special about this window start.
+                }
+                self.mode3_window_activated();
+            } else if !hw && wx == 166 && wx == position.wrapping_add(7) {
+                // The DMG starts the window after the last pixel (its WX
+                // match is latched at the last dot): only an object fetch
+                // after it sees the window's fetches.
+                self.window.line = self.window.line.wrapping_add(1);
+                self.window.started_after_line = true;
+            } else {
+                // The window does not start here.
+            }
+        } else {
+            // The window is already on, or is not being checked.
+        }
+        false
+    }
+
+    pub(super) const fn mode3_window_activated(&mut self) {
+        self.window.wx_triggered = true;
+        self.bg.fetcher.step = FetcherStep::GetTileT1;
+        self.window.being_fetched = true;
     }
 }
