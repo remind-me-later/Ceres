@@ -80,9 +80,9 @@ how = "netlist_replay over the 123 ROMs traced with the scan, the phases where t
 rests_on = ["readable-model-is-dmg-sim"]
 
 [transcription-render-edge]
-title = "NetPipeline is NetRender's background pipeline and sprite fetch (the pixel counter, the fetcher's count, the first fetch's flip-flops, the fine scroll, mode 3's latch, SCX, the sprite store's X and fetched slots, the fetch's steps), edge by edge, while the window is idle and the scan saves no sprite"
+title = "NetPipeline is NetRender's background pipeline, sprite fetch and window (the pixel counter, the fetcher's count, the first fetch's flip-flops, the fine scroll, mode 3's latch, SCX, the sprite store's X and fetched slots, the fetch's steps, WY and WX, the window's matches, counters and start), edge by edge, while the scan saves no sprite"
 evidence = "replayed"
-how = "ceres-netlist's tests/render_edge.rs steps it from NetRender's state at every edge of NetChip's runs where LCDC's bit 5 is clear, WY has not matched and the OAM scan saves no sprite, and compares it with NetRender's after the edge: 638 ROMs (hdl/tests.txt, gambatte's scx_during_m3, scy, sprites, m0int_m0stat, m2int_m3stat, m0enable, bgen, dmgpalette_during_m3 and enable_display, mealybug's ppu ROMs, gbmicrotest, dmg-acid2, mooneye's ppu tests), 0.2 s each: 1,046,338,660 edges, 307,450,280 in mode 3, with 32,402 sprite fetches (135 ROMs) and 181,606 SCX writes, no difference. NetRender, the delta-cycle transcription of render.vhd, is what netlist_replay replays through render's traces."
+how = "ceres-netlist's tests/render_edge.rs steps it from NetRender's state at every edge of NetChip's runs where the OAM scan saves no sprite, and compares it with NetRender's after the edge: 803 ROMs (hdl/tests.txt, gambatte's scx_during_m3, scy, sprites, window, m0int_m0stat, m2int_m3stat, m0enable, bgen, dmgpalette_during_m3 and enable_display, mealybug's ppu ROMs, gbmicrotest, dmg-acid2, mooneye's ppu tests), 0.2 s each: 1,349,372,892 edges, 401,151,682 in mode 3, 89,648,743 with the window (198 ROMs), with 38,826 sprite fetches and 181,702 SCX writes, no difference. NetRender, the delta-cycle transcription of render.vhd, is what netlist_replay replays through render's traces."
 rests_on = ["readable-model-is-dmg-sim"]
 
 # How ceres's time maps onto the netlist's

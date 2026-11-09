@@ -1,7 +1,7 @@
 //! `NetPipeline` (`ceres_netlist::render_edge`) against `NetRender`, edge
 //! by edge, on `NetChip`'s runs of the test ROMs: at each edge where the
-//! window is idle and the OAM scan saves no sprite, the pipeline steps from
-//! render's state before it and must reach render's after it.
+//! OAM scan saves no sprite, the pipeline steps from render's state before
+//! it and must reach render's after it.
 //!
 //! It also measures where mode 3 starts (ceres-core's
 //! `background::check::before_start`): on a visible line with the window
@@ -84,6 +84,18 @@ const BEFORE_START: NetPipeline = NetPipeline {
     ryfa: false,
     rene: false,
     scx: 0,
+    wy: 0,
+    wx: 0,
+    sary: false,
+    wy_latch: false,
+    pyco: false,
+    nunu: false,
+    nopa: false,
+    in_window: false,
+    win_x: 0,
+    win_y: 0,
+    rydy: false,
+    sovy: false,
     xs: [0; 10],
     fetched: 0,
     sobu: false,
@@ -99,6 +111,9 @@ const BEFORE_START: NetPipeline = NetPipeline {
         ppu_reset: false,
         hard_reset: false,
         lcdc: 0,
+        ly: 0,
+        hclk: false,
+        mode1: false,
         line_start: false,
         stop_scan: false,
         ceno: false,
@@ -123,6 +138,7 @@ struct Found {
     strobes: u64,
     first_strobe: Option<String>,
     sprites: u64,
+    windows: u64,
 }
 
 fn roms(root: &Path) -> Vec<String> {
@@ -151,6 +167,7 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
         strobes: 0,
         first_strobe: None,
         sprites: 0,
+        windows: 0,
     };
     // The line timing's half dot (once vclk has risen), and where mode 3
     // rose in this line, if the window was idle.
@@ -199,6 +216,9 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
             rose_at = None;
             let mut pipeline = NetPipeline::of(after);
             pipeline.scx = 0;
+            pipeline.wy = 0;
+            pipeline.wx = 0;
+            pipeline.win_y = 0;
             pipeline.xs = BEFORE_START.xs;
             pipeline.inputs = BEFORE_START.inputs;
             let quiet = !after.inputs.ppu_reset && !after.inputs.stop_scan && !after.inputs.clk;
@@ -216,9 +236,10 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
             }
         }
         let saves = before.inputs.save != 0 || after.inputs.save != 0;
-        if !(window_idle(&before) && window_idle(after)) || saves {
+        if saves {
             continue;
         }
+        found.windows += u64::from(!window_idle(&before));
         found.sprites +=
             u64::from(after.store.fetched != before.store.fetched && after.store.fetched != 0);
         let mut pipeline = NetPipeline::of(&before);
@@ -249,7 +270,7 @@ impl std::fmt::Debug for Fields<'_> {
         let i = &p.inputs;
         write!(
             f,
-            "m3 {} voga {} px {} count {} lyzu {} nyka {} pory {} pygo {} started {} fine {} puxa {} nyze {} discard {} ryfa {} rene {} scx {} xs {:?} fetched {:03x} sobu {} suda {} step {} busy {} tobu {} vonu {} seba {} tyfo {} | ls {} stop {} ceno {} lcdc {:02x} wr {} {:04x}={:02x} reset {}",
+            "m3 {} voga {} px {} count {} lyzu {} nyka {} pory {} pygo {} started {} fine {} puxa {} nyze {} discard {} ryfa {} rene {} scx {} | wy {} wx {} sary {} rejo {} pyco {} nunu {} nopa {} inwin {} winx {} winy {} rydy {} sovy {} | xs {:?} fetched {:03x} sobu {} suda {} step {} busy {} tobu {} vonu {} seba {} tyfo {} | ls {} stop {} ceno {} lcdc {:02x} wr {} {:04x}={:02x} reset {}",
             u8::from(p.mode3),
             u8::from(p.voga),
             p.px,
@@ -266,6 +287,18 @@ impl std::fmt::Debug for Fields<'_> {
             u8::from(p.ryfa),
             u8::from(p.rene),
             p.scx,
+            p.wy,
+            p.wx,
+            u8::from(p.sary),
+            u8::from(p.wy_latch),
+            u8::from(p.pyco),
+            u8::from(p.nunu),
+            u8::from(p.nopa),
+            u8::from(p.in_window),
+            p.win_x,
+            p.win_y,
+            u8::from(p.rydy),
+            u8::from(p.sovy),
             p.xs,
             p.fetched,
             u8::from(p.sobu),
@@ -334,10 +367,11 @@ fn pipeline_follows_render() {
     let mut differ = 0;
     for (_, found) in &results {
         eprintln!(
-            "{}: {} edges compared, {} in mode 3, {} sprites fetched, {} starts, {} SCX writes{}{}{}",
+            "{}: {} edges compared, {} in mode 3, {} with the window, {} sprites fetched, {} starts, {} SCX writes{}{}{}",
             found.rom,
             found.compared,
             found.in_mode3,
+            found.windows,
             found.sprites,
             found.starts,
             found.strobes,

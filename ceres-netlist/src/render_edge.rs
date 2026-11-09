@@ -5,13 +5,13 @@
 //! simulator does: it is the transcription, and the replay checks it
 //! against the model's traces. Kani cannot take it: a single edge, all of it
 //! concrete, did not settle in minutes (it takes this one, from any state,
-//! in under a second). This is the part of it that decides where mode 3 ends
-//! while the window is idle (LCDC's bit 5 clear, WY not matched in the
-//! frame): the pixel counter, the fetcher's count, the first fetch's
-//! flip-flops, the fine scroll, mode 3's latch, SCX, and the sprite fetch
-//! (the sprite store's X, its fetched slots, and the fetch's steps).
-//! `tests/render_edge.rs` checks it against `NetRender`, edge by edge, on
-//! `NetChip`'s runs of the test ROMs, wherever the scan saves no sprite.
+//! in under a second). This is the part of it that decides where mode 3 ends:
+//! the pixel counter, the fetcher's count, the first fetch's flip-flops, the
+//! fine scroll, mode 3's latch, SCX, the sprite fetch (the sprite store's X,
+//! its fetched slots, and the fetch's steps), and the window (WY and WX, its
+//! matches, its counters, and its start). `tests/render_edge.rs` checks it
+//! against `NetRender`, edge by edge, on `NetChip`'s runs of the test ROMs,
+//! wherever the scan saves no sprite.
 //!
 //! An edge is a few nanoseconds of changes, and so is this. At 0 ns the
 //! clock changes, and the clocks made from it (`dot`, `segu`, `clkpipe`,
@@ -45,10 +45,17 @@ const NEVER: u8 = u8::MAX;
 /// When the inputs reach render, as `NetRender::edge_with_pins` takes them.
 const INPUTS_AT: u8 = 1;
 const SCAN_AT: u8 = 2;
+const MODE1_AT: u8 = 3;
 const DATA_AT: u8 = 4;
 
-/// SCX's address.
+/// SCX's, WY's and WX's addresses.
 const SCX: u16 = 0xFF43;
+const WY: u16 = 0xFF4A;
+const WX: u16 = 0xFF4B;
+/// LCDC's window enable.
+const LCDC_WIN_EN: u8 = 0x20;
+/// The window's column counter's bits.
+const WIN_X_MASK: u8 = 0x1F;
 /// LCDC's sprite enable.
 const LCDC_OBJ_EN: u8 = 2;
 
@@ -61,8 +68,11 @@ pub struct EdgeInputs {
     /// The LCD's reset and the chip's.
     pub ppu_reset: bool,
     pub hard_reset: bool,
-    /// LCDC.
+    /// LCDC, LY, the line clock (hclk) and VBlank (mode 1).
     pub lcdc: u8,
+    pub ly: u8,
+    pub hclk: bool,
+    pub mode1: bool,
     /// From the OAM scan: the line starts, the scan stops, CENO.
     pub line_start: bool,
     pub stop_scan: bool,
@@ -82,6 +92,9 @@ impl EdgeInputs {
             ppu_reset: i.ppu_reset,
             hard_reset: i.hard_reset,
             lcdc: i.lcdc,
+            ly: i.ly,
+            hclk: i.hclk,
+            mode1: i.mode1,
             line_start: i.line_start,
             stop_scan: i.stop_scan,
             ceno: i.ceno,
@@ -117,8 +130,23 @@ pub struct NetPipeline {
     pub discard: bool,
     pub ryfa: bool,
     pub rene: bool,
-    /// SCX's latches.
+    /// SCX's, WY's and WX's latches.
     pub scx: u8,
+    pub wy: u8,
+    pub wx: u8,
+    /// The window: WY matched (SARY, and the frame's latch REJO), WX matched
+    /// (PYCO, NUNU), in it (PYNU, and NOPA a clock later), its column and
+    /// line counters, its first tile not fetched yet (RYDY, and SOVY).
+    pub sary: bool,
+    pub wy_latch: bool,
+    pub pyco: bool,
+    pub nunu: bool,
+    pub nopa: bool,
+    pub in_window: bool,
+    pub win_x: u8,
+    pub win_y: u8,
+    pub rydy: bool,
+    pub sovy: bool,
     /// The sprite store: its slots' X (`NO_X` once fetched), the slots
     /// fetched (bit `i` for slot `i`).
     pub xs: [u8; SLOTS],
@@ -142,6 +170,9 @@ impl PartialEq for EdgeInputs {
             & (self.ppu_reset == other.ppu_reset)
             & (self.hard_reset == other.hard_reset)
             & (self.lcdc == other.lcdc)
+            & (self.ly == other.ly)
+            & (self.hclk == other.hclk)
+            & (self.mode1 == other.mode1)
             & (self.line_start == other.line_start)
             & (self.stop_scan == other.stop_scan)
             & (self.ceno == other.ceno)
@@ -171,6 +202,12 @@ struct Wires {
     /// step with the sprite loaded (WUTY).
     step_reset: bool,
     loaded: bool,
+    /// The window: WY and WX matched (PAFU ROGE, NOGY NUKO), its reset
+    /// (XOFO), its column's clock (VETU).
+    wy_match: bool,
+    wxy_match: bool,
+    win_reset: bool,
+    wx_clk: bool,
 }
 
 /// The flip-flops' changes clocked in a nanosecond, for the next.
@@ -198,6 +235,13 @@ struct Changes {
     vonu: Option<bool>,
     seba: Option<bool>,
     tyfo: Option<bool>,
+    sary: Option<bool>,
+    pyco: Option<bool>,
+    nunu: Option<bool>,
+    nopa: Option<bool>,
+    win_x: Option<u8>,
+    win_y: Option<u8>,
+    sovy: Option<bool>,
 }
 
 impl Changes {
@@ -224,6 +268,13 @@ impl Changes {
         vonu: None,
         seba: None,
         tyfo: None,
+        sary: None,
+        pyco: None,
+        nunu: None,
+        nopa: None,
+        win_x: None,
+        win_y: None,
+        sovy: None,
     };
 }
 
@@ -256,6 +307,18 @@ impl NetPipeline {
             ryfa: r.ryfa,
             rene: r.rene,
             scx: r.scx,
+            wy: r.wy,
+            wx: r.wx,
+            sary: r.sary,
+            wy_latch: r.wy_latch,
+            pyco: r.pyco,
+            nunu: r.nunu,
+            nopa: r.nopa,
+            in_window: r.in_window,
+            win_x: r.win_x,
+            win_y: r.win_y,
+            rydy: r.rydy,
+            sovy: r.sovy,
             xs: r.store.xs,
             fetched: r.store.fetched,
             sobu: r.sobu,
@@ -295,10 +358,11 @@ impl NetPipeline {
     }
 
     /// A tile's restart of the fetcher: the fine scroll's last dot (RYFA,
-    /// not RENE yet), or the first fetch done.
+    /// not RENE yet), the window's first tile fetched (SOVY, not RYDY any
+    /// more), or the first fetch done.
     // @hw die: TEVO, and its terms
     const fn restart(&self) -> bool {
-        (self.ryfa & !self.rene) | self.first_fetch_done()
+        (self.ryfa & !self.rene) | (self.sovy & !self.rydy) | self.first_fetch_done()
     }
 
     /// The first fetch of the line is done (NYKA and PORY, not POKY yet).
@@ -313,9 +377,10 @@ impl NetPipeline {
         let matches = self.matches(i);
         let x_match = matches != 0;
         let stop_mode3 = (self.px == STOP_PX) & !held;
-        let dot = self.started & !x_match & !stop_mode3 & i.clk;
+        let dot = !self.rydy & self.started & !x_match & !stop_mode3 & i.clk;
         let segu = !dot;
-        let fetch_reset = i.stop_scan | self.restart();
+        let win_start = self.in_window & !self.nopa;
+        let fetch_reset = i.stop_scan | win_start | self.restart();
         let fetch_done = (self.fetch_count & FETCH_DONE == FETCH_DONE) & !fetch_reset;
         let odd_step = self.sprite_step & 1 != 0;
         Wires {
@@ -329,6 +394,10 @@ impl NetPipeline {
             x_match,
             step_reset: (self.sobu & !self.suda) | i.ppu_reset | i.line_start,
             loaded: self.tyfo & odd_step & self.seba & self.vonu,
+            wy_match: (i.lcdc & LCDC_WIN_EN != 0) & (self.wy == i.ly),
+            wxy_match: self.wy_latch & (self.wx == self.px),
+            win_reset: (i.lcdc & LCDC_WIN_EN == 0) | i.line_start,
+            wx_clk: self.restart() & self.in_window,
         }
     }
 
@@ -343,10 +412,13 @@ impl NetPipeline {
         if i.ppu_reset | self.voga {
             self.mode3 = false;
         }
-        if !self.mode3 {
-            self.lyzu = false;
+        if !self.mode3 | (self.in_window & !self.nopa) {
+            // The window's start restarts the first fetch's NYKA and PORY.
             self.nyka = false;
             self.pory = false;
+        }
+        if !self.mode3 {
+            self.lyzu = false;
             self.pygo = false;
             self.started = false;
             self.puxa = false;
@@ -361,7 +433,11 @@ impl NetPipeline {
             // POKY holds.
         }
         let restart = self.restart();
-        if i.stop_scan | restart {
+        // The fetcher's reset: the scan's stop, the window's start, a restart.
+        // The chip's reset clears NOPA at once and the window a delta later
+        // (through its reset's wire): the start glitches up between them.
+        let starts = self.in_window & !(self.nopa & !i.ppu_reset);
+        if i.stop_scan | starts | restart {
             self.fetch_count = 0;
         }
         if !self.mode3 | restart {
@@ -376,6 +452,40 @@ impl NetPipeline {
         }
         if i.hard_reset {
             self.scx = 0;
+            self.wy = 0;
+            self.wx = 0;
+        }
+        // The window's latches and its counters' resets.
+        if i.ppu_reset {
+            self.sary = false;
+            self.pyco = false;
+            self.nunu = false;
+            self.nopa = false;
+            self.sovy = false;
+        }
+        if i.mode1 | i.ppu_reset {
+            self.wy_latch = false;
+            self.win_y = 0;
+        } else if self.sary {
+            self.wy_latch = true;
+        } else {
+            // REJO holds.
+        }
+        let win_reset = (i.lcdc & LCDC_WIN_EN == 0) | i.line_start;
+        if win_reset {
+            self.in_window = false;
+            self.win_x = 0;
+        } else if self.nunu {
+            self.in_window = true;
+        } else {
+            // PYNU holds.
+        }
+        if self.pory | i.ppu_reset {
+            self.rydy = false;
+        } else if self.in_window & !self.nopa {
+            self.rydy = true;
+        } else {
+            // RYDY holds.
         }
         // The store's X latches: a slot fetched, or a line's start, empties
         // them.
@@ -399,14 +509,21 @@ impl NetPipeline {
         }
     }
 
-    /// SCX's latches, open while the write strobe is up (it opens them a
+    /// SCX's, WY's and WX's latches, open while the write strobe is up (it opens them a
     /// few deltas after the clock) on the address and the data bus as they
     /// are.
     const fn latch_scx(&mut self, i: &EdgeInputs) {
         if i.hard_reset {
             self.scx = 0;
-        } else if i.cpu_wr_sync & (i.addr == SCX) {
-            self.scx = i.data;
+            self.wy = 0;
+            self.wx = 0;
+        } else if i.cpu_wr_sync {
+            match i.addr {
+                SCX => self.scx = i.data,
+                WY => self.wy = i.data,
+                WX => self.wx = i.data,
+                _ => {}
+            }
         } else {
             // The latches hold.
         }
@@ -414,7 +531,14 @@ impl NetPipeline {
 
     /// What the edges of the clocks made from the PPU's (from `before` to
     /// `now`) clock, from the pipeline as it is, for the next nanosecond.
-    const fn clocked(&self, i: &EdgeInputs, before: Wires, now: Wires, clk_edge: bool) -> Changes {
+    const fn clocked(
+        &self,
+        i: &EdgeInputs,
+        before: Wires,
+        now: Wires,
+        clk_edge: bool,
+        hclk_rose: bool,
+    ) -> Changes {
         let mut c = Changes::NONE;
         let clk_rose = clk_edge & i.clk;
         let clk_fell = clk_edge & !i.clk;
@@ -431,7 +555,8 @@ impl NetPipeline {
             c.px_low = Some(self.px.wrapping_add(1) & 0x0F);
         }
         // @hw die: LAXU MESU NYVA (dffr); LYZU (dffr)
-        if !(i.stop_scan | restart) & rose(before.fetch_clock, now.fetch_clock) {
+        let win_start = self.in_window & !self.nopa;
+        if !(i.stop_scan | win_start | restart) & rose(before.fetch_clock, now.fetch_clock) {
             c.fetch_count = Some(self.fetch_count.wrapping_add(1) & 7);
         }
         if self.mode3 & clk_rose {
@@ -452,12 +577,12 @@ impl NetPipeline {
             c.puxa = Some(self.discard & (self.fine == self.scx & 7));
         }
         if self.mode3 & rose(before.segu, now.segu) {
-            c.ryfa = Some(self.fine == 7);
+            c.ryfa = Some((self.fine == 7) & !now.wxy_match);
         }
         // @hw die: SOBU SUDA (dffr); TOXE TULY TESE (dffr); TOBU VONU SEBA
         // TYFO (dffr); EBOJ..FONO (dffr)
         if clk_rose {
-            c.sobu = Some(before.x_match & before.fetch_done & !self.busy);
+            c.sobu = Some(before.x_match & !self.rydy & before.fetch_done & !self.busy);
         }
         if clk_fell {
             c.suda = Some(self.sobu);
@@ -476,11 +601,46 @@ impl NetPipeline {
         if !i.line_start & rose(before.loaded, now.loaded) {
             c.fetched = Some(now.selected);
         }
+        self.clocked_window(&mut c, i, before, now, (clk_rose, clk_fell, hclk_rose));
         c
+    }
+
+    /// What the clocks' edges clock of the window, into `c`; `edges` are
+    /// the clock's rise and fall and hclk's rise.
+    // @hw die: SARY (dffr); PYCO NUNU NOPA (dffr); WYKA..XOLO (dffr); SOVY
+    const fn clocked_window(
+        &self,
+        c: &mut Changes,
+        i: &EdgeInputs,
+        before: Wires,
+        now: Wires,
+        edges: (bool, bool, bool),
+    ) {
+        let (clk_rose, clk_fell, hclk_rose) = edges;
+        if !i.ppu_reset {
+            if hclk_rose {
+                // The match as the wires had it: LY changes with hclk.
+                c.sary = Some(before.wy_match);
+            }
+            if rose(before.dot, now.dot) {
+                c.pyco = Some(now.wxy_match);
+            }
+            if clk_fell {
+                c.nunu = Some(self.pyco);
+            }
+            if clk_rose {
+                c.nopa = Some(self.in_window);
+                c.sovy = Some(self.rydy);
+            }
+        }
+        if !now.win_reset & rose(before.wx_clk, now.wx_clk) {
+            c.win_x = Some(self.win_x.wrapping_add(1) & WIN_X_MASK);
+        }
     }
 
     /// The changes clocked the nanosecond before take effect; the pixel
     /// counter's bit 3, falling, clocks its high half.
+    #[expect(clippy::cognitive_complexity, reason = "a field a change, in turn")]
     const fn apply(&mut self, c: &Changes, next: &mut Changes, i: &EdgeInputs) {
         let px_before = self.px;
         if let Some(v) = c.mode3 {
@@ -549,6 +709,27 @@ impl NetPipeline {
         if let Some(v) = c.tyfo {
             self.tyfo = v;
         }
+        if let Some(v) = c.sary {
+            self.sary = v;
+        }
+        if let Some(v) = c.pyco {
+            self.pyco = v;
+        }
+        if let Some(v) = c.nunu {
+            self.nunu = v;
+        }
+        if let Some(v) = c.nopa {
+            self.nopa = v;
+        }
+        if let Some(v) = c.win_x {
+            self.win_x = v;
+        }
+        if let Some(v) = c.win_y {
+            self.win_y = v;
+        }
+        if let Some(v) = c.sovy {
+            self.sovy = v;
+        }
         // @hw die: TUHU TUKY TAKO SYBE (dffr)
         if !i.line_start & fell(px_before & 8 != 0, self.px & 8 != 0) {
             next.px_high = Some((self.px >> 4).wrapping_add(1) & 0x0F);
@@ -570,7 +751,7 @@ impl NetPipeline {
         let mut held_at = NEVER;
         let mut before = self.wires(&old, held);
         let mut wires = self.wires(&now_in, held);
-        let mut changes = self.clocked(&now_in, before, wires, old.clk != inputs.clk);
+        let mut changes = self.clocked(&now_in, before, wires, old.clk != inputs.clk, false);
         self.latch_scx(&now_in);
         let mut ns = 1;
         while ns < NS {
@@ -578,6 +759,8 @@ impl NetPipeline {
                 now_in.ppu_reset = inputs.ppu_reset;
                 now_in.hard_reset = inputs.hard_reset;
                 now_in.lcdc = inputs.lcdc;
+                now_in.ly = inputs.ly;
+                now_in.hclk = inputs.hclk;
                 // stop_scan falls with the other inputs, rises with the scan's.
                 now_in.stop_scan = old.stop_scan & inputs.stop_scan;
             }
@@ -586,10 +769,15 @@ impl NetPipeline {
                 now_in.stop_scan = inputs.stop_scan;
                 now_in.ceno = inputs.ceno;
             }
+            if ns == MODE1_AT {
+                now_in.mode1 = inputs.mode1;
+            }
             if ns == DATA_AT {
                 now_in.addr = inputs.addr;
                 now_in.data = inputs.data;
             }
+            let hclk_rose = (ns == INPUTS_AT) & !old.hclk & inputs.hclk;
+            let was_in_window = self.in_window;
             let mut next = Changes::NONE;
             self.apply(&changes, &mut next, &now_in);
             if ns == held_at {
@@ -597,6 +785,11 @@ impl NetPipeline {
             }
             self.settle(&now_in);
             self.latch_scx(&now_in);
+            // @hw die: VYNO..TEKE (dffr): the window's line, as it leaves the
+            // window.
+            if !(now_in.mode1 | now_in.ppu_reset) & was_in_window & !self.in_window {
+                next.win_y = Some(self.win_y.wrapping_add(1));
+            }
             // The match's fall reaches the stop at once, its rise later.
             let x_match = self.matches(&now_in) != 0;
             if !x_match {
@@ -609,7 +802,7 @@ impl NetPipeline {
             }
             before = wires;
             wires = self.wires(&now_in, held);
-            let clocked = self.clocked(&now_in, before, wires, false);
+            let clocked = self.clocked(&now_in, before, wires, false, hclk_rose);
             changes = merge(next, clocked);
             ns += 1;
         }
@@ -623,9 +816,10 @@ impl NetPipeline {
     }
 }
 
-/// The changes of a nanosecond: the pixel counter's high half, and what
-/// the clocks clocked.
+/// The changes of a nanosecond: the pixel counter's high half and the
+/// window's line (clocked by latches), and what the clocks clocked.
 const fn merge(high: Changes, mut c: Changes) -> Changes {
     c.px_high = high.px_high;
+    c.win_y = high.win_y;
     c
 }

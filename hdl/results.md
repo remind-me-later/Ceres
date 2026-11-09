@@ -725,6 +725,20 @@ since the last push), each 5 to 7.7 GB and 1 to 21 minutes; the start
 takes any objects the scan found. Planted faults are caught: ceres's low
 byte read a dot short, and the netlist's SOBU without TAKA.
 
+For the window, `NetPipeline` takes render's window too: WY and WX (latched
+as SCX is), SARY and the frame's latch, PYCO, NUNU, NOPA, the in-window
+latch, the window's column and line counters, RYDY and SOVY, with LY,
+hclk and VBlank as inputs. Its start resets the fetcher and the first
+fetch's NYKA and PORY, RYDY holds the dot clock and the sprite request,
+SOVY restarts the fetcher; RYFA takes the fine scroll's 7 only without a
+WX match, and SARY the WY match with the LY before hclk's rise. One delta
+race of render's had to be kept: the chip's reset clears NOPA at once and
+the window a delta later, so the fetcher's count resets as the LCD is
+turned off in the window. It matches `NetRender` on every edge where the
+scan saves no sprite over 803 ROMs (1,349,372,892 edges, 89,648,743 with
+the window in 198 ROMs). The mode 3 proof takes the window off for now
+(LCDC's bit 5 clear, the netlist's window at rest).
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

@@ -152,8 +152,9 @@ const fn drawn(d: &Display) -> bool {
 
 /// SCX's address.
 const SCX: u16 = 0xFF43;
-/// LCDC's object enable.
+/// LCDC's object and window enables.
 const LCDC_OBJ_EN: u8 = 2;
+const LCDC_WIN_EN: u8 = 0x20;
 /// The objects a line holds; the X of the first one the proofs take (those
 /// before match in the lead-in), and of the last the netlist fetches.
 const MAX_OBJECTS: usize = 10;
@@ -512,6 +513,7 @@ pub(crate) fn start_agrees(
         & (l.d.bg.position == pos(-16))
         & !l.d.bg.insert_blank
         & store_holds(net)
+        & net_window_off(net)
         & starting_objects(l, net);
     if !(before
         & rising.clk
@@ -894,7 +896,8 @@ const fn matches_step(a: FetcherStep, b: FetcherStep) -> bool {
 }
 
 /// The netlist's inputs in mode 3: no reset, no line start, the scan
-/// stopped (CENO low), the objects on or off as ceres has them.
+/// stopped (CENO low), the objects on or off as ceres has them, the window
+/// off.
 const fn quiet(i: &EdgeInputs, objects: bool) -> bool {
     !i.ppu_reset
         & !i.hard_reset
@@ -902,6 +905,20 @@ const fn quiet(i: &EdgeInputs, objects: bool) -> bool {
         & !i.stop_scan
         & !i.ceno
         & ((i.lcdc & LCDC_OBJ_EN != 0) == objects)
+        & (i.lcdc & LCDC_WIN_EN == 0)
+}
+
+/// The netlist's window at rest: no WY match in the frame, not in it, its
+/// first tile not wanted.
+const fn net_window_off(net: &NetPipeline) -> bool {
+    !net.sary
+        & !net.wy_latch
+        & !net.pyco
+        & !net.nunu
+        & !net.nopa
+        & !net.in_window
+        & !net.rydy
+        & !net.sovy
 }
 
 /// The CPU strobes SCX's address in this edge.
@@ -946,6 +963,7 @@ pub(crate) fn related(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
         & quiet(&net.inputs, l.objects_enabled)
         & latch_holds(net)
         & store_holds(net)
+        & net_window_off(net)
         & between_dots(&l.d)
         & (drawn(&l.d) == (l.d.bg.position == PX_WIDTH))
         & !l.d.obj_fetch.aborted
