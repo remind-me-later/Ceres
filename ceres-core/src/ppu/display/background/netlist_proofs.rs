@@ -47,17 +47,27 @@
 //! netlist's window waiting (no WX match, not in it), until ceres's check
 //! reaches WX: the window starts in the next dot.
 //!
+//! The `netlist_mode3_window_*` harnesses prove the window's start and the
+//! window after it, with the objects off (`mode3-window-start`): from the
+//! armed window with ceres's check at WX, through the nine dots in which
+//! ceres fetches the window's first tile and the netlist holds its pixels
+//! and restarts its fetcher and fine scroll (`check::window_starting`), and
+//! inside the window to the line's end, both stay related, and the
+//! netlist's mode 3 stops a dot after ceres has drawn the line.
+//!
 //! Ceres's side is its mode 3 loop (`mode3::mode3`), run on the display's
 //! state alone (`check::Mode3Loop`): the reads, the object's row and the
 //! pixels' mixing do nothing there, the window's check runs
-//! (`Display::mode3_window`), and its other hooks are as a window that did
-//! not start leaves them. `check::ceres_dot` wakes it as `step_state_machine`
+//! (`Display::mode3_window`), and the loop itself steps the window's column
+//! and ends its first tile's fetch; its pixel insertion does nothing (WX is
+//! held, and the insertion needs a second match). `check::ceres_dot` wakes it as `step_state_machine`
 //! does, and takes `mode3_done`'s sleep into `HBlankStart`.
 //!
-//! What it does not cover yet: the window's start and the pixels it draws,
-//! how it is armed at a line's start (WY's match, and a line's start with
-//! the window armed), WX outside 7 to 165, and writes of WX and LCDC's
-//! window bit; objects at X 0 to 7 (they match
+//! What it does not cover yet: the window's start with the objects on, the
+//! pixels the window draws, how it is armed at a line's start (WY's match,
+//! and a line's start with the window armed), WX outside 7 to 165, and
+//! writes of WX and LCDC's window bit (the fetcher's read clears ceres's
+//! start when the bit is clear, `read_tile`); objects at X 0 to 7 (they match
 //! in the lead-in), an object's mode 0 pulse at X 167, and writes of LCDC's
 //! object bit (the aborted fetch); line 0 after the LCD is turned on, whose
 //! loop starts elsewhere; how a write reaches ceres's mixer
@@ -69,7 +79,9 @@
 use {
     super::{
         Background,
-        check::{Ghost, Mode3Loop, expected, related_but_pipeline, start_agrees, step_agrees},
+        check::{
+            Ghost, INSIDE, Mode3Loop, expected, related_but_pipeline, start_agrees, step_agrees,
+        },
     },
     crate::ppu::display::{Display, fetcher::FetcherStep, fifo::Fifo, state::State},
     ceres_netlist::render_edge::{EdgeInputs, NetPipeline},
@@ -275,6 +287,9 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     if let Some(since) = since_push {
         g.since_push = since;
     }
+    // The window not started: the ghost counts no dot of it.
+    g.window = 0;
+    g.window_fine = 0;
     // Every related pair's netlist is `expected` of what it carries over
     // (`netlist_mode3_expected_carries`).
     let mut net = expected(&l, &any_carried(&l), g);
@@ -515,6 +530,97 @@ fn netlist_mode3_armed_high() {
     dot_from(State::Mode3ObjectHigh, None, true);
 }
 
+/// A dot from every related pair with the window on and the objects off,
+/// `window` dots after ceres's window check fired if given (0: armed, with
+/// the check at WX; `INSIDE`: ten or more), any of the first nine if not;
+/// the loop sleeps after a pixel, or has drawn the line.
+fn window_dot(window: Option<u8>) {
+    let mut l = any_loop();
+    l.d.state = if kani::any() {
+        State::Mode3Pixel
+    } else {
+        State::HBlankStart
+    };
+    l.d.wait = 1;
+    l.window_enabled = true;
+    l.objects_enabled = false;
+    l.d.window.wy_triggered = true;
+    l.d.window.wx_triggered = kani::any();
+    l.d.window.being_fetched = kani::any();
+    l.d.window.tile_x = kani::any();
+    let mut g = any_ghost();
+    if let Some(dots) = window {
+        g.window = dots;
+    } else {
+        kani::assume((g.window >= 1) & (g.window < INSIDE));
+    }
+    let p = super::check::signed(l.d.bg.position);
+    if g.window == 0 {
+        g.window_fine = 0;
+        kani::assume(p + 7 == i16::from(l.wx));
+    }
+    let mut net = expected(&l, &any_carried(&l), g);
+    let related = related_but_pipeline(&l, &net, g);
+    let drawn = matches!(l.d.state, State::HBlankStart);
+    kani::cover!(related & (g.window == 0), "the check reaches WX");
+    kani::cover!(related & (g.window == 1), "the window's first dot");
+    kani::cover!(related & (g.window == 6), "the window's row pushed");
+    kani::cover!(related & (g.window == 9), "the start's last dot");
+    kani::cover!(related & (g.window == 8) & drawn, "line drawn in the start");
+    kani::cover!(related & (g.window == INSIDE) & !drawn, "in the window");
+    kani::cover!(
+        related & (g.window == INSIDE) & (l.d.window.tile_x == 0),
+        "the window's column wrapped"
+    );
+    kani::cover!(
+        related & (g.window == INSIDE) & drawn,
+        "line drawn in the window"
+    );
+    if related {
+        let rising = quiet_inputs(&l, true);
+        let falling = quiet_inputs(&l, false);
+        assert!(step_agrees(
+            &mut l,
+            &mut net,
+            g,
+            kani::any(),
+            rising,
+            falling
+        ));
+    }
+}
+
+/// A dot from every related pair with the window armed, the objects off and
+/// ceres's check at WX: the window starts.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_window_reached() {
+    window_dot(Some(0));
+}
+
+/// A dot from every related pair in the nine dots of the window's start.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_window_starting() {
+    window_dot(None);
+}
+
+/// A dot from every related pair in the window, past its start.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_window_inside() {
+    window_dot(Some(INSIDE));
+}
+
 /// Any ghost.
 fn any_ghost() -> Ghost {
     let g = Ghost {
@@ -523,8 +629,16 @@ fn any_ghost() -> Ghost {
         extra: kani::any(),
         frozen: kani::any(),
         age: kani::any(),
+        window: kani::any(),
+        window_fine: kani::any(),
     };
-    kani::assume((g.since_push <= 2) & (g.extra <= 2) & (g.age <= 7));
+    kani::assume(
+        (g.since_push <= 2)
+            & (g.extra <= 2)
+            & (g.age <= 7)
+            & (g.window <= INSIDE)
+            & (g.window_fine <= 7),
+    );
     g
 }
 

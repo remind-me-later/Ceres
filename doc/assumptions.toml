@@ -164,6 +164,10 @@ evidence = "proved"
 title = "On a line where the window is armed (LCDC's bit 5 set, WY matched in the frame on both sides, WX held between 7 and 165), ceres's mode 3 loop and render's pipeline stay related dot by dot while ceres's window check is short of WX, whatever SCX is and whenever the CPU writes it, with any objects at X 8 or more while LCDC's object bit holds: neither side starts the window before"
 evidence = "proved"
 
+[mode3-window-start]
+title = "On a line where the window is armed (LCDC's bit 5 set, WY matched in the frame on both sides, WX held between 7 and 165) and the objects are off, ceres's mode 3 loop and render's pipeline stay related dot by dot from ceres's window check at WX, through the nine dots of the window's start and inside the window, and render's mode 0 rises a half dot after ceres's loop ends mode 3"
+evidence = "proved"
+
 [resync-only-in-line-0]
 title = "The pixel pipeline's line-end resync moves ceres's clock only in line 0 after the LCD is turned on (895 to 893); on the other lines it finds 893"
 evidence = "measured"

@@ -750,9 +750,7 @@ The eight `netlist_mode3_armed_*` harnesses, one per sleep of the loop
 (none for a drawn line: the window starts first), take 4 to 18 minutes
 and 7 to 8.7 GB each. The one counterexample was a write: a strobe that
 rises while the bus still carries WX's address from the edge before writes
-WX, which the scope excludes (`holds_wx`). Not proved yet: the window's
-start and its pixels, and how a line starts armed (WY's trigger against
-REJO).
+WX, which the scope excludes (`holds_wx`).
 
 The dot harnesses now build the netlist's side instead of assuming it.
 `check::related` is `related_but_pipeline` and the netlist being
@@ -772,6 +770,53 @@ counterexample. Without it the harnesses measured alone take 1.2 to 2.5 GB:
 solver (symbolic execution takes 5 to 18 seconds). Four at once still
 passed the 9 GB cap after 20 minutes, so the heavy ones run fewer at a
 time. On `dot_wait`, Kissat took 206 seconds where CaDiCaL took 235.
+
+The window's start and the window after it are proved with the objects off
+(`mode3-window-start`). Ceres's loop now ends the first tile's fetch
+(`being_fetched`) and steps the window's column itself, where the pixel
+mixer and the fetcher's read did (the A/V and state hashes are the same on
+185 runs), so the loop the proof runs does all the window's start does.
+`background/cosim.rs` runs that loop and `NetPipeline` side by side on whole
+lines, concretely, and gave the start dot by dot from ceres's window check
+firing:
+
+| Dot | Ceres | Netlist |
+|-----|-------|---------|
+| 1 | FIFO cleared, position held, fetcher at its second step | one more pixel of the background (the pixel counter at WX) |
+| 2 | fetches the window's tile | pixel counter at WX + 1; PYCO, NUNU, the window's latch, RYDY; fetcher restarts, NYKA and PORY low |
+| 3 to 5 | fetches on | pixels and fine scroll held, fetcher counts; NOPA and SOVY from dot 3 |
+| 6 | row pushed, the window's column steps | fetcher counts on |
+| 7 | first pixel out, `being_fetched` ends | fetcher at 5 |
+| 8 | pixel | SOVY without RYDY: fetcher and fine scroll restart (no RYFA, no PYGO), the window's column steps |
+| 9 | pixel | pixel counter at WX + 2; PYCO, NUNU and SOVY fall, RENE stays low |
+| 10 on | the background's loop | the background's pipeline at ceres's position, in the window |
+
+Each side stalls six dots. What the netlist holds in dots 2 to 7 follows
+from the dot and from its fine scroll's count in dot 1, which ceres's
+cleared FIFO no longer gives: the ghost counts the dots and keeps that count
+(`Ghost::window`, `window_fine`), and `check::window_starting` and
+`window_inside` are the netlist's pipeline from them. The netlist's column
+is ceres's, a tile behind from ceres's read of a tile's last byte to the
+netlist's restart for it. With WX at 164 or 165 the line is drawn inside the
+start, and the netlist's mode 3 still stops a dot after ceres's.
+
+The co-simulation asserts `related` at every dot of every such line (WX 7
+to 165, each fine scroll, 0.4 seconds), and of the idle and armed lines
+with objects; a second test takes each pair those lines reach with what a
+harness leaves free at random (the bus, LCDC's other bits, LY, the latches,
+SCX writes). Kani then proves a dot from every related pair:
+`netlist_mode3_window_reached` (the check at WX), `_starting` (the nine
+dots) and `_inside`, about a minute and 2.5 GB each. Its two
+counterexamples were pairs no line reaches: a ninth dot past the line's end
+(with WX at 165 the line is drawn after the eighth), and a window's column
+beyond its five bits. Not proved yet: the window with objects on, how a
+line starts armed (WY's trigger against REJO), WX outside 7 to 165, writes
+of WX and of LCDC's window bit, and the pixels.
+
+All 22 mode 3 harnesses pass on this relation. Two at a time under the 9 GB
+cap they take 92 minutes and 5.5 GB at the most; the longest are
+`armed_high` (35 minutes), `dot_high` (29), `armed_pixel` (22) and
+`dot_pixel` (18).
 
 ## The model's races
 

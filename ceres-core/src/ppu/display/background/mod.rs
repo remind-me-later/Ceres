@@ -8,6 +8,9 @@
 
 #[cfg(any(kani, feature = "check"))]
 pub(crate) mod check;
+#[cfg(test)]
+#[cfg(feature = "check")]
+mod cosim;
 #[cfg(kani)]
 mod netlist_proofs;
 
