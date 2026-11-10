@@ -1,0 +1,15 @@
+# Ceres's window check compares WX with its position plus 8: the window starts a dot off.
+# harness: netlist_mode3_window_reached
+diff --git a/ceres-core/src/ppu/display/window.rs b/ceres-core/src/ppu/display/window.rs
+index c705105e..1d62ef3b 100644
+--- a/ceres-core/src/ppu/display/window.rs
++++ b/ceres-core/src/ppu/display/window.rs
+@@ -193,7 +193,7 @@ impl Display {
+                     || position == pos(-16) && mixer_scx & 7 != 0
+                     || (pos(-15)..=pos(-8)).contains(&position)
+             } else if u16::from(wx) < 166 + u16::from(hw) {
+-                if wx == position.wrapping_add(7) {
++                if wx == position.wrapping_add(8) {
+                     true
+                 } else if !hw && wx == position.wrapping_add(6) && !self.window.wx_just_changed {
+                     // The window starts a pixel after its WX matched, because

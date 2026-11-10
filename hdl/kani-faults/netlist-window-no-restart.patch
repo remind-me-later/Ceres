@@ -1,0 +1,15 @@
+# The netlist's fetcher does not restart as the window's first tile is fetched (TEVO without SOVY).
+# harness: netlist_mode3_window_starting
+diff --git a/ceres-netlist/src/render_edge.rs b/ceres-netlist/src/render_edge.rs
+index c00d65d7..a2e2e645 100644
+--- a/ceres-netlist/src/render_edge.rs
++++ b/ceres-netlist/src/render_edge.rs
+@@ -362,7 +362,7 @@ impl NetPipeline {
+     /// more), or the first fetch done.
+     // @hw die: TEVO, and its terms
+     const fn restart(&self) -> bool {
+-        (self.ryfa & !self.rene) | (self.sovy & !self.rydy) | self.first_fetch_done()
++        (self.ryfa & !self.rene) | self.first_fetch_done()
+     }
+ 
+     /// The first fetch of the line is done (NYKA and PORY, not POKY yet).

@@ -1,0 +1,15 @@
+# Ceres reads an object's low byte a dot after its attributes, not two.
+# harness: netlist_mode3_dot_attributes
+diff --git a/ceres-core/src/ppu/display/mode3.rs b/ceres-core/src/ppu/display/mode3.rs
+index 4a8932a1..f0d624fb 100644
+--- a/ceres-core/src/ppu/display/mode3.rs
++++ b/ceres-core/src/ppu/display/mode3.rs
+@@ -177,7 +177,7 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
+             }
+             Step::ReadObjectLow => {
+                 p.read_object_low();
+-                p.d().sleep_in_line(State::Mode3ObjectLow, 2);
++                p.d().sleep_in_line(State::Mode3ObjectLow, 1);
+                 return Mode3Flow::Slept;
+             }
+             Step::ReadObjectHigh => {
