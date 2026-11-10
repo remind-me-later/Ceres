@@ -247,9 +247,6 @@ impl Ppu {
                             self.vram_read(self.d.bg.fetcher.data_address);
                     }
                 }
-                if self.d.window.wx_triggered {
-                    self.d.window.tile_x = (self.d.window.tile_x + 1) & 0x1F;
-                }
             }
             FetcherStep::Push => {}
         }

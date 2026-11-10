@@ -24,6 +24,8 @@ pub(super) struct Window {
     pub wx_triggered: bool,
     /// WY matched LY in this frame.
     pub wy_triggered: bool,
+    /// The window started and no pixel came out since: its first tile is
+    /// being fetched.
     pub being_fetched: bool,
     pub wy_check_scheduled: bool,
     /// Dots until the WY trigger of line 0 is decided (0: not pending).

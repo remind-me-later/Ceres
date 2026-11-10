@@ -30,11 +30,7 @@ impl Ppu {
                 bg_priority |= oam_item.bg_priority;
             }
         }
-        if popped == Popped::Restarted {
-            return None;
-        }
-        self.d.window.being_fetched = false;
-        if popped == Popped::Dropped {
+        if popped != Popped::Shown {
             return None;
         }
 

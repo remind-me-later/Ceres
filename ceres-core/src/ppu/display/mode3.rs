@@ -72,11 +72,16 @@ pub(super) trait Mode3Ppu {
     /// The HBlank interrupt's source, before the STAT mode (`timing.rs`).
     fn signal_mode3_end(&mut self);
 
-    /// The tile fetcher's read, then its step.
+    /// The tile fetcher's read, then its step; the window's column steps
+    /// with its tile's last read.
     fn advance_fetcher(&mut self) {
         self.fetcher_read();
         let (cgb_wx_glitch, insertion_wx) = self.fetcher_glitches();
-        self.d().bg.advance(cgb_wx_glitch, insertion_wx);
+        let d = self.d();
+        if matches!(d.bg.fetcher.step, FetcherStep::DataHighT2) && d.window.wx_triggered {
+            d.window.tile_x = (d.window.tile_x + 1) & 0x1F;
+        }
+        d.bg.advance(cgb_wx_glitch, insertion_wx);
     }
 }
 
@@ -195,6 +200,9 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
                 // An object at X 0, not fetched yet, holds the pixels back.
                 let held = enabled && d.objs.next().is_some_and(|e| e.x == 0);
                 if !held && let Some((item, popped)) = d.bg.pop(scx, d.window.being_fetched) {
+                    if popped != Popped::Restarted {
+                        d.window.being_fetched = false;
+                    }
                     p.mix_pixel(item, popped);
                 }
                 p.advance_fetcher();
