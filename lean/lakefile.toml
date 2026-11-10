@@ -11,3 +11,8 @@ subDir = "backends/lean"
 
 [[lean_lib]]
 name = "Ceres"
+
+# The chip's proof in outline, with holes (`sorry`, and blocks taken as
+# hypotheses): not a default target, and not under `Ceres/Axioms.lean`.
+[[lean_lib]]
+name = "Sketch"

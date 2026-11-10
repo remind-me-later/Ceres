@@ -54,6 +54,31 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).
 
+## The chip in outline
+
+`Sketch/` is the whole chip's proof in outline, kept apart from `Ceres/`
+(it is not a default target): how the blocks would compose, with each
+block's claim as a hypothesis rather than a proof. Nothing in it names the
+emulator's types yet.
+
+- `Sketch/Iterate.lean`: `Steps.iterate`, a block that steps one input at a
+  time steps over a list of them (mode 3's pipeline, proved a dot at a time,
+  over an M-cycle's dots).
+- `Sketch/Close.lean`: `Steps.close`, a block closed with a driver that
+  gives its input from its own state and takes its output back (the CPU and
+  the blocks on its bus, the loop cut at the CPU's state).
+- `Sketch/Chip.lean`: mode 3's dots wired in front of the M-cycle blocks,
+  the CPU closed around both, and `chip_agrees`: the two closed machines
+  agree from every related pair of states, until a run leaves the blocks'
+  scope. Its hypotheses are what is open: mode 3's step (`hM3`, Kani's
+  within its scope), the M-cycle blocks' (`hPer`, `blocks_steps` once it is
+  plugged in), how an M-cycle's access looks to mode 3 dot by dot (`hDots`),
+  and the SM83's two (`hOut`, `hNext`).
+- `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
+  axioms, with no `sorry`.
+
+`lake build Sketch` builds it.
+
 ## Building
 
 With [elan](https://github.com/leanprover/elan) (which installs the Lean of
