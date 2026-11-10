@@ -28,7 +28,11 @@
 //! any objects the scan found (the scan's proofs: the store holds them).
 //! The `netlist_mode3_dot_*` harnesses prove a dot from every related pair,
 //! one per sleep of ceres's loop (and the fetch's start by the dots since
-//! the last push), as one did not fit in 9 GB: with any SCX in the mixer
+//! the last push), as one did not fit in 9 GB. They build the netlist's
+//! side, `check::expected` of what it carries over, rather than assume it
+//! (`netlist_mode3_expected_carries`: every related pair's netlist is that),
+//! and its inputs quiet, so that Kani folds what the relation pins. With any
+//! SCX in the mixer
 //! and any write the CPU's bus can carry (`check::writes`), both stay
 //! related and mode 3 goes on, until ceres has drawn the line (its position
 //! at 160); then ceres's `HBlankStart` runs in the next dot's first half
@@ -65,7 +69,7 @@
 use {
     super::{
         Background,
-        check::{Ghost, Mode3Loop, start_agrees, step_agrees},
+        check::{Ghost, Mode3Loop, expected, related_but_pipeline, start_agrees, step_agrees},
     },
     crate::ppu::display::{Display, fetcher::FetcherStep, fifo::Fifo, state::State},
     ceres_netlist::render_edge::{EdgeInputs, NetPipeline},
@@ -86,6 +90,62 @@ fn any_inputs() -> EdgeInputs {
         cpu_wr_sync: kani::any(),
         addr: kani::any(),
         data: kani::any(),
+    }
+}
+
+/// LCDC's object and window enables.
+const LCDC_OBJ_EN: u8 = 2;
+const LCDC_WIN_EN: u8 = 0x20;
+
+/// Inputs as `check::quiet` takes them in mode 3 for `l`, with the clock at
+/// `clk`: built rather than assumed, so that Kani folds what they pin. LCDC's
+/// other bits, LY, hclk, VBlank (with the window off) and the CPU's bus are
+/// free.
+fn quiet_inputs(l: &Mode3Loop, clk: bool) -> EdgeInputs {
+    let other: u8 = kani::any();
+    let mut lcdc = other & !(LCDC_OBJ_EN | LCDC_WIN_EN);
+    if l.objects_enabled {
+        lcdc |= LCDC_OBJ_EN;
+    }
+    if l.window_enabled {
+        lcdc |= LCDC_WIN_EN;
+    }
+    EdgeInputs {
+        clk,
+        ppu_reset: false,
+        hard_reset: false,
+        lcdc,
+        ly: kani::any(),
+        hclk: kani::any(),
+        mode1: !l.window_enabled & kani::any::<bool>(),
+        line_start: false,
+        stop_scan: false,
+        ceno: false,
+        cpu_wr_sync: kani::any(),
+        addr: kani::any(),
+        data: kani::any(),
+    }
+}
+
+/// What `check::expected` carries over from the netlist, for `l`: the
+/// latches, the sprite store, and the inputs after a dot (the clock low);
+/// the window's flip-flops as `check::window_agrees` has them (WY's match
+/// and the window's line free where it allows).
+fn any_carried(l: &Mode3Loop) -> NetPipeline {
+    let armed = l.window_enabled;
+    NetPipeline {
+        wx: if armed { l.wx } else { kani::any() },
+        sary: armed & kani::any::<bool>(),
+        wy_latch: armed,
+        pyco: false,
+        nunu: false,
+        nopa: false,
+        in_window: false,
+        win_x: 0,
+        rydy: false,
+        sovy: false,
+        inputs: quiet_inputs(l, false),
+        ..any_pipeline()
     }
 }
 
@@ -175,22 +235,14 @@ fn any_loop() -> Mode3Loop {
     d.bg = any_background();
     d.wait = kani::any();
     kani::assume((0..=3).contains(&d.wait));
-    d.objs.count = kani::any();
-    kani::assume(d.objs.count <= 10);
+    let count: u8 = kani::any();
+    kani::assume(count <= 10);
+    d.objs.count = usize::from(count);
     let mut i = 0;
     while i < 10 {
         d.objs.entries[i].x = kani::any();
         i += 1;
     }
-    let w = &mut d.window;
-    w.wy_triggered = kani::any();
-    w.wx_triggered = kani::any();
-    w.being_fetched = kani::any();
-    w.started_after_line = kani::any();
-    w.wx_166_interrupt_glitch = kani::any();
-    w.enable_pending = kani::any();
-    w.wy_just_checked = kani::any();
-    w.wx_just_changed = kani::any();
     Mode3Loop {
         d,
         mixer_scx: kani::any(),
@@ -206,19 +258,30 @@ fn any_loop() -> Mode3Loop {
 fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     let mut l = any_loop();
     l.d.state = state;
+    // The window's flags as `window_agrees` has them: not started, WY
+    // matched if armed.
     l.window_enabled = armed;
+    l.d.window.wy_triggered = armed;
     if armed {
         kani::assume(super::check::signed(l.d.bg.position) + 7 < i16::from(l.wx));
     }
-    let mut net = any_pipeline();
-    let g = any_ghost();
+    // The sleep's dots left as `between_dots` has them.
+    l.d.wait = if matches!(state, State::Mode3ObjectAttributes | State::Mode3ObjectLow) {
+        1 + i32::from(kani::any::<bool>())
+    } else {
+        1
+    };
+    let mut g = any_ghost();
     if let Some(since) = since_push {
-        kani::assume(g.since_push == since);
+        g.since_push = since;
     }
+    // Every related pair's netlist is `expected` of what it carries over
+    // (`netlist_mode3_expected_carries`).
+    let mut net = expected(&l, &any_carried(&l), g);
     let last_scx = l.mixer_scx;
     let bg = &l.d.bg;
     let p = super::check::signed(bg.position);
-    let related = super::check::related(&l, &net, g);
+    let related = related_but_pipeline(&l, &net, g);
     kani::cover!(
         related & l.objects_enabled & matches!(l.d.state, State::Mode3ObjectWait),
         "object waits for the tile"
@@ -242,14 +305,35 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
         related & armed & (p + 8 == i16::from(l.wx)),
         "WX in the next dot"
     );
-    assert!(step_agrees(
-        &mut l,
-        &mut net,
-        g,
-        kani::any(),
-        any_inputs(),
-        any_inputs()
-    ));
+    if related {
+        let rising = quiet_inputs(&l, true);
+        let falling = quiet_inputs(&l, false);
+        assert!(step_agrees(
+            &mut l,
+            &mut net,
+            g,
+            kani::any(),
+            rising,
+            falling
+        ));
+    }
+}
+
+/// What `expected` gives keeps what it carries over from the netlist: it
+/// is its own `expected`. A pair is related if and only if its netlist is
+/// `expected` of itself and `related_but_pipeline` holds, so the dot
+/// harnesses, which take the netlist as `expected` gives it, cover every
+/// related pair.
+// @assumes transcription-render-edge
+// @discharges mode3-end-background
+// @discharges mode3-window-armed
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_expected_carries() {
+    let l = any_loop();
+    let g = any_ghost();
+    let net = expected(&l, &any_pipeline(), g);
+    assert!(net == expected(&l, &net, g));
 }
 
 /// A dot from every related pair where the loop sleeps after a pixel.

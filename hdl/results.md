@@ -754,6 +754,25 @@ WX, which the scope excludes (`holds_wx`). Not proved yet: the window's
 start and its pixels, and how a line starts armed (WY's trigger against
 REJO).
 
+The dot harnesses now build the netlist's side instead of assuming it.
+`check::related` is `related_but_pipeline` and the netlist being
+`check::expected` of what it carries over (its latches, its sprite store,
+the window's flip-flops, its inputs), so a harness takes the netlist as
+`expected` gives it, with the inputs built quiet, and
+`netlist_mode3_expected_carries` proves that every related pair's netlist
+has that form (10 seconds). Kani folds what is built, where it only carries
+what is assumed. Measured as before, the worst harness fell from 8.7 to
+7.9 GB and `dot_pixel` from 25 to 17 minutes.
+
+Most of that memory was not the proofs', though: those runs had Kani's
+concrete playback on, which is only needed for a failing harness's
+counterexample. Without it the harnesses measured alone take 1.2 to 2.5 GB:
+`dot_drawn` 20 seconds, `start` 3 minutes, `dot_attributes` and `dot_low`
+4 minutes, `dot_high` 19 minutes at 2.5 GB, nearly all of it in the SAT
+solver (symbolic execution takes 5 to 18 seconds). Four at once still
+passed the 9 GB cap after 20 minutes, so the heavy ones run fewer at a
+time. On `dot_wait`, Kissat took 206 seconds where CaDiCaL took 235.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

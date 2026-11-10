@@ -1017,6 +1017,13 @@ const fn latch_holds(net: &NetPipeline) -> bool {
 /// Ceres's loop and the netlist's pipeline after a dot (at even `h`), with
 /// the mixer's SCX in the dot and the ghost.
 pub(crate) fn related(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
+    related_but_pipeline(l, net, g) && (*net == expected(l, net, g))
+}
+
+/// `related` but for the pipeline's own flip-flops, which `expected` gives
+/// from ceres's loop, the ghost and what it carries over from `net` (the
+/// latches, the sprite store, the window's flip-flops, the inputs).
+pub(crate) fn related_but_pipeline(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
     !net.inputs.clk
         & quiet(&net.inputs, l)
         & latch_holds(net)
@@ -1027,7 +1034,6 @@ pub(crate) fn related(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
         & !l.d.obj_fetch.aborted
         & reachable(l, net.scx, g)
         & objects_agree(l, net, g)
-        && (*net == expected(l, net, g))
 }
 
 /// The sprite store's fetched slots hold no X.
@@ -1041,10 +1047,11 @@ const fn store_holds(net: &NetPipeline) -> bool {
     holds
 }
 
-/// A dot from related states, with the mixer's SCX in this one (the loop
-/// has the last dot's): both stay related, and mode 3 goes on; or, once
-/// ceres has drawn the line (its `HBlankStart` runs in this dot's first half
-/// dot), the netlist's mode 3 stops at the dot's second edge.
+/// A dot from related states (the caller's to check), with the mixer's SCX
+/// in this one (the loop has the last dot's): both stay related, and mode 3
+/// goes on; or, once ceres has drawn the line (its `HBlankStart` runs in
+/// this dot's first half dot), the netlist's mode 3 stops at the dot's
+/// second edge.
 pub(crate) fn step_agrees(
     l: &mut Mode3Loop,
     net: &mut NetPipeline,
@@ -1053,8 +1060,7 @@ pub(crate) fn step_agrees(
     rising: EdgeInputs,
     falling: EdgeInputs,
 ) -> bool {
-    if !(related(l, net, g)
-        & rising.clk
+    if !(rising.clk
         & !falling.clk
         & quiet(&rising, l)
         & quiet(&falling, l)
