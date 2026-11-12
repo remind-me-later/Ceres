@@ -82,7 +82,7 @@ pub struct CoreInputs {
 /// register (PC, BC, DE, or FF for LDH), HL or SP, which come later; or the
 /// core lets go of it (the test mode T1 alone).
 // @hw measured: dmg-sim (the delays of its gates and wires)
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub enum HighByte {
     #[default]
     Precharged,
@@ -114,7 +114,7 @@ pub const CTL_MREQ_ARRIVES: u32 = 14_000;
 pub const MREQ_GATE: u32 = 8_000;
 
 /// What the core gives out as a phase ends.
-#[derive(Clone, Copy, Default, Debug)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 #[expect(clippy::struct_excessive_bools, reason = "the control lines")]
 pub struct CoreOutputs {
     pub addr: u16,
@@ -224,24 +224,26 @@ impl NetCore {
         }
     }
 
-    /// As `settle_from`, in `passes` passes: `None` if the last of them
-    /// still changed something. For the proofs: every pass runs, whether
-    /// the core has settled or not (a pass over a settled core changes
-    /// nothing, so the result is `settle_from`'s), which leaves the solver
-    /// no exit to follow out of the loop.
-    pub fn settle_within(&mut self, i: &CoreInputs, kept: u8, passes: u32) -> Option<CoreOutputs> {
+    /// One pass over the latches and wires with `i`, the keeper holding
+    /// `kept`. For the proofs: from a core settled in the phase before (or
+    /// in this one, with another data bus), and with the NMI's latches at
+    /// rest, one pass settles it, and a second changes neither the core
+    /// nor what it gives out (ceres-core's `sm83::netlist_proofs`, the
+    /// `netlist_sm83_settles_*` harnesses), so the result is
+    /// `settle_from`'s.
+    pub fn settle_once(&mut self, i: &CoreInputs, kept: u8) -> CoreOutputs {
         self.clk = i.clk;
         self.exec_phase = i.exec_phase;
-        for _ in 1..passes {
-            self.evaluate(i, kept);
-        }
-        let was = *self;
-        let out = self.evaluate(i, kept);
-        if self.settled(&was) { Some(out) } else { None }
+        self.evaluate(i, kept)
     }
 
-    /// Nothing changed in a pass (the decoded steps follow from their key).
-    fn settled(&self, was: &Self) -> bool {
+    /// Nothing changed in a pass. The decoded steps and their key are not
+    /// compared: they follow from the sequencer's fields, so a pass that
+    /// changes none of those leaves the next pass the same key. (The first
+    /// pass of phase A moves the fetched opcode into the opcode register,
+    /// and the second decodes it.)
+    #[must_use]
+    pub fn settled(&self, was: &Self) -> bool {
         (self.seq == was.seq)
             & (self.regs == was.regs)
             & (self.alu == was.alu)
@@ -249,7 +251,6 @@ impl NetCore {
             & (self.db == was.db)
             & (self.fetch == was.fetch)
             & (self.sampled == was.sampled)
-            & (self.decoded_key == was.decoded_key)
     }
 
     /// One pass over the latches and wires.

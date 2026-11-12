@@ -918,6 +918,35 @@ the cap as one harness: the longer classes need a harness per M-cycle with
 a relation inside the instruction, or an M-cycle's transcription of the
 core held to `NetCore` by test, as `NetPipeline` is to `NetRender`.
 
+They fit now, as the core settles each phase in one pass
+(`NetCore::settle_once`). The co-simulation showed why that can be: in
+5.37 million settles nothing changed after the first pass, so of the three
+passes a phase one did the work, one confirmed it and one was spare. Kani
+did not take it from every related state at first, and two things were in
+the way. The decoder's cache key moved in phase A's second pass (the first
+moves the fetched opcode into the opcode register, the second decodes it),
+though nothing else did; the key follows from the sequencer's fields, so
+`settled` no longer compares it, which leaves `NetChip`'s settle as it was
+(the full replay, 445 traces and 2.36 billion phases, finds no
+difference). And from any state a second pass moves many things: the
+transcription evaluates its parts in an order that is right once the core
+is consistent. What holds is local, and that is what the instruction
+harness needs: from a core settled in the phase before, with the NMI's
+latches at rest, a phase's edges and one pass settle it, and so does one
+pass once the memory drives the bus; a second pass changes neither the
+core nor what it gives out (`sm83-settles-in-one-pass`, sixteen harnesses,
+10 to 15 s each). The core between instructions is settled in phase H, so
+by induction every phase's one pass is the settle, and the instruction
+harness runs one pass a phase, unconfirmed; the co-simulation still
+confirms each. The harness also builds what the relation pins into the
+core, rather than assuming it, so that Kani folds it.
+
+`netlist_sm83_alu_a_r` takes 47 s where it took 210, and
+`netlist_sm83_ld_r_d8`, LD r,d8 in two M-cycles, the first longer class,
+75 s; the CPU's 18 harnesses run one at a time in 6 minutes, 5.2 GB at the
+most. Each M-cycle adds about 1.1 GB, so the classes of three and four
+M-cycles should fit, and CALL's six would be near the cap.
+
 Interrupts are left out (`sm83-no-interrupt`). The core decides an
 interrupt's entry in the data phase of the M-cycle that fetches the next
 opcode, and ceres at the start of its step, before that fetch, so the two

@@ -282,6 +282,7 @@ fn run(op: u8, prefixed: bool, rng: &mut Rng, tally: &mut Tally) {
     let mut net = Net {
         core: core_at(&cpu, rng.word()),
         low_before: 0,
+        confirm: true,
     };
     let mut net_memory = memory.clone();
     // The core settles in every phase, in the passes `check` gives it.

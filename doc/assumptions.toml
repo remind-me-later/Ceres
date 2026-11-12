@@ -253,6 +253,10 @@ how = "Its read strobe opens OAM's first latches, and its address changes the pr
 
 # The CPU
 
+[sm83-settles-in-one-pass]
+title = "From a core settled in the phase before, with the NMI's latches at rest, a phase's edges and one pass of the core's latches and wires settle it, and so does one pass once the memory drives the bus: a second changes neither the core nor what it gives out"
+evidence = "proved"
+
 [sm83-memory-as-the-chip-drives-it]
 title = "The core's harnesses drive its data bus as NetChip does for an address the chip does not decode: the memory's byte while the core's read is up, and the phase after; the oscillator stable, no reset, no test mode; no access at IE's address (FFFF), where the core's own register answers"
 evidence = "measured"

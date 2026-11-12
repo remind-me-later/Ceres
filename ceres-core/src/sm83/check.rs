@@ -24,19 +24,14 @@
 
 use {
     super::Sm83,
-    ceres_netlist::sm83::{CoreInputs, NetCore, Register},
+    ceres_netlist::sm83::{CoreInputs, CoreOutputs, NetCore, Register},
 };
 
 /// The phases of an M-cycle (A to H), and those from which the clocks are
 /// up: `data_phase` from E, `write_phase` from G; `pch_phase` in B to F.
-const PHASES: u8 = 8;
+pub(super) const PHASES: u8 = 8;
 const PHASE_E: u8 = 4;
 const PHASE_G: u8 = 6;
-/// The passes in which the core settles in a phase, the one that finds
-/// nothing changed among them: with the data bus as the phase before left
-/// it, then with what the memory drives.
-const PASSES: u32 = 3;
-const PASSES_DRIVEN: u32 = 2;
 
 /// What an M-cycle does on the bus.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -49,7 +44,7 @@ pub(super) enum Access {
 /// The core's inputs in a phase, with `d` on the chip's data bus: the
 /// oscillator stable, no reset, no interrupt requested, and an address the
 /// chip does not decode.
-const fn inputs(phase: u8, d: u8) -> CoreInputs {
+pub(super) const fn inputs(phase: u8, d: u8) -> CoreInputs {
     CoreInputs {
         clk: phase == 0,
         exec_phase: phase != 0,
@@ -75,16 +70,33 @@ pub(super) struct Net {
     /// The bits the memory pulled low in the phase before: they stay a
     /// while after the edge (`NetChip::data_low`).
     pub low_before: u8,
+    /// Each settle is confirmed by a second pass (the co-simulation). The
+    /// proofs settle in one pass, which the `netlist_sm83_settles_*`
+    /// harnesses show is enough: a second pass would cost Kani as much
+    /// again.
+    pub confirm: bool,
 }
 
 impl Net {
+    /// One pass with `i`, and, if confirmed, a second, which must change
+    /// neither the core nor what it gives out.
+    fn settle(&mut self, i: &CoreInputs, kept: u8, settled: &mut bool) -> CoreOutputs {
+        let out = self.core.settle_once(i, kept);
+        if self.confirm {
+            let mut again = self.core;
+            let out_again = again.settle_once(i, kept);
+            *settled &= again.settled(&self.core) & (out_again == out);
+        }
+        out
+    }
+
     /// An M-cycle, and its access: the read as phase H has it (the model's
     /// `BUS_TRACE`), the write as its last phase has it. `read` is the
     /// memory, which drives the bus while the core reads; the core is
     /// settled twice a phase, as `NetChip` does, the second time with what
     /// the memory drives (if that is what the bus had already, the core is
-    /// settled as it is). `None` if the core does not settle in `PASSES`
-    /// passes, or in `PASSES_DRIVEN` more with the memory's byte.
+    /// settled as it is). `None` if a confirmed settle took more than one
+    /// pass.
     pub(super) fn mcycle(&mut self, mut read: impl FnMut(u16) -> u8) -> Option<Access> {
         let mut access = Access::Idle;
         let mut settled = true;
@@ -92,19 +104,13 @@ impl Net {
             let kept = self.core.db;
             let stale = inputs(phase, !self.low_before);
             self.core.edges(&stale);
-            let Some(first) = self.core.settle_within(&stale, kept, PASSES) else {
-                settled = false;
-                continue;
-            };
+            let first = self.settle(&stale, kept, &mut settled);
             let now_low = if first.rd { !read(first.addr) } else { 0 };
             let driven = inputs(phase, !(now_low | self.low_before));
             let out = if driven.d == stale.d {
                 first
-            } else if let Some(out) = self.core.settle_within(&driven, kept, PASSES_DRIVEN) {
-                out
             } else {
-                settled = false;
-                continue;
+                self.settle(&driven, kept, &mut settled)
             };
             self.low_before = now_low;
             if out.wr {
