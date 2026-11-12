@@ -127,27 +127,6 @@ impl Ppu {
         }
     }
 
-    pub(super) fn update_wx_glitch(&mut self) {
-        if !self.is_cgb_hardware() {
-            return;
-        }
-        if self.lcdc & LCDC_WIN_EN_B == 0 || !self.d.window.wy_triggered {
-            self.d.window.cgb_wx_glitch = false;
-            return;
-        }
-        let position = self.d.bg.position;
-        if self.wx == 0 {
-            // (position + 16 <= 8) in u8 arithmetic
-            self.d.window.cgb_wx_glitch =
-                position.wrapping_add(16) <= 8 || (position == pos(-7) && self.d.bg.fractional);
-            return;
-        }
-        self.d.window.cgb_wx_glitch = position
-            .wrapping_add(7)
-            .wrapping_add(u8::from(self.d.window.being_fetched))
-            == self.wx;
-    }
-
     /// On CGB, disabling the window while its start is still in progress (its
     /// first tile not pushed yet) calls it off: the pixels go on from the
     /// background where they were instead of waiting for the window's tile.
@@ -175,6 +154,82 @@ impl Ppu {
 }
 
 impl Display {
+    fn update_wx_glitch(&mut self, enabled: bool, wx: u8, hw: bool) {
+        if !hw {
+            return;
+        }
+        if !enabled || !self.window.wy_triggered {
+            self.window.cgb_wx_glitch = false;
+            return;
+        }
+        let position = self.bg.position;
+        if wx == 0 {
+            // (position + 16 <= 8) in u8 arithmetic
+            self.window.cgb_wx_glitch =
+                position.wrapping_add(16) <= 8 || (position == pos(-7) && self.bg.fractional);
+            return;
+        }
+        self.window.cgb_wx_glitch = position
+            .wrapping_add(7)
+            .wrapping_add(u8::from(self.window.being_fetched))
+            == wx;
+    }
+
+    /// A blank pixel inserted right at the FIFO's end, as the window's WX
+    /// matches again there.
+    pub(super) fn window_pixel_insertion(&mut self, wx: u8, hw: bool) {
+        if wx == self.bg.position.wrapping_add(7)
+            && (!hw || wx == 0)
+            && self.window.wx_triggered
+            && !self.window.being_fetched
+            && self.bg.fetcher.step == FetcherStep::GetTileT1
+            && self.bg.fifo.len() == 8
+        {
+            self.bg.insert_blank = true;
+        }
+    }
+
+    /// The window's part of a fetcher's dot, before its read: the CGB's WX
+    /// glitch is decided as a tile's fetch and each of its rows' reads
+    /// start, and a window that LCDC turned off stops as a tile's fetch
+    /// starts (the fetcher reads the background's tile).
+    pub(super) fn window_before_fetch(&mut self, enabled: bool, wx: u8, hw: bool) {
+        match self.bg.fetcher.step {
+            FetcherStep::GetTileT1 => {
+                self.update_wx_glitch(enabled, wx, hw);
+                if !enabled {
+                    self.window.wx_triggered = false;
+                }
+            }
+            FetcherStep::DataLowT1 | FetcherStep::DataHighT1 => {
+                self.update_wx_glitch(enabled, wx, hw);
+            }
+            _ => {}
+        }
+    }
+
+    /// What the fetcher's step takes of the window: the CGB's WX glitch, and
+    /// WX if the DMG's window insertion glitch can happen as the fetcher
+    /// pushes (the window triggered on WY but is off, and its disable did
+    /// not land during a window tile's fetch).
+    pub(super) const fn fetcher_glitches(
+        &self,
+        enabled: bool,
+        wx: u8,
+        hw: bool,
+    ) -> (bool, Option<u8>) {
+        let insertion_wx = if self.window.wy_triggered
+            && !enabled
+            && !hw
+            && !self.window.no_pixel_insertion_glitch
+        {
+            Some(wx)
+        } else {
+            None
+        };
+        (self.window.cgb_wx_glitch, insertion_wx)
+    }
+
     /// Window activation check at the top of a mode-3 iteration, with LCDC's
     /// window enable, WX and the mixer's SCX as the PPU has them. Returns
     /// `true` if the engine went to sleep (state 42).

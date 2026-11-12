@@ -31,8 +31,10 @@
 //! checked them.
 //!
 //! Ceres's side is its mode 3 loop itself (`mode3::mode3`), on the display's
-//! state alone (`Mode3Loop`): the fetchers' reads, the object's row and the
-//! pixels' mixing, which do not decide when the pixels come out, do nothing.
+//! state alone (`Mode3Loop`): the loop runs all of the window's logic itself
+//! (its check, its start, its pixel insertion, the glitches its fetcher's
+//! step takes); only the fetchers' reads, the object's row and the pixels'
+//! mixing, which do not decide when the pixels come out, do nothing.
 //! The window is off, armed, starting or started (`WindowPhase`,
 //! `window_agrees`). Armed, ceres's check compares WX with its position plus
 //! 7, the netlist's with its pixel counter (6 ahead) at the dot's rise, and
@@ -78,8 +80,10 @@ use {
     ceres_netlist::render_edge::{EdgeInputs, NO_X, NetPipeline, SLOTS},
 };
 
-/// Ceres's mode 3 loop on the display's state alone: nothing read, no pixel
-/// drawn.
+/// Ceres's mode 3 loop on the display's state alone: the loop runs all of the
+/// window's logic itself (its check, its start, its pixel insertion, the
+/// glitches its fetcher's step takes); only the reads, the object's row and
+/// the pixels' mixing do nothing, and no pixel is drawn.
 pub(crate) struct Mode3Loop {
     pub d: Display,
     /// SCX as the pixel mixer sees it, LCDC's object and window enables, and
@@ -103,22 +107,19 @@ impl Mode3Ppu for Mode3Loop {
         self.mixer_scx
     }
 
-    fn window_check(&mut self) -> bool {
-        self.d
-            .mode3_window(self.window_enabled, self.wx, self.mixer_scx, false)
+    fn window_enabled(&self) -> bool {
+        self.window_enabled
     }
 
-    fn window_activated(&mut self) {
-        self.d.mode3_window_activated();
+    fn wx(&self) -> u8 {
+        self.wx
     }
 
-    fn window_pixel_insertion(&mut self) {}
+    fn cgb_hardware(&self) -> bool {
+        false
+    }
 
     fn fetcher_read(&mut self) {}
-
-    fn fetcher_glitches(&self) -> (bool, Option<u8>) {
-        (false, None)
-    }
 
     fn read_object_attributes(&mut self) {}
 

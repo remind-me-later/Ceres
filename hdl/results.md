@@ -832,6 +832,18 @@ cap they take 92 minutes and 5.5 GB at the most; the longest are
 `armed_high` (35 minutes), `dot_high` (29), `armed_pixel` (22) and
 `dot_pixel` (18).
 
+The proofs ran ceres's loop with three of the PPU's hooks stubbed, and a
+survey of what each hook reads and writes showed that exactly those three
+write what decides the timing, all of it the window's: the blank pixel
+inserted as WX matches again, the window stopped as a tile's fetch starts
+with LCDC's bit 5 clear (and the CGB's WX glitch, decided there), and the
+glitches the fetcher's step takes as it pushes. They are `Display`'s now
+(`window_pixel_insertion`, `window_before_fetch`, `fetcher_glitches`), with
+LCDC's bit, WX and the hardware as arguments, and the loop calls them
+itself: the hooks left write only data (the tile's bytes, the object's row,
+the pixels, the buses' conflicts), and the proofs' loop runs all of the
+window's logic. The A/V and state hashes are the same on 185 runs.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

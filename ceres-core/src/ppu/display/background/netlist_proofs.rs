@@ -59,20 +59,21 @@
 //! state alone (`check::Mode3Loop`): the reads, the object's row and the
 //! pixels' mixing do nothing there, the window's check runs
 //! (`Display::mode3_window`), and the loop itself steps the window's column
-//! and ends its first tile's fetch; its pixel insertion does nothing (WX is
-//! held, and the insertion needs a second match). `check::ceres_dot` wakes it as `step_state_machine`
+//! and ends its first tile's fetch; the loop runs the window's pixel
+//! insertion and the fetcher's window glitches too, which a held WX and
+//! LCDC's bit never set off. `check::ceres_dot` wakes it as `step_state_machine`
 //! does, and takes `mode3_done`'s sleep into `HBlankStart`.
 //!
 //! What it does not cover yet: the window's start with the objects on, the
 //! pixels the window draws, how it is armed at a line's start (WY's match,
 //! and a line's start with the window armed), WX outside 7 to 165, and
-//! writes of WX and LCDC's window bit (the fetcher's read clears ceres's
-//! start when the bit is clear, `read_tile`); objects at X 0 to 7 (they match
-//! in the lead-in), an object's mode 0 pulse at X 167, and writes of LCDC's
-//! object bit (the aborted fetch); line 0 after the LCD is turned on, whose
-//! loop starts elsewhere; how a write reaches ceres's mixer
-//! (`cpu_bus::write`'s hold of SCX's low bits, measured); that the window's
-//! other hooks do nothing before it starts; and the dispatch around the loop
+//! writes of WX and LCDC's window bit (the loop stops ceres's window as a
+//! tile's fetch starts with the bit clear, `Display::window_before_fetch`);
+//! objects at X 0 to 7 (they match in the lead-in), an object's mode 0 pulse
+//! at X 167, and writes of LCDC's object bit (the aborted fetch); line 0
+//! after the LCD is turned on, whose loop starts elsewhere; how a write
+//! reaches ceres's mixer (`cpu_bus::write`'s hold of SCX's low bits,
+//! measured); and the dispatch around the loop
 //! (`ceres_dot`'s, copied from `step_state_machine` and `mode3_done`, as
 //! `timing::check` copies the timing's).
 

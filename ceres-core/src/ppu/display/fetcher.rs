@@ -154,10 +154,6 @@ impl Ppu {
     pub(super) fn read_tile(&mut self) {
         match self.d.bg.fetcher.step {
             FetcherStep::GetTileT1 => {
-                self.update_wx_glitch();
-                if self.lcdc & LCDC_WIN_EN_B == 0 {
-                    self.d.window.wx_triggered = false;
-                }
                 #[cfg(feature = "debug")]
                 self.trace_tile_fetch(self.d.window.wx_triggered);
 
@@ -194,7 +190,6 @@ impl Ppu {
                 }
             }
             FetcherStep::DataLowT1 | FetcherStep::DataHighT1 => {
-                self.update_wx_glitch();
                 let y = if model_ge_cgb_d(self.model) {
                     self.d.bg.fetcher.y
                 } else {
@@ -249,21 +244,6 @@ impl Ppu {
                 }
             }
             FetcherStep::Push => {}
-        }
-    }
-
-    /// WX, if the DMG's window insertion glitch can happen as the fetcher
-    /// pushes: the window triggered on WY but is off, and its disable did
-    /// not land during a window tile's fetch.
-    pub(super) const fn insertion_glitch_wx(&self) -> Option<u8> {
-        if self.d.window.wy_triggered
-            && self.lcdc & LCDC_WIN_EN_B == 0
-            && !self.is_cgb_hardware()
-            && !self.d.window.no_pixel_insertion_glitch
-        {
-            Some(self.wx)
-        } else {
-            None
         }
     }
 }

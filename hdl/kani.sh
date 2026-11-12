@@ -26,10 +26,11 @@
 # here can change while a run is going: Kani compiles each harness from
 # the sources it finds.
 #
-# The sources a verdict is about: ceres-core and ceres-netlist (every file
-# git knows or would add) and the workspace's Cargo.toml and Cargo.lock.
-# That is everything a harness could reach, so any change there makes
-# every verdict stale.
+# The sources a verdict is about: ceres-core's and ceres-netlist's src/
+# (every file git knows or would add) and manifests, and the workspace's
+# Cargo.toml and Cargo.lock. That is everything a harness could reach, so
+# any change there makes every verdict stale; the crates' tests and examples
+# are outside it.
 #
 # A run is one `cargo kani` with KANI_JOBS harnesses at a time (2), under
 # a memory cap where systemd-run is there (KANI_MEMORY, 9G; no swap), on
@@ -51,7 +52,9 @@ JOBS=${KANI_JOBS:-2}
 MEMORY=${KANI_MEMORY:-9G}
 SOLVER=${KANI_SOLVER:-cadical}
 LOGS=$WT/target/kani-logs
+# What the worktree takes of this one, and what a verdict's hash covers.
 SOURCES="ceres-core ceres-netlist Cargo.toml Cargo.lock"
+HASHED="ceres-core/src ceres-core/Cargo.toml ceres-netlist/src ceres-netlist/Cargo.toml Cargo.toml Cargo.lock"
 
 # The harnesses of ceres-core, by their full names: each `#[kani::proof]`
 # with the module its file is.
@@ -76,7 +79,7 @@ harnesses() {
 sources_hash() {
     cd "$1"
     # shellcheck disable=SC2086
-    git ls-files -co --exclude-standard -- $SOURCES | LC_ALL=C sort |
+    git ls-files -co --exclude-standard -- $HASHED | LC_ALL=C sort |
         xargs sha256sum | sha256sum | cut -c1-16
 }
 

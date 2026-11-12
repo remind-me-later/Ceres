@@ -50,17 +50,14 @@ pub(super) trait Mode3Ppu {
     fn objects_enabled(&self) -> bool;
     /// SCX as the pixel mixer sees it.
     fn mixer_scx(&self) -> u8;
-    /// The window's check at the top of the loop: whether it started, and
-    /// the loop sleeps (`Mode3WindowDelay`).
-    fn window_check(&mut self) -> bool;
-    /// The window starts after its delay.
-    fn window_activated(&mut self);
-    /// A blank pixel inserted at the FIFO's end, as the window starts there.
-    fn window_pixel_insertion(&mut self);
-    /// The tile fetcher's read of this dot, and the window's glitches its
-    /// step takes (`Background::advance`).
+    /// LCDC's window enable (bit 5).
+    fn window_enabled(&self) -> bool;
+    /// WX.
+    fn wx(&self) -> u8;
+    /// CGB hardware (its window differs from the DMG's).
+    fn cgb_hardware(&self) -> bool;
+    /// The tile fetcher's read of this dot.
     fn fetcher_read(&mut self);
-    fn fetcher_glitches(&self) -> (bool, Option<u8>);
     /// The object fetch's reads: its attributes, its row's two bytes.
     fn read_object_attributes(&mut self);
     fn read_object_low(&mut self);
@@ -72,12 +69,15 @@ pub(super) trait Mode3Ppu {
     /// The HBlank interrupt's source, before the STAT mode (`timing.rs`).
     fn signal_mode3_end(&mut self);
 
-    /// The tile fetcher's read, then its step; the window's column steps
+    /// The window's part of the fetch first (`Display::window_before_fetch`),
+    /// then the tile fetcher's read and its step; the window's column steps
     /// with its tile's last read.
     fn advance_fetcher(&mut self) {
+        let (enabled, wx, hw) = (self.window_enabled(), self.wx(), self.cgb_hardware());
+        self.d().window_before_fetch(enabled, wx, hw);
         self.fetcher_read();
-        let (cgb_wx_glitch, insertion_wx) = self.fetcher_glitches();
         let d = self.d();
+        let (cgb_wx_glitch, insertion_wx) = d.fetcher_glitches(enabled, wx, hw);
         if matches!(d.bg.fetcher.step, FetcherStep::DataHighT2) && d.window.wx_triggered {
             d.window.tile_x = (d.window.tile_x + 1) & 0x1F;
         }
@@ -103,7 +103,7 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
     };
     let mut step = match resume {
         State::Mode3WindowDelay => {
-            p.window_activated();
+            p.d().mode3_window_activated();
             Step::Objects
         }
         State::Mode3ObjectWait => unless_aborted(p, Step::WaitForTile),
@@ -117,13 +117,16 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
     loop {
         step = match step {
             Step::WindowCheck => {
-                if p.window_check() {
+                let (enabled, wx, scx, hw) =
+                    (p.window_enabled(), p.wx(), p.mixer_scx(), p.cgb_hardware());
+                if p.d().mode3_window(enabled, wx, scx, hw) {
                     return Mode3Flow::Slept;
                 }
                 Step::Objects
             }
             Step::Objects => {
-                p.window_pixel_insertion();
+                let (wx, hw) = (p.wx(), p.cgb_hardware());
+                p.d().window_pixel_insertion(wx, hw);
                 // Drop the objects left of the current position.
                 let d = p.d();
                 while d.objs.next().is_some_and(|e| e.x < d.bg.object_match_x()) {
@@ -238,37 +241,23 @@ impl Mode3Ppu for Ppu {
         self.mixer_scx
     }
 
-    fn window_check(&mut self) -> bool {
-        let hw = self.is_cgb_hardware();
-        self.d
-            .mode3_window(self.lcdc & LCDC_WIN_EN_B != 0, self.wx, self.mixer_scx, hw)
+    #[inline]
+    fn window_enabled(&self) -> bool {
+        self.lcdc & LCDC_WIN_EN_B != 0
     }
 
-    fn window_activated(&mut self) {
-        self.d.mode3_window_activated();
+    #[inline]
+    fn wx(&self) -> u8 {
+        self.wx
     }
 
-    fn window_pixel_insertion(&mut self) {
-        // Insert a pixel right at the FIFO's end.
-        let hw = self.is_cgb_hardware();
-        if self.wx == self.d.bg.position.wrapping_add(7)
-            && (!hw || self.wx == 0)
-            && self.d.window.wx_triggered
-            && !self.d.window.being_fetched
-            && self.d.bg.fetcher.step == FetcherStep::GetTileT1
-            && self.d.bg.fifo.len() == 8
-        {
-            self.d.bg.insert_blank = true;
-        }
+    #[inline]
+    fn cgb_hardware(&self) -> bool {
+        self.is_cgb_hardware()
     }
 
     fn fetcher_read(&mut self) {
         self.read_tile();
-    }
-
-    #[inline]
-    fn fetcher_glitches(&self) -> (bool, Option<u8>) {
-        (self.d.window.cgb_wx_glitch, self.insertion_glitch_wx())
     }
 
     fn read_object_attributes(&mut self) {
