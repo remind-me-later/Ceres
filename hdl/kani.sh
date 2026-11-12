@@ -195,6 +195,14 @@ run_and_record() {
         echo "$verdict $name (${seconds}s)"
         [ "$verdict" = pass ] || failed=1
     done <"$LOGS.verdicts"
+    # A harness with no verdict: Kani stopped before it (killed for its
+    # memory, or the build failed).
+    while read -r name; do
+        if ! grep -q "^$name " "$LOGS.verdicts"; then
+            echo "no verdict $name (see $LOGS/run.log)"
+            failed=1
+        fi
+    done <"$LOGS/todo"
     rm -f "$LOGS.verdicts"
     return "$failed"
 }

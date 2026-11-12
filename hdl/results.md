@@ -844,6 +844,87 @@ itself: the hooks left write only data (the tile's bytes, the object's row,
 the pixels, the buses' conflicts), and the proofs' loop runs all of the
 window's logic. The A/V and state hashes are the same on 185 runs.
 
+## Ceres's CPU and the core
+
+Two spikes before the next phase of mode 3, to see what the CPU's side of
+the proof takes.
+
+The first compares ceres's instructions with the core's
+(`ceres-core/src/sm83/check.rs`). The core does an instruction's last work
+while it fetches the next opcode, so an instruction ends, for the
+comparison, with the M-cycle that fetches the next one: ceres executes the
+opcode it holds and reads the next, and the core runs as many M-cycles from
+the one after the first opcode's fetch. Each M-cycle's access must be the
+same, and the two must be related again after the last (`boundary`): the
+core's masters hold ceres's registers and flags (its slaves show them in
+the next M-cycle's first phase), its IME latch is ceres's IME with EI's
+delay already counted, and its control state is that of a fetch's end.
+
+`sm83::cosim` runs that on a memory of random bytes: every opcode but HALT,
+STOP and the eleven that are not instructions, and the 256 after the CB
+prefix, from 400 random states each. All 199,583 runs agree, in 3 s. What
+the core shows of IME (`seq.ime`) is not compared: after DI it still shows
+1 where the latch holds 0, until the next M-cycle starts.
+
+Kani then takes one class from every related pair of states:
+`netlist_sm83_alu_a_r`, the 8-bit arithmetic and logic on A with a register
+(56 opcodes), in 210 s with 6.7 GB at its peak. It passes with the core's
+slaves, its opcode register, its M-cycle counter, W and Z and what it shows
+of IME all free, so none of them counts between instructions, and it proves
+that the core settles in three passes a phase, and two more once the memory
+drives the bus. An access at IE's address is left out: the core's own
+register answers there, and the first run failed on it. Two planted faults
+go with it, one in ceres's ADC and one in the core's SBC.
+
+What costs is building the model, not solving it: a phase of the core
+(settled twice, four passes each) takes Kani 13 s and about 0.9 GB to
+build and 1.5 s to solve, and it grows in step with the phases. The first
+runs were killed at 9 GB: the harness unrolled seven M-cycles where the
+class takes one, and then settled 64 passes in the one. Now the M-cycle
+count is a constant of the class, the settle has no early exit
+(`NetCore::settle_within`: every pass runs, and the last must change
+nothing), and a phase whose data bus the memory leaves as it was is settled
+once. By these figures an instruction of two M-cycles does not fit under
+the cap as one harness: the longer classes need a harness per M-cycle with
+a relation inside the instruction, or an M-cycle's transcription of the
+core held to `NetCore` by test, as `NetPipeline` is to `NetRender`.
+
+Interrupts are left out (`sm83-no-interrupt`). The core decides an
+interrupt's entry in the data phase of the M-cycle that fetches the next
+opcode, and ceres at the start of its step, before that fetch, so the two
+can only be compared with the interrupt block's timing in hand.
+
+The second spike is a CPU access to VRAM. `ceres-netlist`'s
+`tests/vram_gate.rs` runs the 43 ROMs that read and write VRAM around
+mode 3 (Gambatte's `vram_m3` for the DMG, gbmicrotest's `vram` ROMs) on
+`NetChip` and tallies each access by mode 3's level as each phase of its
+M-cycle ends, against what became of it. Every access follows one rule: a
+write lands if mode 3 is off as E, F or G ends (the write strobe's phases),
+and a read takes VRAM's byte if mode 3 is off as H ends.
+
+| Mode 3 in A to H | Reads           | Writes                |
+| ---------------- | --------------- | --------------------- |
+| `00000000`       | 20 through      | 14,390 through        |
+| `00000111`       | 4 blocked       | 890 through           |
+| `01111111`       | 1 blocked       | 1 blocked             |
+| `11000000`       | 1 through       | none                  |
+| `11110000`       | 3 through       | 1 through             |
+| `11111100`       | 1 through       | none                  |
+| `11111111`       | 10 blocked      | 5,425 blocked         |
+
+(479,587 more writes do not tell: the byte was there already.) Mode 3
+rises at the edge that starts F on these lines, so the write of that
+M-cycle lands and its read does not, which ceres has as a read blocked
+before a write (`OAM_SCAN_UNLOCK_INDEX`); the rise at B's edge is one line
+only, probably line 0 after the LCD is turned on. Mode 3 falls at the edge
+that starts C, E or G here (A's is the fourth of that parity), where the
+rule lets a read and a write through alike. So the proof of an access
+needs, of mode 3, its level at two points of the M-cycle and no more, and
+the edges at which it can change. What the ROMs do not cover: a write in
+an M-cycle where mode 3 falls at C's or G's edge, and any access where it
+falls at A's; a sweep ROM (SCX 0 to 7 against a write and a read a cycle
+apart) would fill the table.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

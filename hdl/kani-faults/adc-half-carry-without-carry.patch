@@ -1,0 +1,15 @@
+# Ceres's ADC leaves the carry out of the half carry.
+# harness: netlist_sm83_alu_a_r
+diff --git a/ceres-core/src/sm83/alu.rs b/ceres-core/src/sm83/alu.rs
+index 33f6e03c..af985092 100644
+--- a/ceres-core/src/sm83/alu.rs
++++ b/ceres-core/src/sm83/alu.rs
+@@ -26,7 +26,7 @@ impl Sm83 {
+         if res.trailing_zeros() >= 8 {
+             self.af |= ZF;
+         }
+-        if (a & 0xF) + (val & 0xF) + carry > 0x0F {
++        if (a & 0xF) + (val & 0xF) > 0x0F {
+             self.af |= HF;
+         }
+         if res > 0xFF {

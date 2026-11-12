@@ -85,6 +85,12 @@ evidence = "replayed"
 how = "ceres-netlist's tests/render_edge.rs steps it from NetRender's state at every edge of NetChip's runs where the OAM scan saves no sprite, and compares it with NetRender's after the edge: 803 ROMs (hdl/tests.txt, gambatte's scx_during_m3, scy, sprites, window, m0int_m0stat, m2int_m3stat, m0enable, bgen, dmgpalette_during_m3 and enable_display, mealybug's ppu ROMs, gbmicrotest, dmg-acid2, mooneye's ppu tests), 0.2 s each: 1,349,372,892 edges, 401,151,682 in mode 3, 89,648,743 with the window (198 ROMs), with 38,826 sprite fetches and 181,702 SCX writes, no difference. tests/render_edge_free.rs does the same from states no ROM reaches (2000 runs of three lines from power-on, with random LCDC, sprite X, CPU writes of SCX, WY and WX, and resets held as levels: 5,471,000 edges, no difference) and found the exception: at the edge where the LCD's reset rises while mode 3 runs, render's fetcher restart still sees mode 3 in the delta before the reset clears it and clears the fetcher's count, where the pipeline clears mode 3 first (56 of 1000 such edges differ; the proofs take no reset in mode 3, and the ROMs' runs turn the LCD off outside it). NetRender, the delta-cycle transcription of render.vhd, is what netlist_replay replays through render's traces."
 rests_on = ["readable-model-is-dmg-sim"]
 
+[transcription-sm83]
+title = "NetCore is sm83.vhd and its parts (the sequencer, the decoder and its control lines, the registers, the ALU, the IDU, IE and the interrupts' selection), phase by phase"
+evidence = "replayed"
+how = "netlist_replay's replay of the core over the model's traces that have its fields, alone and in the whole chip (NetChip)."
+rests_on = ["readable-model-is-dmg-sim"]
+
 # How ceres's time maps onto the netlist's
 
 [mapping-m-cycle-at-e]
@@ -238,3 +244,16 @@ evidence = "proved"
 title = "The CPU does not address OAM (FExx) during the OAM scan"
 evidence = "open"
 how = "Its read strobe opens OAM's first latches, and its address changes the precharge (oam.vhd); the scan's harnesses leave it out."
+
+# The CPU
+
+[sm83-memory-as-the-chip-drives-it]
+title = "The core's harnesses drive its data bus as NetChip does for an address the chip does not decode: the memory's byte while the core's read is up, and the phase after; the oscillator stable, no reset, no test mode; no access at IE's address (FFFF), where the core's own register answers"
+evidence = "measured"
+how = "ceres-core's sm83::cosim runs sm83::check's M-cycle on a memory of random bytes: every opcode but HALT, STOP and the eleven that are not instructions, and the 256 after the CB prefix, from 400 random states each (199,583 runs, the 17 with an access at FFFF left out): the accesses and the registers are ceres's."
+rests_on = ["transcription-sm83"]
+
+[sm83-no-interrupt]
+title = "No interrupt is requested while the CPU's instructions are compared, and the core is not halted or stopped"
+evidence = "open"
+how = "The core decides an interrupt's entry in the data phase of the M-cycle that fetches the next opcode, and ceres at the start of its step, before that fetch: the two need the interrupt block's timing (if-step-agrees) to be compared. HALT's and STOP's steps are not compared either."

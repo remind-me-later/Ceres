@@ -5,8 +5,15 @@
 
 mod alu;
 mod bus;
+#[cfg(any(kani, feature = "check"))]
+mod check;
 pub(crate) mod conflict;
+#[cfg(test)]
+#[cfg(feature = "check")]
+mod cosim;
 mod instructions;
+#[cfg(kani)]
+mod netlist_proofs;
 #[cfg(kani)]
 mod proofs;
 

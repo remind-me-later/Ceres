@@ -188,13 +188,18 @@ impl NetCore {
     /// A phase: the edges that start it (`clk` rising, `exec_phase`
     /// falling), then the phase settled.
     pub fn phase(&mut self, i: &CoreInputs) -> CoreOutputs {
+        self.edges(i);
+        self.settle(i)
+    }
+
+    /// The edges that start a phase: `clk` rising, `exec_phase` falling.
+    pub const fn edges(&mut self, i: &CoreInputs) {
         if i.clk & !self.clk {
             self.seq.clock(self.sampled);
         }
         if !i.exec_phase & self.exec_phase {
             self.seq.exec_falls();
         }
-        self.settle(i)
     }
 
     /// The latches and wires with `i`, until nothing changes.
@@ -217,6 +222,22 @@ impl NetCore {
                 return out;
             }
         }
+    }
+
+    /// As `settle_from`, in `passes` passes: `None` if the last of them
+    /// still changed something. For the proofs: every pass runs, whether
+    /// the core has settled or not (a pass over a settled core changes
+    /// nothing, so the result is `settle_from`'s), which leaves the solver
+    /// no exit to follow out of the loop.
+    pub fn settle_within(&mut self, i: &CoreInputs, kept: u8, passes: u32) -> Option<CoreOutputs> {
+        self.clk = i.clk;
+        self.exec_phase = i.exec_phase;
+        for _ in 1..passes {
+            self.evaluate(i, kept);
+        }
+        let was = *self;
+        let out = self.evaluate(i, kept);
+        if self.settled(&was) { Some(out) } else { None }
     }
 
     /// Nothing changed in a pass (the decoded steps follow from their key).

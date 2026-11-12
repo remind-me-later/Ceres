@@ -836,10 +836,12 @@ transcription, each naming the harness that must fail with it. They show
 that a harness would notice the kind of bug it is there for; `faults`
 records each as caught or missed.
 
-Before Kani, `cargo test -p ceres-core --features check cosim` runs ceres's
-mode 3 loop and `NetPipeline` side by side on whole lines and checks the
-proofs' relation at every dot, in seconds: a new rule is fitted there, and
-Kani then takes every related state.
+Before Kani, `cargo test -p ceres-core --features check cosim` runs the two
+sides concretely and checks the proofs' relations, in seconds: ceres's
+mode 3 loop and `NetPipeline` on whole lines, at every dot, and ceres's CPU
+and the core (`NetCore`) on every opcode from random states, where each
+instruction ends. A new rule is fitted there, and Kani then takes every
+related state.
 
 ### The rules beyond the die
 

@@ -1,0 +1,15 @@
+# The core's SBC subtracts as SUB does: the carry into bit 0 does not take the flag.
+# harness: netlist_sm83_alu_a_r
+diff --git a/ceres-netlist/src/sm83/alu.rs b/ceres-netlist/src/sm83/alu.rs
+index 0e8345cc..26a83caa 100644
+--- a/ceres-netlist/src/sm83/alu.rs
++++ b/ceres-netlist/src/sm83/alu.rs
+@@ -126,7 +126,7 @@ impl NetAlu {
+             & (c.cp
+                 | (!o(0) & s.inc_or_dec_m)
+                 | (c.add_sp_e_or_ldhl_sp_e_m2 & f.c)
+-                | (c.sub_or_sbc & (!f.c | !o(3)))
++                | c.sub_or_sbc
+                 | (f.c & (s.add_hl_ss_m1 | (c.add_a_x_or_adc_a_x & o(3)))));
+ 
+         // The shifter.
