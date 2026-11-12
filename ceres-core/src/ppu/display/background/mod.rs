@@ -16,7 +16,7 @@ mod netlist_proofs;
 
 use {
     super::{
-        fetcher::{Fetcher, FetcherStep},
+        fetcher::{FetcherStep, Row},
         fifo::{Fifo, Item},
         pos,
     },
@@ -40,7 +40,8 @@ pub(super) struct Background {
     /// window's pixel insertion glitch).
     pub insert_blank: bool,
     pub fifo: Fifo,
-    pub fetcher: Fetcher,
+    /// The fetcher's step (what it reads is the PPU's, `Fetcher`).
+    pub step: FetcherStep,
 }
 
 /// What became of the FIFO's front pixel.
@@ -62,7 +63,7 @@ impl Default for Background {
             fractional: false,
             insert_blank: false,
             fifo: Fifo::default(),
-            fetcher: Fetcher::default(),
+            step: FetcherStep::default(),
         }
     }
 }
@@ -73,7 +74,7 @@ impl Background {
     pub(super) fn start(&mut self) {
         self.fifo.clear();
         self.fifo.push_bg_row(0, 0, 0, false, false);
-        self.fetcher.step = FetcherStep::GetTileT1;
+        self.step = FetcherStep::GetTileT1;
     }
 
     /// The X an object must have to be fetched at this position: the
@@ -89,16 +90,11 @@ impl Background {
         self.fractional = false;
     }
 
-    /// The line is drawn (`skip_slow_mode_3`): a fetch cut off in its high
-    /// byte keeps the last byte read.
-    pub(super) const fn end_line(&mut self) {
+    /// The line is drawn (`skip_slow_mode_3`): whether the fetch was cut
+    /// off in its high byte (the fetcher keeps the last byte read).
+    pub(super) const fn end_line(&mut self) -> bool {
         self.restart_line();
-        if matches!(
-            self.fetcher.step,
-            FetcherStep::DataHighT1 | FetcherStep::DataHighT2
-        ) {
-            self.fetcher.data[1] = self.fetcher.data[0];
-        }
+        matches!(self.step, FetcherStep::DataHighT1 | FetcherStep::DataHighT2)
     }
 
     /// The FIFO's front pixel (or the blank one inserted before it), and
@@ -144,22 +140,22 @@ impl Background {
         ))
     }
 
-    /// The fetcher's step after its read: the next, or the push of its row
-    /// (which the CGB's WX glitch skips in the high byte's second dot).
-    /// `insertion_wx` is WX, if the DMG's window insertion glitch can
+    /// The fetcher's step after its read: the next, or the push of its
+    /// `row` (which the CGB's WX glitch skips in the high byte's second
+    /// dot). `insertion_wx` is WX, if the DMG's window insertion glitch can
     /// happen.
-    pub(super) fn advance(&mut self, cgb_wx_glitch: bool, insertion_wx: Option<u8>) {
-        match self.fetcher.step {
-            FetcherStep::DataHighT2 if !cgb_wx_glitch => self.push(insertion_wx),
-            FetcherStep::Push => self.push(insertion_wx),
-            step => self.fetcher.step = step.next(),
+    pub(super) fn advance(&mut self, cgb_wx_glitch: bool, insertion_wx: Option<u8>, row: Row) {
+        match self.step {
+            FetcherStep::DataHighT2 if !cgb_wx_glitch => self.push(insertion_wx, row),
+            FetcherStep::Push => self.push(insertion_wx, row),
+            step => self.step = step.next(),
         }
     }
 
     /// The fetcher pushes its row once the FIFO is empty, and begins the
     /// next tile.
-    fn push(&mut self, insertion_wx: Option<u8>) {
-        self.fetcher.step = FetcherStep::Push;
+    fn push(&mut self, insertion_wx: Option<u8>, row: Row) {
+        self.step = FetcherStep::Push;
         if !self.fifo.is_empty() {
             return;
         }
@@ -174,8 +170,8 @@ impl Background {
                 return;
             }
         }
-        let attr = self.fetcher.attributes;
-        let [low, high] = self.fetcher.data;
+        let attr = row.attributes;
+        let [low, high] = row.data;
         self.fifo.push_bg_row(
             low,
             high,
@@ -183,6 +179,6 @@ impl Background {
             attr & ATTR_PRIORITY_B != 0,
             attr & ATTR_X_FLIP_B != 0,
         );
-        self.fetcher.step = FetcherStep::GetTileT1;
+        self.step = FetcherStep::GetTileT1;
     }
 }

@@ -80,7 +80,7 @@
 .decl rule_tag(rule: symbol, file: symbol, line: number, entity: symbol, branch: symbol)
 
 // What the proofs against the netlist assume (doc/assumptions.toml): the
-// evidence (proved, replayed, measured, fact or open) and how; the facts
+// evidence (proved, typed, replayed, measured, fact or open) and how; the facts
 // each rests on and the assumptions it takes as given in turn; ceres-core's
 // Kani harnesses, and their tags: what each assumes, and what it
 // discharges (proves for the others).

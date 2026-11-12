@@ -22,7 +22,7 @@ use {
         LAST_LINE, LINES, State, model_ge_cgb_d,
         timing::{ClockPosition, LINE_END_H, LINE_RESET_H, VBLANK_H},
     },
-    crate::ppu::{LCDC_WIN_EN_B, Ppu},
+    crate::ppu::{LCDC_WIN_EN_B, Ppu, PpuCore},
 };
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -115,43 +115,11 @@ const fn cc(ds: bool, n: i64) -> i64 {
     if ds { n } else { 2 * n }
 }
 
-impl Ppu {
+impl PpuCore {
     /// The CGB follows these windows (up to revision C).
     #[must_use]
     pub(crate) const fn cgb_c_timing(&self) -> bool {
         self.is_cgb_hardware() && !model_ge_cgb_d(self.model)
-    }
-
-    /// Advances a half dot (after the timing unit): runs the WY checks.
-    pub(super) fn cgb_c_unit(&mut self) {
-        if !self.cgb_c_timing() {
-            return;
-        }
-        self.d.cgb_c.now += 1;
-        let ClockPosition { line, half_dot } = self.d.timing.position();
-        let h = i64::from(half_dot);
-        if h == 0 {
-            self.d.cgb_c.hblank_age = None;
-        }
-        if !self.d.timing.is_on() {
-            return;
-        }
-        // The WY checks at the end of a line: half an M-cycle before the
-        // line-end pulse against the line, at the VBlank latch's edge
-        // against the next one.
-        let ly = if h == i64::from(LINE_END_H) - 4 {
-            line
-        } else if h == i64::from(VBLANK_H) {
-            if line == LAST_LINE { 0 } else { line + 1 }
-        } else {
-            return;
-        };
-        let c = &mut self.d.cgb_c;
-        c.wy.settle(c.now);
-        c.lcdc.settle(c.now);
-        if ly != 0 && c.lcdc.val & LCDC_WIN_EN_B != 0 && c.wy.val == ly {
-            self.d.window.wy_triggered = true;
-        }
     }
 
     /// A half dot ran (after the pipeline's state machine): counts the time
@@ -201,15 +169,6 @@ impl Ppu {
             return pipeline;
         }
         pipeline || c.vram_lock_age > self.lock_delay() + 2
-    }
-
-    /// OAM as CPU writes see it locked: for the next line only once LY has
-    /// changed.
-    pub(in crate::ppu) const fn cgb_c_oam_write_blocked(&self, pipeline: bool) -> bool {
-        if !self.cgb_c_timing() || !self.d.line_clock_valid() {
-            return pipeline;
-        }
-        pipeline && !matches!(self.d.state(), State::LineOamWriteLock | State::LineLy)
     }
 
     /// A WY write: the WY checks see it 2 cycles later.
@@ -270,23 +229,6 @@ impl Ppu {
         Some(h + ahead < i64::from(LINE_RESET_H) && age + ahead > HBLANK_WAIT)
     }
 
-    /// The line cycle (dots since LY changed) after which the object search
-    /// sees an `OBJ_SIZE` write landing now, `units_early` before a read's
-    /// point; `-1` if it lands before the line. The search samples entry `i`
-    /// at line cycles `2 * i` and `2 * i + 1` (`objects.rs`).
-    pub(in crate::ppu) fn cgb_c_size_change_cycle(&self, units_early: i64) -> Option<i64> {
-        if matches!(
-            self.d.state(),
-            State::LineOamWriteLock | State::LineLy | State::OamScanStart
-        ) {
-            return Some(-1);
-        }
-        let age = i64::from(self.d.cgb_c.scan_age?);
-        // The write reaches the search 2 cycles later.
-        let h = age - SCAN_START_TO_LY + units_early + cc(self.double_speed(), 2);
-        Some(if h < 0 { -1 } else { (h + 1) / 2 })
-    }
-
     /// HBlank began.
     pub(super) const fn cgb_c_hblank(&mut self) {
         self.d.cgb_c.hblank_age = Some(0);
@@ -295,5 +237,65 @@ impl Ppu {
     /// The line's OAM scan began.
     pub(super) const fn cgb_c_scan_start(&mut self) {
         self.d.cgb_c.scan_age = Some(0);
+    }
+}
+
+impl Ppu {
+    /// Advances a half dot (after the timing unit): runs the WY checks.
+    pub(super) fn cgb_c_unit(&mut self) {
+        if !self.cgb_c_timing() {
+            return;
+        }
+        self.d.cgb_c.now += 1;
+        let ClockPosition { line, half_dot } = self.d.timing.position();
+        let h = i64::from(half_dot);
+        if h == 0 {
+            self.d.cgb_c.hblank_age = None;
+        }
+        if !self.d.timing.is_on() {
+            return;
+        }
+        // The WY checks at the end of a line: half an M-cycle before the
+        // line-end pulse against the line, at the VBlank latch's edge
+        // against the next one.
+        let ly = if h == i64::from(LINE_END_H) - 4 {
+            line
+        } else if h == i64::from(VBLANK_H) {
+            if line == LAST_LINE { 0 } else { line + 1 }
+        } else {
+            return;
+        };
+        let c = &mut self.d.cgb_c;
+        c.wy.settle(c.now);
+        c.lcdc.settle(c.now);
+        if ly != 0 && c.lcdc.val & LCDC_WIN_EN_B != 0 && c.wy.val == ly {
+            self.pace.window.wy_triggered = true;
+        }
+    }
+
+    /// OAM as CPU writes see it locked: for the next line only once LY has
+    /// changed.
+    pub(in crate::ppu) const fn cgb_c_oam_write_blocked(&self, pipeline: bool) -> bool {
+        if !self.core.cgb_c_timing() || !self.core.d.line_clock_valid() {
+            return pipeline;
+        }
+        pipeline && !matches!(self.pace.state(), State::LineOamWriteLock | State::LineLy)
+    }
+
+    /// The line cycle (dots since LY changed) after which the object search
+    /// sees an `OBJ_SIZE` write landing now, `units_early` before a read's
+    /// point; `-1` if it lands before the line. The search samples entry `i`
+    /// at line cycles `2 * i` and `2 * i + 1` (`objects.rs`).
+    pub(in crate::ppu) fn cgb_c_size_change_cycle(&self, units_early: i64) -> Option<i64> {
+        if matches!(
+            self.pace.state(),
+            State::LineOamWriteLock | State::LineLy | State::OamScanStart
+        ) {
+            return Some(-1);
+        }
+        let age = i64::from(self.d.cgb_c.scan_age?);
+        // The write reaches the search 2 cycles later.
+        let h = age - SCAN_START_TO_LY + units_early + cc(self.double_speed(), 2);
+        Some(if h < 0 { -1 } else { (h + 1) / 2 })
     }
 }

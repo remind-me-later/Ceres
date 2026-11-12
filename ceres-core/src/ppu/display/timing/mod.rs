@@ -34,7 +34,7 @@ use {
     crate::{
         interrupts::Interrupts,
         ppu::{
-            Ppu, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B, STAT_LYC_B,
+            PpuCore, STAT_IF_HBLANK_B, STAT_IF_LYC_B, STAT_IF_OAM_B, STAT_IF_VBLANK_B, STAT_LYC_B,
             STAT_MODE_B,
         },
     },
@@ -412,7 +412,7 @@ impl LcdTiming {
     }
 }
 
-impl Ppu {
+impl PpuCore {
     /// The CPU's access delays for the model and speed.
     const fn delays(&self) -> Delays {
         if !self.d.timing.phases.cgb {

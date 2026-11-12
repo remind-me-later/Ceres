@@ -120,7 +120,7 @@ CGB is left to check, since there is no netlist for it.
 
   The readable model draws `strikethrough`'s screenshot pixel for pixel, and
   passes all 16 of gambatte's DMG `late_sp*` ROMs.
-- **Ceres today:** the same latches (`y_bus` and `x_bus` in
+- **Ceres today:** the same latches (`OamLatches` in
   `ceres-core/src/ppu/display/objects/mod.rs`), on every model; on the DMG,
   since 2026-10-29, a sprite fetch during a DMA takes the DMA's byte as the
   netlist's does (`oam_read_fetch`), where it read the OAM pair at the

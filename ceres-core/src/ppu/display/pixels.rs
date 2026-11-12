@@ -9,13 +9,13 @@ use {
     crate::{
         CgbMode,
         ppu::{
-            LCDC_BG_EN_B, LCDC_OBJ_EN_B, PX_WIDTH, Ppu,
+            LCDC_BG_EN_B, LCDC_OBJ_EN_B, PX_WIDTH, PpuCore,
             color_palette::{GRAYSCALE_PALETTE, Rgb},
         },
     },
 };
 
-impl Ppu {
+impl PpuCore {
     /// The background FIFO's pixel (mode 3's loop popped it), mixed with the
     /// object FIFO's: the pixel for the LCD, if it is shown.
     pub(super) fn mixed_pixel(&mut self, fifo_item: Item, popped: Popped) -> Option<PixelOut> {

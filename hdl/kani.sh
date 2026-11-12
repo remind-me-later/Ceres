@@ -34,7 +34,9 @@
 #
 # A run is one `cargo kani` with KANI_JOBS harnesses at a time (2), under
 # a memory cap where systemd-run is there (KANI_MEMORY, 9G; no swap), on
-# KANI_CORES if given (taskset's list), with KANI_SOLVER (cadical).
+# KANI_CORES if given (taskset's list), with KANI_SOLVER (cadical). The
+# harnesses that need the cap to themselves (SOLO: the CPU's against the
+# netlist's core, 6.7 GB) run after the others, one at a time.
 # Without Kani's concrete playback: it multiplies a harness's memory, and
 # only a failing harness needs it, for its counterexample:
 #
@@ -49,6 +51,7 @@ RESULTS=$HDL/kani-results.tsv
 FAULTS=$HDL/kani-faults
 WT=${KANI_WORKTREE:-$ROOT-kani}
 JOBS=${KANI_JOBS:-2}
+SOLO=netlist_sm83_
 MEMORY=${KANI_MEMORY:-9G}
 SOLVER=${KANI_SOLVER:-cadical}
 LOGS=$WT/target/kani-logs
@@ -163,17 +166,19 @@ verdicts() {
         }' "$1"
 }
 
-# Runs the harnesses of the standard input in the worktree; prints
-# "name verdict seconds" for each that finished.
+# Runs the harnesses of the standard input in the worktree, $1 at a time
+# (JOBS if not given), logging to run$2.log; prints "name verdict seconds"
+# for each that finished.
 kani() {
+    at_once=${1:-$JOBS}
+    log=$LOGS/run${2:-}.log
     mkdir -p "$LOGS"
-    log=$LOGS/run.log
     set --
     while read -r name; do
         set -- "$@" --harness "$name"
     done
     [ $# -gt 0 ] || return 0
-    set -- cargo kani -p ceres-core "$@" --exact -j "$JOBS" \
+    set -- cargo kani -p ceres-core "$@" --exact -j "$at_once" \
         --output-format terse --solver "$SOLVER"
     if [ -n "${KANI_CORES:-}" ]; then
         set -- taskset -c "$KANI_CORES" "$@"
@@ -189,7 +194,10 @@ kani() {
 run_and_record() {
     hash=$1
     failed=0
-    kani >"$LOGS.verdicts" 2>/dev/null || true
+    {
+        grep -v -e "$SOLO" "$LOGS/todo" | kani
+        grep -e "$SOLO" "$LOGS/todo" | kani 1 -solo
+    } >"$LOGS.verdicts" 2>/dev/null || true
     while read -r name verdict seconds; do
         record "$name" "$hash" "$verdict" "$seconds"
         echo "$verdict $name (${seconds}s)"
@@ -199,7 +207,7 @@ run_and_record() {
     # memory, or the build failed).
     while read -r name; do
         if ! grep -q "^$name " "$LOGS.verdicts"; then
-            echo "no verdict $name (see $LOGS/run.log)"
+            echo "no verdict $name (see $LOGS/run.log or run-solo.log)"
             failed=1
         fi
     done <"$LOGS/todo"

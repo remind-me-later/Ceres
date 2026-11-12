@@ -4,7 +4,7 @@
 //! the pixel pipeline did: the pixels it pushed and the tile fetches it began.
 
 use {
-    super::{LCDC_ON_B, Ppu},
+    super::{LCDC_ON_B, PpuCore},
     crate::interrupts::Interrupts,
     alloc::vec::Vec,
     core::mem,
@@ -59,7 +59,7 @@ pub(super) struct Trace {
     lcd_requests: u32,
 }
 
-impl Ppu {
+impl PpuCore {
     /// Where the display is, for a debugger.
     pub(crate) const fn debug_state(&self) -> crate::PpuState {
         let clock = self.timing_position();

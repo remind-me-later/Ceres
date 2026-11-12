@@ -363,7 +363,7 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     pub const fn vram_bank(&self) -> u8 {
-        self.ppu.vram().bank()
+        self.ppu.core().vram().bank()
     }
 
     /// The cartridge RAM bank mapped at 0xA000-0xBFFF.
@@ -378,7 +378,7 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     pub const fn read_vram_direct(&self, addr: u16) -> u8 {
-        self.ppu.vram().read(addr)
+        self.ppu.core().vram().read(addr)
     }
 
     /// The printable bytes sent through the serial port (Blargg's tests print

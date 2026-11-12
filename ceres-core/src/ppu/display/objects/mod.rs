@@ -11,7 +11,7 @@ use {
         memory::{DmaPhase, OAM_START},
         ppu::{
             ATTR_BANK_B, ATTR_Y_FLIP_B, LCDC_OBJ_EN_B, LCDC_OBJ_SIZE_B, LCDC_ON_B, Oam, Ppu,
-            oam_bug::NO_ROW,
+            PpuCore, oam_bug::NO_ROW,
         },
     },
 };
@@ -41,16 +41,34 @@ pub(super) struct ObjectSearch {
     pub index: u8,
     /// OAM row the PPU is reading (DMG OAM bug); `NO_ROW` when none.
     pub accessed_oam_row: u8,
-    /// The OAM's two output latches: the last pair of bytes the PPU read,
-    /// an entry's Y and X from the search, or an object's tile and
-    /// attributes from the fetch. While a DMA runs the search does not read
-    /// OAM and compares each entry with these.
-    // @fact oam-scan-during-dma
-    pub y_bus: u8,
-    pub x_bus: u8,
     /// A CGB-C `OBJ_SIZE` write during this line's search (see
     /// `cgb_obj_size_write`).
     pub size_change: Option<SizeChange>,
+}
+
+/// The OAM's two output latches: the last pair of bytes the PPU read, an
+/// entry's Y and X from the search, or an object's tile and attributes from
+/// the fetch. While a DMA runs the search does not read OAM and compares
+/// each entry with these.
+// @fact oam-scan-during-dma
+#[derive(Clone, Copy, Default)]
+pub(super) struct OamLatches {
+    pub y: u8,
+    pub x: u8,
+}
+
+impl OamLatches {
+    /// The search reads an entry: the latches take its Y and X (`read`),
+    /// unless an OAM DMA hides OAM from the search (`None`), and the search
+    /// compares what they hold.
+    // @fact oam-scan-during-dma
+    pub(super) const fn latch(&mut self, read: Option<(u8, u8)>) -> (u8, u8) {
+        if let Some((y, x)) = read {
+            self.y = y;
+            self.x = x;
+        }
+        (self.y, self.x)
+    }
 }
 
 /// `OBJ_SIZE` changed while the CGB-C was searching `line`: an entry samples
@@ -104,18 +122,6 @@ impl ObjectSearch {
         self.count += 1;
     }
 
-    /// The search reads an entry: the OAM's output latches take its Y and X
-    /// (`read`), unless an OAM DMA hides OAM from the search (`None`), and
-    /// the search compares what they hold.
-    // @fact oam-scan-during-dma
-    pub(super) const fn latch(&mut self, read: Option<(u8, u8)>) -> (u8, u8) {
-        if let Some((y, x)) = read {
-            self.y_bus = y;
-            self.x_bus = x;
-        }
-        (self.y_bus, self.x_bus)
-    }
-
     /// The next object to draw, if any.
     pub(super) fn next(&self) -> Option<Entry> {
         self.count.checked_sub(1).map(|i| self.entries[i])
@@ -135,14 +141,13 @@ impl Default for ObjectSearch {
             entries: [Entry::default(); MAX_OBJECTS_PER_LINE],
             index: 0,
             accessed_oam_row: NO_ROW,
-            y_bus: 0,
-            x_bus: 0,
             size_change: None,
         }
     }
 }
 
-/// The fetch of an object's tile in mode 3.
+/// What the fetch of an object's tile in mode 3 reads (whether one runs is
+/// the display's pace: `Pace::fetching_object`).
 #[derive(Clone, Default)]
 pub(super) struct ObjectFetch {
     /// The tile number and the attributes read from the OAM.
@@ -150,14 +155,12 @@ pub(super) struct ObjectFetch {
     pub flags: u8,
     pub line_address: u16,
     pub data: [u8; 2],
-    pub active: bool,
-    pub aborted: bool,
     /// `OBJ_SIZE` as the object fetch sees it (it can land a dot before the
     /// object search sees it).
     pub size_16: bool,
 }
 
-impl Ppu {
+impl PpuCore {
     /// OAM as the PPU reads it (SameBoy's `oam_read`): blocked in STOP mode,
     /// and while a DMA runs it sees the byte pair the DMA is writing.
     pub(super) fn oam_read(&self, addr: u16) -> u8 {
@@ -240,101 +243,6 @@ impl Ppu {
         (!self.d.bus.cpu_idle || !self.is_cgb_hardware()) && self.search_dma_runs()
     }
 
-    pub(super) fn add_object_from_index(&mut self, index: u8) {
-        let base = u16::from(index) * Oam::ENTRY_SIZE;
-        let dma_active = self.search_dma_phase() != DmaPhase::Idle;
-        let read = (!self.dma_hides_object_search()).then(|| {
-            (
-                self.oam_read(base + Oam::ENTRY_Y),
-                self.oam_read(base + Oam::ENTRY_X),
-            )
-        });
-        let (y, x) = self.d.objs.latch(read);
-
-        if self.d.objs.count == MAX_OBJECTS_PER_LINE {
-            return;
-        }
-
-        // A halted DMA blocks the object search on the CGBs before the CGB-E
-        // (like SameBoy, which notes that units before the CGB vary; the
-        // DMG-CPU B's netlist compares the latches, above).
-        // @fact oam-scan-during-halted-dma
-        if dma_active
-            && self.d.bus.cpu_idle
-            && self.is_cgb_hardware()
-            && !matches!(self.model, Model::CgbE | Model::Agb)
-        {
-            return;
-        }
-
-        if self.d.bus.oam_ppu_blocked {
-            return;
-        }
-
-        let height_16 = match self.d.objs.size_change {
-            Some(c) if c.line == self.d.current_line => c.large(index),
-            _ => self.lcdc & LCDC_OBJ_SIZE_B != 0,
-        };
-        self.d
-            .objs
-            .consider(index, x, y, on_line(y, self.d.current_line, height_16));
-    }
-
-    fn remove_object(&mut self, index: u8) {
-        let objs = &mut self.d.objs;
-        let n = objs.count;
-        let Some(j) = objs.entries[..n].iter().position(|e| e.index == index) else {
-            return;
-        };
-        objs.entries.copy_within(j + 1..n, j);
-        objs.count -= 1;
-    }
-
-    /// A CGB-C write that changes `OBJ_SIZE`, `units_early` before the point a
-    /// read in the same cycle would see. The search samples the size later
-    /// than this PPU looks at each entry (gambatte's `OamReader`), so the
-    /// entries already searched are looked at again.
-    pub(crate) fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
-        let new = val & LCDC_OBJ_SIZE_B != 0;
-        if !self.cgb_c_timing()
-            || self.lcdc & LCDC_ON_B == 0
-            || (self.lcdc & LCDC_OBJ_SIZE_B != 0) == new
-        {
-            return;
-        }
-        let searched = match self.d.state() {
-            State::OamScanNext => self.d.objs.index,
-            State::OamScanObject => self.d.objs.index + 1,
-            State::Mode3PalettesLock | State::Mode3Start => Oam::OBJECTS,
-            State::LineOamWriteLock | State::LineLy | State::OamScanStart => 0,
-            _ => return,
-        };
-        let line = self.d.current_line;
-        let Some(lc) = self.cgb_c_size_change_cycle(units_early) else {
-            return;
-        };
-        let change = SizeChange { line, lc, new };
-        self.d.objs.size_change = Some(change);
-        let old = !new;
-        for index in 0..searched {
-            let large = change.large(index);
-            if large == old {
-                continue;
-            }
-            let base = u16::from(index) * Oam::ENTRY_SIZE;
-            let y = self.oam_read(base + Oam::ENTRY_Y);
-            let x = self.oam_read(base + Oam::ENTRY_X);
-            match (on_line(y, line, old), on_line(y, line, large)) {
-                (false, true) => self.d.objs.consider(index, x, y, true),
-                (true, false) => self.remove_object(index),
-                _ => {}
-            }
-        }
-        if searched == Oam::OBJECTS {
-            self.d.objs.found = self.d.objs.count;
-        }
-    }
-
     pub(super) fn object_line_address(&self, y: u8, tile: u8, flags: u8) -> u16 {
         let height_16 = self.d.obj_fetch.size_16;
         let mut tile_y = self.d.current_line.wrapping_sub(y) & if height_16 { 0xF } else { 7 };
@@ -360,17 +268,115 @@ impl Ppu {
     pub(crate) const fn set_obj_size_fetch(&mut self, big: bool) {
         self.d.obj_fetch.size_16 = big;
     }
+}
+
+impl Ppu {
+    pub(super) fn add_object_from_index(&mut self, index: u8) {
+        let base = u16::from(index) * Oam::ENTRY_SIZE;
+        let dma_active = self.search_dma_phase() != DmaPhase::Idle;
+        let read = (!self.dma_hides_object_search()).then(|| {
+            (
+                self.oam_read(base + Oam::ENTRY_Y),
+                self.oam_read(base + Oam::ENTRY_X),
+            )
+        });
+        let (y, x) = self.d.oam_latches.latch(read);
+
+        if self.pace.objs.count == MAX_OBJECTS_PER_LINE {
+            return;
+        }
+
+        // A halted DMA blocks the object search on the CGBs before the CGB-E
+        // (like SameBoy, which notes that units before the CGB vary; the
+        // DMG-CPU B's netlist compares the latches, above).
+        // @fact oam-scan-during-halted-dma
+        if dma_active
+            && self.d.bus.cpu_idle
+            && self.is_cgb_hardware()
+            && !matches!(self.model, Model::CgbE | Model::Agb)
+        {
+            return;
+        }
+
+        if self.d.bus.oam_ppu_blocked {
+            return;
+        }
+
+        let line = self.d.current_line;
+        let height_16 = match self.pace.objs.size_change {
+            Some(c) if c.line == line => c.large(index),
+            _ => self.lcdc & LCDC_OBJ_SIZE_B != 0,
+        };
+        self.pace
+            .objs
+            .consider(index, x, y, on_line(y, line, height_16));
+    }
+
+    fn remove_object(&mut self, index: u8) {
+        let objs = &mut self.pace.objs;
+        let n = objs.count;
+        let Some(j) = objs.entries[..n].iter().position(|e| e.index == index) else {
+            return;
+        };
+        objs.entries.copy_within(j + 1..n, j);
+        objs.count -= 1;
+    }
+
+    /// A CGB-C write that changes `OBJ_SIZE`, `units_early` before the point a
+    /// read in the same cycle would see. The search samples the size later
+    /// than this PPU looks at each entry (gambatte's `OamReader`), so the
+    /// entries already searched are looked at again.
+    pub(crate) fn cgb_obj_size_write(&mut self, val: u8, units_early: i64) {
+        let new = val & LCDC_OBJ_SIZE_B != 0;
+        if !self.cgb_c_timing()
+            || self.lcdc & LCDC_ON_B == 0
+            || (self.lcdc & LCDC_OBJ_SIZE_B != 0) == new
+        {
+            return;
+        }
+        let searched = match self.pace.state() {
+            State::OamScanNext => self.pace.objs.index,
+            State::OamScanObject => self.pace.objs.index + 1,
+            State::Mode3PalettesLock | State::Mode3Start => Oam::OBJECTS,
+            State::LineOamWriteLock | State::LineLy | State::OamScanStart => 0,
+            _ => return,
+        };
+        let line = self.d.current_line;
+        let Some(lc) = self.cgb_c_size_change_cycle(units_early) else {
+            return;
+        };
+        let change = SizeChange { line, lc, new };
+        self.pace.objs.size_change = Some(change);
+        let old = !new;
+        for index in 0..searched {
+            let large = change.large(index);
+            if large == old {
+                continue;
+            }
+            let base = u16::from(index) * Oam::ENTRY_SIZE;
+            let y = self.oam_read(base + Oam::ENTRY_Y);
+            let x = self.oam_read(base + Oam::ENTRY_X);
+            match (on_line(y, line, old), on_line(y, line, large)) {
+                (false, true) => self.pace.objs.consider(index, x, y, true),
+                (true, false) => self.remove_object(index),
+                _ => {}
+            }
+        }
+        if searched == Oam::OBJECTS {
+            self.pace.objs.found = self.pace.objs.count;
+        }
+    }
 
     /// DMG: disabling objects while an object is being fetched aborts it.
     pub(in crate::ppu) const fn abort_object_fetch_on_obj_disable(&mut self, val: u8) {
-        if !self.is_cgb_hardware()
-            && self.lcdc & LCDC_OBJ_EN_B != 0
+        if !self.core.is_cgb_hardware()
+            && self.core.lcdc & LCDC_OBJ_EN_B != 0
             && val & LCDC_OBJ_EN_B == 0
-            && self.d.obj_fetch.active
+            && self.pace.fetching_object
         {
-            self.d.cfl -= self.d.wait - 1;
-            self.d.wait = 1;
-            self.d.obj_fetch.aborted = true;
+            self.pace.cfl -= self.pace.wait - 1;
+            self.pace.wait = 1;
+            self.pace.object_fetch_aborted = true;
         }
     }
 }

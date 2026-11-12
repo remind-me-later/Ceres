@@ -90,7 +90,7 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     pub const fn ppu_state(&self) -> PpuState {
-        self.ppu.debug_state()
+        self.ppu.core().debug_state()
     }
 
     #[must_use]

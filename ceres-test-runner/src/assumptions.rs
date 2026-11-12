@@ -28,6 +28,8 @@ use {
 pub enum Evidence {
     /// A harness proves it (`@discharges <id>`).
     Proved,
+    /// Ceres's types leave no other way: the compiler checks it.
+    Typed,
     /// A transcription of the readable model, which the replay of the
     /// model's traces checks (ceres-netlist's `netlist_replay`).
     Replayed,
@@ -44,6 +46,7 @@ impl Evidence {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Proved => "proved",
+            Self::Typed => "typed",
             Self::Replayed => "replayed",
             Self::Measured => "measured",
             Self::Fact => "fact",

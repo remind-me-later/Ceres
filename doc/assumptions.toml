@@ -12,8 +12,9 @@
 # Fields:
 #
 # - title: the assumption, in a line.
-# - evidence: proved (a harness discharges it), replayed (a transcription,
-#   which ceres-netlist's netlist_replay checks against the model's traces),
+# - evidence: proved (a harness discharges it), typed (ceres's types leave
+#   no other way: the compiler checks it), replayed (a transcription, which
+#   ceres-netlist's netlist_replay checks against the model's traces),
 #   measured (on the model's traces, ceres's runs or hardware), fact (ceres
 #   departs from the netlist there, as the facts record) or open (not known
 #   yet: the proofs leave the case out).
@@ -173,6 +174,11 @@ evidence = "proved"
 [mode3-window-start]
 title = "On a line where the window is armed (LCDC's bit 5 set, WY matched in the frame on both sides, WX held between 7 and 165) and the objects are off, ceres's mode 3 loop and render's pipeline stay related dot by dot from ceres's window check at WX, through the nine dots of the window's start and inside the window, and render's mode 0 rises a half dot after ceres's loop ends mode 3"
 evidence = "proved"
+
+[mode3-hooks-keep-pace]
+title = "What ceres's mode 3 loop asks of the PPU (its hooks: the fetchers' reads, the object's row, the pixels, the HBlank source) leaves the display's pace as it was, and changes of what the loop reads back only the tile the fetcher holds"
+evidence = "typed"
+how = "The hooks are PpuCore's (`impl Mode3Ppu for PpuCore`), and get the pace as `&Pace`: the pace is Ppu's, beside its core, and the loop takes the two apart (`mode3(&mut self.core, &mut self.pace, state)`). Besides the pace, the loop reads LCDC's object and window bits, WX, the mixer's SCX and the hardware, which no hook writes, and what the fetcher read (`Mode3Ppu::fetcher`), which the proofs' fetcher read and object push set to anything (`check::Mode3Loop`)."
 
 [resync-only-in-line-0]
 title = "The pixel pipeline's line-end resync moves ceres's clock only in line 0 after the LCD is turned on (895 to 893); on the other lines it finds 893"

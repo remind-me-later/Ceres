@@ -2588,20 +2588,20 @@ def memory.dma.check.step_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::LINE_LENGTH]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 54:0-54:40 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 57:0-57:40 -/
 @[global_simps, irreducible] def ppu.display.LINE_LENGTH : Std.I32 := 456#i32
 
 /-- [ceres_core::ppu::PX_HEIGHT]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 21:0-21:30
+    Source: 'ceres-core/src/ppu/mod.rs', lines 26:0-26:30
     Visibility: public -/
 @[global_simps, irreducible] def ppu.PX_HEIGHT : Std.U8 := 144#u8
 
 /-- [ceres_core::ppu::display::LINES]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 56:0-56:39 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 59:0-59:39 -/
 @[global_simps, irreducible] def ppu.display.LINES : Std.U8 := ppu.PX_HEIGHT
 
 /-- [ceres_core::ppu::display::LAST_LINE]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 58:0-58:37 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 61:0-61:37 -/
 @[global_simps, irreducible] def ppu.display.LAST_LINE : Std.U8 := 153#u8
 
 /-- [ceres_core::ppu::display::timing::check::LCDC_EARLY]
@@ -2635,23 +2635,23 @@ def ppu.display.timing.check.SKEWED_LAST : Result Std.I32 := do
   i - 7#i32
 
 /-- [ceres_core::ppu::STAT_LYC_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 54:0-54:38 -/
+    Source: 'ceres-core/src/ppu/mod.rs', lines 59:0-59:38 -/
 @[global_simps, irreducible] def ppu.STAT_LYC_B : Std.U8 := 4#u8
 
 /-- [ceres_core::ppu::STAT_IF_LYC_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 58:0-58:42 -/
+    Source: 'ceres-core/src/ppu/mod.rs', lines 63:0-63:42 -/
 @[global_simps, irreducible] def ppu.STAT_IF_LYC_B : Std.U8 := 64#u8
 
 /-- [ceres_core::ppu::STAT_IF_OAM_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 57:0-57:42 -/
+    Source: 'ceres-core/src/ppu/mod.rs', lines 62:0-62:42 -/
 @[global_simps, irreducible] def ppu.STAT_IF_OAM_B : Std.U8 := 32#u8
 
 /-- [ceres_core::ppu::STAT_IF_VBLANK_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 56:0-56:45 -/
+    Source: 'ceres-core/src/ppu/mod.rs', lines 61:0-61:45 -/
 @[global_simps, irreducible] def ppu.STAT_IF_VBLANK_B : Std.U8 := 16#u8
 
 /-- [ceres_core::ppu::STAT_IF_HBLANK_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 55:0-55:44 -/
+    Source: 'ceres-core/src/ppu/mod.rs', lines 60:0-60:44 -/
 @[global_simps, irreducible] def ppu.STAT_IF_HBLANK_B : Std.U8 := 8#u8
 
 /-- [ceres_core::ppu::display::timing::STAT_ENABLES]
@@ -3024,7 +3024,7 @@ def ppu.display.timing.check.mode3_may_end
     ppu.display.timing.check.MODE3_LAST_LX))
 
 /-- [ceres_core::ppu::LCDC_ON_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 36:0-36:38 -/
+    Source: 'ceres-core/src/ppu/mod.rs', lines 41:0-41:38 -/
 @[global_simps, irreducible] def ppu.LCDC_ON_B : Std.U8 := 128#u8
 
 /-- [ceres_core::ppu::display::timing::check::outside]:
@@ -3561,7 +3561,7 @@ def ppu.display.timing.LcdTiming.write_stat
     else ok (glitch, self1)
 
 /-- [ceres_core::ppu::STAT_MODE_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 53:0-53:39 -/
+    Source: 'ceres-core/src/ppu/mod.rs', lines 58:0-58:39 -/
 @[global_simps, irreducible] def ppu.STAT_MODE_B : Std.U8 := 3#u8
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_mode]:

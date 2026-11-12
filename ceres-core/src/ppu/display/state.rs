@@ -26,10 +26,11 @@ const HBLANK_HDMA_DELAY: u8 = 1;
 /// (SameBoy's 37).
 const OAM_SCAN_UNLOCK_INDEX: u8 = 37;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]
 pub(crate) enum State {
     // The first line after the LCD is turned on: no OAM scan.
+    #[default]
     LcdOn = 0,
     FirstLine = 23,
     FirstLineOamLock = 2,
@@ -89,11 +90,11 @@ pub(crate) enum State {
 impl Ppu {
     /// Runs the code of the states whose sleep ended, until the next sleep.
     pub(super) fn step_state_machine(&mut self, ints: &mut Interrupts) {
-        if !self.d.wake() {
+        if !self.pace.wake() {
             return;
         }
 
-        let mut state = self.d.state;
+        let mut state = self.pace.state;
         loop {
             let next = match state {
                 State::LcdOn
@@ -119,7 +120,10 @@ impl Ppu {
                 | State::Mode3ObjectLow
                 | State::Mode3ObjectHigh
                 | State::Mode3Pixel => {
-                    if matches!(mode3(self, state), Mode3Flow::Done) {
+                    if matches!(
+                        mode3(&mut self.core, &mut self.pace, state),
+                        Mode3Flow::Done
+                    ) {
                         self.mode3_done();
                     }
                     None
@@ -161,8 +165,8 @@ impl Ppu {
             self.wy_check();
         }
         self.d.cpu.oam_write_blocked = self.is_cgb_hardware() && !self.double_speed();
-        self.d.objs.accessed_oam_row = 0;
-        self.d.objs.size_change = None;
+        self.pace.objs.accessed_oam_row = 0;
+        self.pace.objs.size_change = None;
         self.sleep(State::LineOamWriteLock, 2);
     }
 
@@ -179,28 +183,28 @@ impl Ppu {
             }
             State::FirstLine => {
                 self.d.current_line = 0;
-                self.d.window.line = Window::NO_LINE;
-                self.d.window.wy_triggered = false;
-                self.d.bg.restart_line();
+                self.pace.window.line = Window::NO_LINE;
+                self.pace.window.wy_triggered = false;
+                self.pace.bg.restart_line();
                 self.d.ly_for_comparison = 0;
                 self.stat &= !STAT_MODE_B;
                 self.d.cpu.unlock_all();
-                self.d.cfl = MODE2_LENGTH - 4;
+                self.pace.cfl = MODE2_LENGTH - 4;
                 self.d.line_clock = 0;
                 self.sleep(State::FirstLineOamLock, MODE2_LENGTH - 4);
                 None
             }
             State::FirstLineOamLock => {
                 self.d.cpu.oam_write_blocked = true;
-                self.d.cfl += 2;
+                self.pace.cfl += 2;
                 self.sleep(State::FirstLineMode3, 2);
                 None
             }
             State::FirstLineMode3 => {
-                self.d.objs.count = 0;
-                self.d.objs.found = 0;
+                self.pace.objs.count = 0;
+                self.pace.objs.found = 0;
                 // Mode 0 is shorter on the first line 0.
-                self.d.cfl += 8;
+                self.pace.cfl += 8;
                 self.stat = (self.stat & !STAT_MODE_B) | 3;
                 self.d.cpu.oam_write_blocked = true;
                 self.d.cpu.oam_read_blocked = true;
@@ -218,8 +222,8 @@ impl Ppu {
             State::FirstLineVramLock => {
                 self.d.cpu.vram_read_blocked = true;
                 self.d.cpu.vram_write_blocked = true;
-                self.d.window.wx_triggered = false;
-                self.d.window.wx_166_carry = false;
+                self.pace.window.wx_triggered = false;
+                self.pace.window.wx_166_carry = false;
                 self.mode3_start();
                 Some(State::Mode3)
             }
@@ -256,37 +260,37 @@ impl Ppu {
                 if !self.cgb_c_timing() {
                     self.wy_check();
                 }
-                self.d.objs.count = 0;
-                self.d.objs.found = 0;
-                self.d.objs.index = 0;
+                self.pace.objs.count = 0;
+                self.pace.objs.found = 0;
+                self.pace.objs.index = 0;
                 Some(State::OamScanNext)
             }
             State::OamScanNext => {
                 // The CGB adds the object before the sleep.
                 if self.is_cgb_hardware() {
-                    self.add_object_from_index(self.d.objs.index);
+                    self.add_object_from_index(self.pace.objs.index);
                 }
                 self.sleep(State::OamScanObject, 2);
                 None
             }
             State::OamScanObject => {
                 if !self.is_cgb_hardware() {
-                    self.add_object_from_index(self.d.objs.index);
-                    self.d.objs.accessed_oam_row = (self.d.objs.index & !1) * 4 + 8;
+                    self.add_object_from_index(self.pace.objs.index);
+                    self.pace.objs.accessed_oam_row = (self.pace.objs.index & !1) * 4 + 8;
                 }
-                if self.d.objs.index == OAM_SCAN_UNLOCK_INDEX {
+                if self.pace.objs.index == OAM_SCAN_UNLOCK_INDEX {
                     self.d.cpu.vram_read_blocked = !self.is_cgb_hardware();
                     self.d.cpu.vram_write_blocked = false;
                     self.d.cpu.cgb_palettes_blocked = false;
                     self.d.cpu.oam_write_blocked = self.is_cgb_hardware();
                 }
-                self.d.objs.index += 1;
-                if self.d.objs.index < Oam::OBJECTS {
+                self.pace.objs.index += 1;
+                if self.pace.objs.index < Oam::OBJECTS {
                     return Some(State::OamScanNext);
                 }
-                self.d.cfl = MODE2_LENGTH + 4;
-                self.d.objs.accessed_oam_row = NO_ROW;
-                self.d.objs.found = self.d.objs.count;
+                self.pace.cfl = MODE2_LENGTH + 4;
+                self.pace.objs.accessed_oam_row = NO_ROW;
+                self.pace.objs.found = self.pace.objs.count;
                 self.stat = (self.stat & !STAT_MODE_B) | 3;
                 self.d.cpu.vram_read_blocked = true;
                 self.d.cpu.vram_write_blocked = true;
@@ -329,12 +333,12 @@ impl Ppu {
             }
             State::HBlankPalettesUnlock => {
                 self.d.cpu.cgb_palettes_blocked = false;
-                if self.d.cfl > LINE_LENGTH - 2 {
-                    self.d.cfl = 0;
+                if self.pace.cfl > LINE_LENGTH - 2 {
+                    self.pace.cfl = 0;
                     self.sleep(State::LongLineEnd, LINE_LENGTH);
                 } else {
-                    let rest = LINE_LENGTH - self.d.cfl - 2;
-                    self.d.cfl = 0;
+                    let rest = LINE_LENGTH - self.pace.cfl - 2;
+                    self.pace.cfl = 0;
                     self.sleep(State::LineEnd, rest);
                 }
                 None
@@ -342,27 +346,28 @@ impl Ppu {
             State::LongLineEnd | State::Mode3Abort => {
                 self.d.line_clock_valid = false;
                 self.fill_desynced_line();
-                self.d.objs.count = self.d.objs.found;
+                self.pace.objs.count = self.pace.objs.found;
                 self.d.current_line += 1;
                 self.wy_check();
-                self.d.cfl = 0;
+                self.pace.cfl = 0;
                 if self.d.current_line != LINES {
-                    self.d.cfl = 2;
+                    self.pace.cfl = 2;
                     self.sleep(State::AbortedLineStart, 2);
                     return None;
                 }
-                self.d.bg.restart_line();
+                self.pace.bg.restart_line();
                 Some(State::VBlankLine)
             }
             State::AbortedLineStart => {
                 self.ly = self.d.current_line;
-                self.d.bg.position = pos(-15);
+                self.pace.bg.position = pos(-15);
                 self.mode3_start();
                 Some(State::Mode3)
             }
             State::LineEnd => {
-                self.timing_line_end(self.d.current_line);
-                self.d.cfl = 0;
+                let line = self.d.current_line;
+                self.timing_line_end(line);
+                self.pace.cfl = 0;
                 self.d.line_clock = 0;
                 self.d.line_clock_valid = true;
                 self.sleep(State::NextLine, 2);
@@ -484,8 +489,8 @@ impl Ppu {
             State::Line153LycGlitch => self.sleep(State::FrameEnd, LINE_LENGTH - 24),
             State::FrameEnd => {
                 self.d.current_line = 0;
-                self.d.window.wy_triggered = false;
-                self.d.window.line0_wy_countdown = if self.double_speed() {
+                self.pace.window.wy_triggered = false;
+                self.pace.window.line0_wy_countdown = if self.double_speed() {
                     8
                 } else if self.is_cgb_hardware() {
                     7

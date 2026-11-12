@@ -1,4 +1,4 @@
-use crate::ppu::{LCDC_ON_B, Ppu};
+use crate::ppu::{LCDC_ON_B, PpuCore};
 
 pub(crate) struct Oam {
     bytes: [u8; Self::SIZE as usize],
@@ -55,7 +55,7 @@ impl Oam {
     }
 }
 
-impl Ppu {
+impl PpuCore {
     #[must_use]
     pub(crate) const fn oam(&self) -> &Oam {
         &self.oam

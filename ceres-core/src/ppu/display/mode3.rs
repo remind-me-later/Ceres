@@ -2,12 +2,17 @@
 
 use {
     super::{
-        Display, LINES, background::Popped, fetcher::FetcherStep, fifo::Item, model_ge_cgb_d,
-        state::State, window::Window,
+        LINES, Pace,
+        background::Popped,
+        fetcher::{Fetcher, FetcherStep},
+        fifo::Item,
+        model_ge_cgb_d,
+        state::State,
+        window::Window,
     },
     crate::ppu::{
         ATTR_CGB_PALETTE, ATTR_DMG_PALETTE_B, ATTR_PRIORITY_B, ATTR_X_FLIP_B, LCDC_OBJ_EN_B,
-        LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, STAT_MODE_B,
+        LCDC_WIN_EN_B, Oam, PX_WIDTH, Ppu, PpuCore, STAT_MODE_B,
     },
     core::mem,
 };
@@ -39,13 +44,13 @@ enum Step {
     AfterPixel,
 }
 
-/// What mode 3's loop asks of the PPU besides the display's state: the
-/// window, the fetchers' reads, the object's row and the pixels. `Ppu` does
-/// them; the proofs against the netlist (`background::check`) run the loop
-/// with the window idle and nothing read.
+/// What mode 3's loop asks of the PPU besides the display's pace, which
+/// the loop changes: the registers it reads, the fetchers' reads, the
+/// object's row and the pixels. The hooks read the pace and cannot change
+/// it: `PpuCore` does them, and the pace is not the core's (`Ppu::pace`).
+/// The proofs against the netlist (`background::check`) run the loop with
+/// hooks that only change what the fetcher read, to anything.
 pub(super) trait Mode3Ppu {
-    /// The display's state.
-    fn d(&mut self) -> &mut Display;
     /// The objects are drawn (LCDC's bit 1, always on the CGB).
     fn objects_enabled(&self) -> bool;
     /// SCX as the pixel mixer sees it.
@@ -56,33 +61,35 @@ pub(super) trait Mode3Ppu {
     fn wx(&self) -> u8;
     /// CGB hardware (its window differs from the DMG's).
     fn cgb_hardware(&self) -> bool;
+    /// What the tile fetcher read.
+    fn fetcher(&self) -> &Fetcher;
     /// The tile fetcher's read of this dot.
-    fn fetcher_read(&mut self);
+    fn fetcher_read(&mut self, pace: &Pace);
     /// The object fetch's reads: its attributes, its row's two bytes.
-    fn read_object_attributes(&mut self);
-    fn read_object_low(&mut self);
-    fn read_object_high(&mut self);
+    fn read_object_attributes(&mut self, pace: &Pace);
+    fn read_object_low(&mut self, pace: &Pace);
+    fn read_object_high(&mut self, pace: &Pace);
     /// The fetched object's row onto the object FIFO.
-    fn push_object(&mut self);
+    fn push_object(&mut self, pace: &Pace);
     /// The background FIFO's pixel, mixed and drawn.
     fn mix_pixel(&mut self, item: Item, popped: Popped);
     /// The HBlank interrupt's source, before the STAT mode (`timing.rs`).
     fn signal_mode3_end(&mut self);
+}
 
-    /// The window's part of the fetch first (`Display::window_before_fetch`),
-    /// then the tile fetcher's read and its step; the window's column steps
-    /// with its tile's last read.
-    fn advance_fetcher(&mut self) {
-        let (enabled, wx, hw) = (self.window_enabled(), self.wx(), self.cgb_hardware());
-        self.d().window_before_fetch(enabled, wx, hw);
-        self.fetcher_read();
-        let d = self.d();
-        let (cgb_wx_glitch, insertion_wx) = d.fetcher_glitches(enabled, wx, hw);
-        if matches!(d.bg.fetcher.step, FetcherStep::DataHighT2) && d.window.wx_triggered {
-            d.window.tile_x = (d.window.tile_x + 1) & 0x1F;
-        }
-        d.bg.advance(cgb_wx_glitch, insertion_wx);
+/// The window's part of the fetch first (`Pace::window_before_fetch`), then
+/// the tile fetcher's read and its step, which pushes what it read; the
+/// window's column steps with its tile's last read.
+fn advance_fetcher<P: Mode3Ppu>(p: &mut P, pace: &mut Pace) {
+    let (enabled, wx, hw) = (p.window_enabled(), p.wx(), p.cgb_hardware());
+    pace.window_before_fetch(enabled, wx, hw);
+    p.fetcher_read(pace);
+    let (cgb_wx_glitch, insertion_wx) = pace.fetcher_glitches(enabled, wx, hw);
+    if matches!(pace.bg.step, FetcherStep::DataHighT2) && pace.window.wx_triggered {
+        pace.window.tile_x = (pace.window.tile_x + 1) & 0x1F;
     }
+    pace.bg
+        .advance(cgb_wx_glitch, insertion_wx, p.fetcher().row());
 }
 
 /// Runs the mode 3 loop from `resume` (the sleep that ended) until it sleeps
@@ -91,25 +98,25 @@ pub(super) trait Mode3Ppu {
     clippy::too_many_lines,
     reason = "SameBoy's mode 3 loop: one arm per step"
 )]
-pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
+pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> Mode3Flow {
     // On the DMG, disabling objects aborts an object fetch (see
     // `abort_object_fetch_on_obj_disable`).
-    let unless_aborted = |ppu: &mut P, step| {
-        if ppu.d().obj_fetch.aborted {
-            Step::OutputPixel
-        } else {
-            step
-        }
+    let unless_aborted = |aborted: bool, step| {
+        if aborted { Step::OutputPixel } else { step }
     };
     let mut step = match resume {
         State::Mode3WindowDelay => {
-            p.d().mode3_window_activated();
+            pace.mode3_window_activated();
             Step::Objects
         }
-        State::Mode3ObjectWait => unless_aborted(p, Step::WaitForTile),
-        State::Mode3ObjectFetch => unless_aborted(p, Step::ReadObjectAttributes),
-        State::Mode3ObjectAttributes => unless_aborted(p, Step::ReadObjectLow),
-        State::Mode3ObjectLow => unless_aborted(p, Step::ReadObjectHigh),
+        State::Mode3ObjectWait => unless_aborted(pace.object_fetch_aborted, Step::WaitForTile),
+        State::Mode3ObjectFetch => {
+            unless_aborted(pace.object_fetch_aborted, Step::ReadObjectAttributes)
+        }
+        State::Mode3ObjectAttributes => {
+            unless_aborted(pace.object_fetch_aborted, Step::ReadObjectLow)
+        }
+        State::Mode3ObjectLow => unless_aborted(pace.object_fetch_aborted, Step::ReadObjectHigh),
         State::Mode3ObjectHigh => Step::PushObject,
         State::Mode3Pixel => Step::AfterPixel,
         _ => Step::WindowCheck,
@@ -119,28 +126,30 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
             Step::WindowCheck => {
                 let (enabled, wx, scx, hw) =
                     (p.window_enabled(), p.wx(), p.mixer_scx(), p.cgb_hardware());
-                if p.d().mode3_window(enabled, wx, scx, hw) {
+                if pace.mode3_window(enabled, wx, scx, hw, p.fetcher()) {
                     return Mode3Flow::Slept;
                 }
                 Step::Objects
             }
             Step::Objects => {
                 let (wx, hw) = (p.wx(), p.cgb_hardware());
-                p.d().window_pixel_insertion(wx, hw);
+                pace.window_pixel_insertion(wx, hw);
                 // Drop the objects left of the current position.
-                let d = p.d();
-                while d.objs.next().is_some_and(|e| e.x < d.bg.object_match_x()) {
-                    d.objs.count -= 1;
+                while pace
+                    .objs
+                    .next()
+                    .is_some_and(|e| e.x < pace.bg.object_match_x())
+                {
+                    pace.objs.count -= 1;
                 }
-                d.obj_fetch.active = true;
+                pace.fetching_object = true;
                 Step::NextObject
             }
             Step::NextObject => {
                 let enabled = p.objects_enabled();
-                let d = p.d();
-                if let Some(obj) = d.objs.next()
+                if let Some(obj) = pace.objs.next()
                     && enabled
-                    && obj.x == d.bg.object_match_x()
+                    && obj.x == pace.bg.object_match_x()
                 {
                     if obj.x == 167 {
                         // The HBlank interrupt does not wait for the fetch of an
@@ -153,70 +162,68 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
                 }
             }
             Step::WaitForTile => {
-                let d = p.d();
-                if mem::take(&mut d.window.started_after_line) {
+                if mem::take(&mut pace.window.started_after_line) {
                     // The window's start restarted the fetcher: the
                     // object waits for the window's first tile and the
                     // next one (the line ends after it, whatever the
                     // fetcher holds).
-                    d.sleep_in_line(State::Mode3ObjectFetch, 1 + WINDOW_TILES_BEFORE_OBJECT);
+                    pace.sleep_in_line(State::Mode3ObjectFetch, 1 + WINDOW_TILES_BEFORE_OBJECT);
                     return Mode3Flow::Slept;
                 }
                 // The background fetcher finishes its tile first.
-                let next = if d.bg.fetcher.step < FetcherStep::DataHighT2 || d.bg.fifo.is_empty() {
+                let next = if pace.bg.step < FetcherStep::DataHighT2 || pace.bg.fifo.is_empty() {
                     State::Mode3ObjectWait
                 } else {
                     State::Mode3ObjectFetch
                 };
-                p.advance_fetcher();
-                p.d().sleep_in_line(next, 1);
+                advance_fetcher(p, pace);
+                pace.sleep_in_line(next, 1);
                 return Mode3Flow::Slept;
             }
             Step::ReadObjectAttributes => {
-                p.advance_fetcher();
-                p.read_object_attributes();
-                p.d().sleep_in_line(State::Mode3ObjectAttributes, 2);
+                advance_fetcher(p, pace);
+                p.read_object_attributes(pace);
+                pace.sleep_in_line(State::Mode3ObjectAttributes, 2);
                 return Mode3Flow::Slept;
             }
             Step::ReadObjectLow => {
-                p.read_object_low();
-                p.d().sleep_in_line(State::Mode3ObjectLow, 2);
+                p.read_object_low(pace);
+                pace.sleep_in_line(State::Mode3ObjectLow, 2);
                 return Mode3Flow::Slept;
             }
             Step::ReadObjectHigh => {
-                p.d().obj_fetch.active = false;
-                p.read_object_high();
-                p.d().sleep_in_line(State::Mode3ObjectHigh, 1);
+                pace.fetching_object = false;
+                p.read_object_high(pace);
+                pace.sleep_in_line(State::Mode3ObjectHigh, 1);
                 return Mode3Flow::Slept;
             }
             Step::PushObject => {
-                p.push_object();
-                p.d().objs.count -= 1;
+                p.push_object(pace);
+                pace.objs.count -= 1;
                 Step::NextObject
             }
             Step::OutputPixel => {
                 let enabled = p.objects_enabled();
                 let scx = p.mixer_scx();
-                let d = p.d();
-                d.obj_fetch.aborted = false;
-                d.obj_fetch.active = false;
+                pace.object_fetch_aborted = false;
+                pace.fetching_object = false;
                 // An object at X 0, not fetched yet, holds the pixels back.
-                let held = enabled && d.objs.next().is_some_and(|e| e.x == 0);
-                if !held && let Some((item, popped)) = d.bg.pop(scx, d.window.being_fetched) {
+                let held = enabled && pace.objs.next().is_some_and(|e| e.x == 0);
+                if !held && let Some((item, popped)) = pace.bg.pop(scx, pace.window.being_fetched) {
                     if popped != Popped::Restarted {
-                        d.window.being_fetched = false;
+                        pace.window.being_fetched = false;
                     }
                     p.mix_pixel(item, popped);
                 }
-                p.advance_fetcher();
-                if p.d().bg.position == PX_WIDTH {
+                advance_fetcher(p, pace);
+                if pace.bg.position == PX_WIDTH {
                     return Mode3Flow::Done;
                 }
-                p.d().sleep_in_line(State::Mode3Pixel, 1);
+                pace.sleep_in_line(State::Mode3Pixel, 1);
                 return Mode3Flow::Slept;
             }
             Step::AfterPixel => {
-                if p.d().window.wx_166_interrupt_glitch {
+                if pace.window.wx_166_interrupt_glitch {
                     p.signal_mode3_end();
                 }
                 Step::WindowCheck
@@ -225,12 +232,7 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, resume: State) -> Mode3Flow {
     }
 }
 
-impl Mode3Ppu for Ppu {
-    #[inline]
-    fn d(&mut self) -> &mut Display {
-        &mut self.d
-    }
-
+impl Mode3Ppu for PpuCore {
     #[inline]
     fn objects_enabled(&self) -> bool {
         self.lcdc & LCDC_OBJ_EN_B != 0 || self.is_cgb_hardware()
@@ -256,32 +258,37 @@ impl Mode3Ppu for Ppu {
         self.is_cgb_hardware()
     }
 
-    fn fetcher_read(&mut self) {
-        self.read_tile();
+    #[inline]
+    fn fetcher(&self) -> &Fetcher {
+        &self.d.fetcher
     }
 
-    fn read_object_attributes(&mut self) {
-        let base = u16::from(self.d.objs.fetched().index) * Oam::ENTRY_SIZE;
+    fn fetcher_read(&mut self, pace: &Pace) {
+        self.read_tile(pace);
+    }
+
+    fn read_object_attributes(&mut self, pace: &Pace) {
+        let base = u16::from(pace.objs.fetched().index) * Oam::ENTRY_SIZE;
         // The tile and the attributes go through the latches the search
         // reads Y and X into, and stay there.
         self.d.obj_fetch.tile = self.oam_read_fetch(base + Oam::ENTRY_TILE);
         self.d.obj_fetch.flags = self.oam_read_fetch(base + Oam::ENTRY_ATTRIBUTES);
-        self.d.objs.y_bus = self.d.obj_fetch.tile;
-        self.d.objs.x_bus = self.d.obj_fetch.flags;
+        self.d.oam_latches.y = self.d.obj_fetch.tile;
+        self.d.oam_latches.x = self.d.obj_fetch.flags;
     }
 
-    fn read_object_low(&mut self) {
-        self.d.obj_fetch.line_address = self.current_object_line_address();
+    fn read_object_low(&mut self, pace: &Pace) {
+        self.d.obj_fetch.line_address = self.current_object_line_address(pace);
         self.d.obj_fetch.data[0] = self.vram_read(self.d.obj_fetch.line_address);
     }
 
-    fn read_object_high(&mut self) {
-        self.d.obj_fetch.line_address = self.current_object_line_address();
+    fn read_object_high(&mut self, pace: &Pace) {
+        self.d.obj_fetch.line_address = self.current_object_line_address(pace);
         self.d.obj_fetch.data[1] = self.vram_read(self.d.obj_fetch.line_address + 1);
     }
 
-    fn push_object(&mut self) {
-        self.overlay_object_row();
+    fn push_object(&mut self, pace: &Pace) {
+        self.overlay_object_row(pace);
     }
 
     fn mix_pixel(&mut self, item: Item, popped: Popped) {
@@ -299,31 +306,60 @@ impl Mode3Ppu for Ppu {
 
 impl Ppu {
     pub(super) fn mode3_start(&mut self) {
-        self.d.window.no_pixel_insertion_glitch = false;
-        self.d.bg.start();
+        self.pace.window.no_pixel_insertion_glitch = false;
+        self.pace.bg.start();
         self.d.oam_fifo.clear();
         self.d.lcd_x = 0;
-        self.d.window.started_after_line = false;
+        self.pace.window.started_after_line = false;
         // The DMG's WX match at the last line's end is held (PYCO, NUNU)
         // until this line's first pixel; LCDC bit 5 holds the window off
         // until then.
-        if mem::take(&mut self.d.window.wx_166_carry) && self.lcdc & LCDC_WIN_EN_B != 0 {
-            self.d.window.wx_triggered = true;
-            self.d.window.tile_x = 1;
-            self.d.window.line = self.d.window.line.wrapping_add(1);
+        if mem::take(&mut self.pace.window.wx_166_carry) && self.lcdc & LCDC_WIN_EN_B != 0 {
+            self.pace.window.wx_triggered = true;
+            self.pace.window.tile_x = 1;
+            self.pace.window.line = self.pace.window.line.wrapping_add(1);
         }
     }
 
-    fn current_object_line_address(&self) -> u16 {
+    /// Code after the mode-3 loop breaks (`skip_slow_mode_3`).
+    pub(super) fn mode3_done(&mut self) {
+        if self.pace.bg.end_line() {
+            self.d.fetcher.data[1] = self.d.fetcher.data[0];
+        }
+
+        // The PPU and LCD desynced: fill the rest of the line with the last colour.
+        self.fill_desynced_line();
+
+        if self.d.current_line == LINES - 1 {
+            self.pace.window.line = Window::NO_LINE;
+        }
+        self.pace.window.wx_triggered = false;
+        self.pace.window.wx_166_carry =
+            !self.is_cgb_hardware() && self.pace.window.wy_triggered && self.wx == 166;
+
+        if !self.double_speed() {
+            self.stat &= !STAT_MODE_B;
+            self.d.cpu.oam_read_blocked = model_ge_cgb_d(self.model);
+            self.d.cpu.vram_read_blocked = false;
+            self.d.cpu.oam_write_blocked = false;
+            self.d.cpu.vram_write_blocked = false;
+        }
+
+        self.sleep_in_line(State::HBlankStart, 1);
+    }
+}
+
+impl PpuCore {
+    fn current_object_line_address(&self, pace: &Pace) -> u16 {
         self.object_line_address(
-            self.d.objs.fetched().y,
+            pace.objs.fetched().y,
             self.d.obj_fetch.tile,
             self.d.obj_fetch.flags,
         )
     }
 
     /// Overlays the fetched object row on the object FIFO.
-    fn overlay_object_row(&mut self) {
+    fn overlay_object_row(&mut self, pace: &Pace) {
         let flags = self.d.obj_fetch.flags;
         let palette = if self.cgb_mode_on() {
             flags & ATTR_CGB_PALETTE
@@ -331,7 +367,7 @@ impl Ppu {
             u8::from(flags & ATTR_DMG_PALETTE_B != 0)
         };
         let priority = if self.opri_index_priority() {
-            self.d.objs.fetched().index
+            pace.objs.fetched().index
         } else {
             0
         };
@@ -344,36 +380,11 @@ impl Ppu {
             priority,
             flags & ATTR_X_FLIP_B != 0,
         );
-        self.d.bg.fetcher.sel_glitch_data = if self.d.bus.vram_ppu_blocked {
+        self.d.fetcher.sel_glitch_data = if self.d.bus.vram_ppu_blocked {
             0xFF
         } else {
             self.vram_raw(self.d.obj_fetch.line_address + 1)
         };
-    }
-
-    /// Code after the mode-3 loop breaks (`skip_slow_mode_3`).
-    pub(super) fn mode3_done(&mut self) {
-        self.d.bg.end_line();
-
-        // The PPU and LCD desynced: fill the rest of the line with the last colour.
-        self.fill_desynced_line();
-
-        if self.d.current_line == LINES - 1 {
-            self.d.window.line = Window::NO_LINE;
-        }
-        self.d.window.wx_triggered = false;
-        self.d.window.wx_166_carry =
-            !self.is_cgb_hardware() && self.d.window.wy_triggered && self.wx == 166;
-
-        if !self.double_speed() {
-            self.stat &= !STAT_MODE_B;
-            self.d.cpu.oam_read_blocked = model_ge_cgb_d(self.model);
-            self.d.cpu.vram_read_blocked = false;
-            self.d.cpu.oam_write_blocked = false;
-            self.d.cpu.vram_write_blocked = false;
-        }
-
-        self.sleep_in_line(State::HBlankStart, 1);
     }
 
     pub(super) fn fill_desynced_line(&mut self) {

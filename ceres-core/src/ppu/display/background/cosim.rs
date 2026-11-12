@@ -12,7 +12,11 @@ use {
         Before, Ghost, INSIDE, Mode3Loop, before_start, ceres_dot, ceres_first_dot, expected,
         related, signed, step_agrees,
     },
-    crate::ppu::display::{Display, fetcher::FetcherStep, state::State},
+    crate::ppu::display::{
+        Pace,
+        fetcher::{Fetcher, FetcherStep},
+        state::State,
+    },
     ceres_netlist::render_edge::{EdgeInputs, NO_X, NetPipeline, SLOTS},
     core::fmt::Write as _,
 };
@@ -98,18 +102,19 @@ impl Walk {
     /// netlist as `check::before_start` has it, ceres's position at the
     /// lead-in's start, the window armed if it is on.
     fn start(line: &Line) -> Self {
-        let mut d = Display::default();
+        let mut pace = Pace::default();
         let armed = line.wx.is_some();
-        d.window.wy_triggered = armed;
+        pace.window.wy_triggered = armed;
         let mut xs = [NO_X; SLOTS];
-        d.objs.count = line.objects.len();
+        pace.objs.count = line.objects.len();
         for (i, &x) in line.objects.iter().enumerate() {
             // Ceres's are sorted descending, the next one last.
-            d.objs.entries[line.objects.len() - 1 - i].x = x;
+            pace.objs.entries[line.objects.len() - 1 - i].x = x;
             xs[i] = x;
         }
         let l = Mode3Loop {
-            d,
+            pace,
+            fetcher: Fetcher::default(),
             mixer_scx: line.scx,
             objects_enabled: !line.objects.is_empty(),
             window_enabled: armed,
@@ -156,7 +161,7 @@ impl Walk {
             tyfo: false,
             inputs: inputs(&l, false),
         };
-        let g = Ghost::at_rest(&l.d.bg);
+        let g = Ghost::at_rest(&l.pace.bg);
         Self {
             net: before_start(&carried),
             l,
@@ -171,15 +176,15 @@ impl Walk {
     /// Ceres's first dot of the loop and its two edges, as
     /// `check::start_agrees` runs them.
     fn first_dot(&mut self) {
-        let snapshot = Before::of(&self.l.d);
+        let snapshot = Before::of(&self.l.pace);
         ceres_first_dot(&mut self.l);
         self.net.edge(inputs(&self.l, true));
         self.net.edge(inputs(&self.l, false));
         let rest = Ghost {
             age: 0,
-            ..Ghost::at_rest(&self.l.d.bg)
+            ..Ghost::at_rest(&self.l.pace.bg)
         };
-        self.g = rest.after(snapshot, &self.l.d);
+        self.g = rest.after(snapshot, &self.l.pace);
         self.row();
     }
 
@@ -188,8 +193,8 @@ impl Walk {
     /// second edge and not before. While the line goes on, the netlist's
     /// mode 3 must not stop.
     fn dot(&mut self) -> Option<bool> {
-        let drawn = matches!(self.l.d.state, State::HBlankStart);
-        let before = Before::of(&self.l.d);
+        let drawn = matches!(self.l.pace.state, State::HBlankStart);
+        let before = Before::of(&self.l.pace);
         if !drawn {
             ceres_dot(&mut self.l);
         }
@@ -199,7 +204,7 @@ impl Walk {
         if drawn {
             return Some(!stopped_early && self.net.stop_mode3());
         }
-        self.g = self.g.after(before, &self.l.d);
+        self.g = self.g.after(before, &self.l.pace);
         self.row();
         assert!(
             !stopped_early && !self.net.stop_mode3(),
@@ -217,7 +222,7 @@ impl Walk {
     /// is not what `check::expected` gives.
     fn row(&mut self) {
         self.dot += 1;
-        let (d, net, g) = (&self.l.d, &self.net, self.g);
+        let (pace, net, g) = (&self.l.pace, &self.net, self.g);
         let e = expected(&self.l, net, g);
         let differs = differing!(net, e;
             mode3 voga px fetch_count lyzu nyka pory pygo started fine puxa nyze discard ryfa
@@ -228,14 +233,14 @@ impl Walk {
             self.table,
             "{:3} | {:21} {} {:5} {:3} {} | {:3} {:2} {:2} | {:3} {:1} {:4} {:4} {:4} {:4} {:4} {:2} {:4} {:4} | {:4} {:4} {:4} {:3} {:4} {:4} {:2} | {:11} {:5} {:6} {:3} {:3} {:4} |{}",
             self.dot,
-            format!("{:?}", d.state),
-            d.wait,
-            signed(d.bg.position),
-            d.bg.fifo.len(),
-            step_name(d.bg.fetcher.step),
-            u8::from(d.window.wx_triggered),
-            u8::from(d.window.being_fetched),
-            d.window.tile_x,
+            format!("{:?}", pace.state),
+            pace.wait,
+            signed(pace.bg.position),
+            pace.bg.fifo.len(),
+            step_name(pace.bg.step),
+            u8::from(pace.window.wx_triggered),
+            u8::from(pace.window.being_fetched),
+            pace.window.tile_x,
             net.px,
             net.fetch_count,
             net.fine,
@@ -426,7 +431,7 @@ impl Walk {
         self.net.wy = free.byte();
         self.net.sary = free.flag();
         self.net.win_y = free.byte();
-        self.l.d.bg.fractional = free.flag();
+        self.l.pace.bg.fractional = free.flag();
         if self.g.window != 0 {
             self.g.rerun = free.flag();
         }
@@ -446,10 +451,10 @@ impl Walk {
         for x in &mut self.net.xs {
             *x = free.byte();
         }
-        self.l.d.objs.count = usize::from(free.byte() % 11);
+        self.l.pace.objs.count = usize::from(free.byte() % 11);
         let mut x = 8 + free.byte() % 160;
-        for i in (0..self.l.d.objs.count).rev() {
-            self.l.d.objs.entries[i].x = x;
+        for i in (0..self.l.pace.objs.count).rev() {
+            self.l.pace.objs.entries[i].x = x;
             x = x.saturating_add(free.byte() % 4);
         }
     }
@@ -482,7 +487,7 @@ impl Walk {
             "window {}, {:?}; net wy {} sary {} win_y {} scx {:02X}; mixer {:02X} then {mixer:02X}; \
              before: {}; rising: {}; falling: {}",
             self.g.window,
-            self.l.d.state,
+            self.l.pace.state,
             self.net.wy,
             self.net.sary,
             self.net.win_y,

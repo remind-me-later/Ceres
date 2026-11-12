@@ -2,7 +2,7 @@
 
 use {
     super::{
-        Display,
+        Pace,
         fetcher::{Fetcher, FetcherStep},
         fifo::Fifo,
         pos,
@@ -50,9 +50,9 @@ pub(super) struct Window {
     /// A CPU write that turns the window on is landing: the pixel pipeline
     /// sees the new enable a dot after the WY trigger does.
     pub enable_pending: bool,
-    /// The background FIFO and fetcher as the window start found them, for a
-    /// CGB window start that is called off.
-    pub saved: Option<(Fifo, Fetcher)>,
+    /// The background FIFO and fetcher (its step, and what it read) as the
+    /// window start found them, for a CGB window start that is called off.
+    pub saved: Option<(Fifo, FetcherStep, Fetcher)>,
 }
 
 impl Window {
@@ -97,7 +97,7 @@ impl Ppu {
                 i32::from(self.d.current_line)
             };
         if self.lcdc & LCDC_WIN_EN_B != 0 && i32::from(self.wy) == comparison {
-            self.d.window.wy_triggered = true;
+            self.pace.window.wy_triggered = true;
         }
     }
 
@@ -105,8 +105,8 @@ impl Ppu {
     /// 8 of them (counted from the moment the LCD was turned on), which sits
     /// at a different offset in each speed and hardware.
     pub(in crate::ppu) fn advance_wy_unit(&mut self) {
-        self.d.window.wy_units = (self.d.window.wy_units + 1) & 7;
-        if self.d.window.wy_check_scheduled && !self.d.window.wy_triggered {
+        self.pace.window.wy_units = (self.pace.window.wy_units + 1) & 7;
+        if self.pace.window.wy_check_scheduled && !self.pace.window.wy_triggered {
             let offset = if self.double_speed {
                 6
             } else if self.is_cgb_hardware() {
@@ -114,14 +114,14 @@ impl Ppu {
             } else {
                 2
             };
-            if (self.d.window.wy_units + offset).trailing_zeros() >= 3 {
-                self.d.window.wy_check_scheduled = false;
+            if (self.pace.window.wy_units + offset).trailing_zeros() >= 3 {
+                self.pace.window.wy_check_scheduled = false;
                 self.wy_check();
-                if self.d.state == State::Mode3Pixel
+                if self.pace.state == State::Mode3Pixel
                     && self.is_cgb_hardware()
                     && !self.double_speed()
                 {
-                    self.d.window.wy_just_checked = true;
+                    self.pace.window.wy_just_checked = true;
                 }
             }
         }
@@ -131,29 +131,30 @@ impl Ppu {
     /// first tile not pushed yet) calls it off: the pixels go on from the
     /// background where they were instead of waiting for the window's tile.
     pub(in crate::ppu) const fn cancel_window_start(&mut self) {
-        let window = &mut self.d.window;
-        if window.being_fetched
-            && window.wx_triggered
-            && self.d.bg.fifo.is_empty()
-            && let Some((fifo, fetcher)) = window.saved.take()
+        let pace = &mut self.pace;
+        if pace.window.being_fetched
+            && pace.window.wx_triggered
+            && pace.bg.fifo.is_empty()
+            && let Some((fifo, step, fetcher)) = pace.window.saved.take()
         {
-            window.wx_triggered = false;
+            pace.window.wx_triggered = false;
 
-            self.d.bg.fifo = fifo;
-            self.d.bg.fetcher = fetcher;
+            pace.bg.fifo = fifo;
+            pace.bg.step = step;
+            self.core.d.fetcher = fetcher;
         }
     }
 
     /// Called by the CPU's LCDC write handler: disabling the window while a
     /// window tile is being fetched suppresses the pixel-insertion glitch.
     pub(crate) const fn note_window_disable(&mut self, old: u8, new: u8) {
-        if old & LCDC_WIN_EN_B != 0 && new & LCDC_WIN_EN_B == 0 && self.d.window.being_fetched {
-            self.d.window.no_pixel_insertion_glitch = true;
+        if old & LCDC_WIN_EN_B != 0 && new & LCDC_WIN_EN_B == 0 && self.pace.window.being_fetched {
+            self.pace.window.no_pixel_insertion_glitch = true;
         }
     }
 }
 
-impl Display {
+impl Pace {
     fn update_wx_glitch(&mut self, enabled: bool, wx: u8, hw: bool) {
         if !hw {
             return;
@@ -182,7 +183,7 @@ impl Display {
             && (!hw || wx == 0)
             && self.window.wx_triggered
             && !self.window.being_fetched
-            && self.bg.fetcher.step == FetcherStep::GetTileT1
+            && self.bg.step == FetcherStep::GetTileT1
             && self.bg.fifo.len() == 8
         {
             self.bg.insert_blank = true;
@@ -194,7 +195,7 @@ impl Display {
     /// start, and a window that LCDC turned off stops as a tile's fetch
     /// starts (the fetcher reads the background's tile).
     pub(super) fn window_before_fetch(&mut self, enabled: bool, wx: u8, hw: bool) {
-        match self.bg.fetcher.step {
+        match self.bg.step {
             FetcherStep::GetTileT1 => {
                 self.update_wx_glitch(enabled, wx, hw);
                 if !enabled {
@@ -231,9 +232,17 @@ impl Display {
     }
 
     /// Window activation check at the top of a mode-3 iteration, with LCDC's
-    /// window enable, WX and the mixer's SCX as the PPU has them. Returns
-    /// `true` if the engine went to sleep (state 42).
-    pub(super) fn mode3_window(&mut self, enabled: bool, wx: u8, mixer_scx: u8, hw: bool) -> bool {
+    /// window enable, WX and the mixer's SCX as the PPU has them, and what
+    /// the fetcher read (the CGB keeps it, `Window::saved`). Returns `true`
+    /// if the engine went to sleep (state 42).
+    pub(super) fn mode3_window(
+        &mut self,
+        enabled: bool,
+        wx: u8,
+        mixer_scx: u8,
+        hw: bool,
+        fetcher: &Fetcher,
+    ) -> bool {
         self.window.wx_166_interrupt_glitch = false;
         if self.window.wy_just_checked {
             self.window.wy_just_checked = false;
@@ -269,7 +278,7 @@ impl Display {
             if should_activate {
                 self.window.line = self.window.line.wrapping_add(1);
                 self.window.tile_x = 0;
-                self.window.saved = hw.then(|| (self.bg.fifo, self.bg.fetcher.clone()));
+                self.window.saved = hw.then(|| (self.bg.fifo, self.bg.step, fetcher.clone()));
                 self.bg.fifo.clear();
                 if wx == 0 && mixer_scx & 7 != 0 && !hw {
                     self.sleep_in_line(State::Mode3WindowDelay, 1);
@@ -297,7 +306,7 @@ impl Display {
 
     pub(super) const fn mode3_window_activated(&mut self) {
         self.window.wx_triggered = true;
-        self.bg.fetcher.step = FetcherStep::GetTileT1;
+        self.bg.step = FetcherStep::GetTileT1;
         self.window.being_fetched = true;
     }
 }

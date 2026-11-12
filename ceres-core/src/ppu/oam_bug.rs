@@ -12,7 +12,7 @@
     reason = "The glitch functions name the bus values a, b, c, ... like SameBoy's"
 )]
 
-use super::Ppu;
+use super::{Ppu, PpuCore};
 use crate::{
     Model,
     memory::{IO_START, OAM_START, UNUSABLE_START},
@@ -83,7 +83,7 @@ const fn glitch_quaternary_read_sgb2(
     (e & (h | g | c | (a & b))) | ((c & g & h) & (b | a | !f))
 }
 
-impl Ppu {
+impl PpuCore {
     /// OAM byte; the corruption can touch the row right after OAM (row
     /// 0xA0), which is memory outside OAM (unobservable on the DMG): reads
     /// there yield 0 and writes are dropped.
@@ -107,39 +107,11 @@ impl Ppu {
         self.set_oam_byte(index * 2 + 1, hi);
     }
 
-    /// The row the PPU is accessing, if the bug applies to it.
-    fn bug_row(&self) -> Option<usize> {
-        let row = self.d.accessed_oam_row();
-        (row != NO_ROW && row >= 8).then_some(usize::from(row))
-    }
-
     /// Copies `len` bytes inside OAM.
     fn copy_oam_row(&mut self, dst: usize, src: usize) {
         for i in 0..8 {
             let byte = self.oam_byte(src + i);
             self.set_oam_byte(dst + i, byte);
-        }
-    }
-
-    /// The "write" corruption: an address in OAM range was put on the bus
-    /// (writes, `inc rr`, `push`, ...).
-    pub(crate) fn trigger_oam_bug(&mut self, addr: u16) {
-        if self.is_cgb_hardware() || !(OAM_START..IO_START).contains(&addr) {
-            return;
-        }
-        let Some(row) = self.bug_row() else {
-            return;
-        };
-        let base = row / 2;
-        let value = glitch(
-            self.oam_word(base),
-            self.oam_word(base - 4),
-            self.oam_word(base - 2),
-        );
-        self.set_oam_word(base, value);
-        for i in 2..8 {
-            let byte = self.oam_byte(row - 8 + i);
-            self.set_oam_byte(row + i, byte);
         }
     }
 
@@ -189,6 +161,69 @@ impl Ppu {
             self.set_oam_word(base - 4, value);
             self.copy_oam_row(row - 0x10, row - 0x08);
             self.copy_oam_row(row - 0x20, row - 0x08);
+        }
+    }
+
+    /// `oam[a] = oam[b] = value` on 16-bit words, in C's right-to-left order.
+    fn oam_word_pair(&mut self, first: usize, second: usize, value: u16) {
+        self.set_oam_word(first, value);
+        self.set_oam_word(second, value);
+    }
+
+    /// The model-specific contents of the unusable area behind OAM.
+    pub(super) fn read_unusable(&self, addr: u16) -> u8 {
+        let low = (addr & 0xFF) as u8;
+        match self.model {
+            Model::CgbE | Model::Agb => (low & 0xF0) | (low >> 4),
+            model => unusable_index(model, low).map_or(0, |i| self.oam.extra()[i]),
+        }
+    }
+
+    const fn write_unusable(&mut self, addr: u16, val: u8) {
+        if let Some(i) = unusable_index(self.model, (addr & 0xFF) as u8) {
+            self.oam.extra_mut()[i] = val;
+        }
+    }
+
+    /// Side-effect free view of the unusable area (for non-CPU readers).
+    #[must_use]
+    pub(crate) fn peek_unusable(&self, addr: u16) -> u8 {
+        if self.d.cpu().oam_read_blocked
+            || self.d.cpu().oam_write_blocked && !self.is_cgb_hardware()
+        {
+            0xFF
+        } else {
+            self.read_unusable(addr)
+        }
+    }
+}
+
+impl Ppu {
+    /// The row the PPU is accessing, if the bug applies to it.
+    fn bug_row(&self) -> Option<usize> {
+        let row = self.pace.accessed_oam_row();
+        (row != NO_ROW && row >= 8).then_some(usize::from(row))
+    }
+
+    /// The "write" corruption: an address in OAM range was put on the bus
+    /// (writes, `inc rr`, `push`, ...).
+    pub(crate) fn trigger_oam_bug(&mut self, addr: u16) {
+        if self.is_cgb_hardware() || !(OAM_START..IO_START).contains(&addr) {
+            return;
+        }
+        let Some(row) = self.bug_row() else {
+            return;
+        };
+        let base = row / 2;
+        let value = glitch(
+            self.oam_word(base),
+            self.oam_word(base - 4),
+            self.oam_word(base - 2),
+        );
+        self.set_oam_word(base, value);
+        for i in 2..8 {
+            let byte = self.oam_byte(row - 8 + i);
+            self.set_oam_byte(row + i, byte);
         }
     }
 
@@ -249,7 +284,7 @@ impl Ppu {
             return;
         }
         let low = usize::from(addr & 0xFF);
-        match self.d.accessed_oam_row() {
+        match self.pace.accessed_oam_row() {
             0 => {
                 let value = glitch_read(
                     self.oam_word(0),
@@ -286,39 +321,6 @@ impl Ppu {
                 self.oam.bytes_mut().copy_within(0x98..0xA0, low & 0xF8);
             }
             _ => {}
-        }
-    }
-
-    /// `oam[a] = oam[b] = value` on 16-bit words, in C's right-to-left order.
-    fn oam_word_pair(&mut self, first: usize, second: usize, value: u16) {
-        self.set_oam_word(first, value);
-        self.set_oam_word(second, value);
-    }
-
-    /// The model-specific contents of the unusable area behind OAM.
-    pub(super) fn read_unusable(&self, addr: u16) -> u8 {
-        let low = (addr & 0xFF) as u8;
-        match self.model {
-            Model::CgbE | Model::Agb => (low & 0xF0) | (low >> 4),
-            model => unusable_index(model, low).map_or(0, |i| self.oam.extra()[i]),
-        }
-    }
-
-    const fn write_unusable(&mut self, addr: u16, val: u8) {
-        if let Some(i) = unusable_index(self.model, (addr & 0xFF) as u8) {
-            self.oam.extra_mut()[i] = val;
-        }
-    }
-
-    /// Side-effect free view of the unusable area (for non-CPU readers).
-    #[must_use]
-    pub(crate) fn peek_unusable(&self, addr: u16) -> u8 {
-        if self.d.cpu().oam_read_blocked
-            || self.d.cpu().oam_write_blocked && !self.is_cgb_hardware()
-        {
-            0xFF
-        } else {
-            self.read_unusable(addr)
         }
     }
 
@@ -364,7 +366,7 @@ impl Ppu {
 
         let low = usize::from(addr & 0xFF);
         if addr < UNUSABLE_START {
-            if self.d.accessed_oam_row() == 0xA0 {
+            if self.pace.accessed_oam_row() == 0xA0 {
                 for i in 0..8 {
                     let dst = (low & 0xF8) + i;
                     let value = if (i & 6) == (low & 6) {
@@ -381,7 +383,7 @@ impl Ppu {
 
             self.oam.bytes_mut()[low] = val;
 
-            if self.d.accessed_oam_row() == 0 {
+            if self.pace.accessed_oam_row() == 0 {
                 for i in 0..2 {
                     let a = u16::from(self.oam.bytes()[i]);
                     let b = u16::from(self.oam.bytes()[(low & 0xF8) + i]);
@@ -391,7 +393,7 @@ impl Ppu {
                 let base = low & 0xF8;
                 self.oam.bytes_mut().copy_within(base + 2..base + 8, 2);
             }
-        } else if self.d.accessed_oam_row() == 0 {
+        } else if self.pace.accessed_oam_row() == 0 {
             self.oam.bytes_mut()[low & 7] = val;
         } else {
             // The unusable area: the write is dropped.

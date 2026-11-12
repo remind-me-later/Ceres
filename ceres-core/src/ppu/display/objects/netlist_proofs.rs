@@ -20,7 +20,7 @@
 //! M-cycle to any later one, with the CPU halted in any of them, with OAM's two
 //! stages of latches (`NetOamLatches`): the DMA closes the first, which keep
 //! the last Y the scan read, and the scan goes on comparing it; ceres's search
-//! keeps its `y_bus` (`ObjectSearch::latch`) for the reads its DMA hides
+//! keeps its latches' Y (`OamLatches::latch`) for the reads its DMA hides
 //! (`Dma::runs`, which the DMA's proof shows is the netlist's run, a restart
 //! included). Both see the same Y for every sprite, from any Y the latches hold
 //! as the scan starts, and the netlist saves the sprites ceres finds. The DMA's
@@ -39,7 +39,7 @@
 //! and the order of the sprites for the fetch (the sprite store's and
 //! render's).
 
-use super::{Entry, MAX_OBJECTS_PER_LINE, ObjectSearch, on_line};
+use super::{Entry, MAX_OBJECTS_PER_LINE, OamLatches, ObjectSearch, on_line};
 use ceres_netlist::{
     oam::{NetOamLatches, OamInputs},
     oam_scan::{Clocks, NetScan, SLOTS},
@@ -208,13 +208,12 @@ fn ceres_search(
     hidden: impl Fn(u8) -> bool,
     held: u8,
 ) -> ([Option<u8>; 10], usize) {
-    let mut search = ObjectSearch::default();
-    search.y_bus = held;
+    let mut latches = OamLatches { y: held, x: 0 };
     let mut first: [Option<u8>; 10] = [None; 10];
     let mut found = 0;
     for index in 0..40u8 {
         let read = (!hidden(index)).then_some((ys[usize::from(index)], 0));
-        let (y, _) = search.latch(read);
+        let (y, _) = latches.latch(read);
         if on_line(y, line, tall(index)) && found < MAX_OBJECTS_PER_LINE {
             first[found] = Some(index);
             found += 1;

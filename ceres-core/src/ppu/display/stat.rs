@@ -3,18 +3,13 @@
 
 use {
     super::state::State,
-    crate::{interrupts::Interrupts, ppu::Ppu},
+    crate::{
+        interrupts::Interrupts,
+        ppu::{Ppu, PpuCore},
+    },
 };
 
-impl Ppu {
-    /// The DMA's last cycle: during the OAM scan edge it raises the mode 2
-    /// bits (SameBoy `GB_dma_run`).
-    pub(crate) fn dma_finished(&mut self) {
-        if self.d.state == State::OamScanObject {
-            self.stat |= 2;
-        }
-    }
-
+impl PpuCore {
     pub(in crate::ppu) const fn write_lyc_reg(&mut self, val: u8) {
         self.timing_write_lyc(val);
         self.lyc = val;
@@ -23,5 +18,15 @@ impl Ppu {
     pub(in crate::ppu) const fn write_stat_reg(&mut self, val: u8, ints: &mut Interrupts) {
         self.timing_write_stat(val, ints);
         self.stat = (self.stat & 7) | (val & !7) | 0x80;
+    }
+}
+
+impl Ppu {
+    /// The DMA's last cycle: during the OAM scan edge it raises the mode 2
+    /// bits (SameBoy `GB_dma_run`).
+    pub(crate) fn dma_finished(&mut self) {
+        if self.pace.state == State::OamScanObject {
+            self.stat |= 2;
+        }
     }
 }

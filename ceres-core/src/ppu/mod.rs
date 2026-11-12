@@ -15,7 +15,12 @@ pub(crate) use oam_bug::unusable_index;
 #[cfg(feature = "debug")]
 pub use trace::{PpuEvent, PpuEventKind};
 pub(crate) use vram::Vram;
-use {crate::CgbMode, crate::Model, rgba_buf::RgbaBuf};
+use {
+    crate::CgbMode,
+    crate::Model,
+    core::ops::{Deref, DerefMut},
+    rgba_buf::RgbaBuf,
+};
 
 pub const PX_WIDTH: u8 = 160;
 pub const PX_HEIGHT: u8 = 144;
@@ -77,8 +82,37 @@ pub(crate) enum Mode {
     Drawing = 3,
 }
 
-#[derive(Default)]
+/// The PPU: the display's pace (`display::Pace`: the state machine's
+/// sleep and mode 3's timing) and the rest, its core. Mode 3's hooks
+/// (`display::mode3::Mode3Ppu`) are the core's, so they cannot change the
+/// pace; the code that runs both (the state machine, mode 3's loop, the
+/// writes that reach the pace) is the `Ppu`'s, which shows its core's
+/// fields and methods as its own (`Deref`).
 pub(crate) struct Ppu {
+    pace: display::Pace,
+    core: PpuCore,
+}
+
+impl Deref for Ppu {
+    type Target = PpuCore;
+
+    #[inline]
+    fn deref(&self) -> &PpuCore {
+        &self.core
+    }
+}
+
+impl DerefMut for Ppu {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut PpuCore {
+        &mut self.core
+    }
+}
+
+/// The PPU but the display's pace: its registers, memories and frame
+/// buffers, and the display's state outside the pace.
+#[derive(Default)]
+pub(crate) struct PpuCore {
     model: Model,
     bcp: ColorPalette,
     bgp: u8,
@@ -115,24 +149,49 @@ pub(crate) struct Ppu {
     trace: trace::Trace,
 }
 
-// IO
 impl Ppu {
     #[must_use]
     pub(crate) fn new(model: Model) -> Self {
         // Not deterministic on real hardware, but 00 (CGB) and FF (DMG) are
         // by far the most common power-on values.
         let obp = if model.is_cgb_hardware() { 0x00 } else { 0xFF };
-        let mut ppu = Self {
+        let mut core = PpuCore {
             model,
             obp0: obp,
             obp1: obp,
-            ..Self::default()
+            ..PpuCore::default()
         };
         if model.is_cgb_hardware() {
-            ppu.bcp.init_compat_palette();
-            ppu.ocp.init_compat_palette();
+            core.bcp.init_compat_palette();
+            core.ocp.init_compat_palette();
         }
-        ppu
+        Self {
+            pace: display::Pace::default(),
+            core,
+        }
+    }
+
+    /// The core, for const functions, which cannot go through `Deref`.
+    #[must_use]
+    pub(crate) const fn core(&self) -> &PpuCore {
+        &self.core
+    }
+
+    /// The core, for const functions, which cannot go through `DerefMut`.
+    pub(crate) const fn core_mut(&mut self) -> &mut PpuCore {
+        &mut self.core
+    }
+}
+
+// IO
+impl PpuCore {
+    #[must_use]
+    pub(crate) const fn pixel_data_rgba(&self) -> &[u8] {
+        self.rgba_buf_present.pixel_data()
+    }
+
+    pub(crate) const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
+        self.color_correction_mode = mode;
     }
 
     #[must_use]
@@ -173,11 +232,6 @@ impl Ppu {
     }
 
     #[must_use]
-    pub(crate) const fn pixel_data_rgba(&self) -> &[u8] {
-        self.rgba_buf_present.pixel_data()
-    }
-
-    #[must_use]
     pub(crate) const fn read_bgp(&self) -> u8 {
         self.bgp
     }
@@ -208,37 +262,9 @@ impl Ppu {
         }
     }
 
-    /// `position_in_line` as a signed value (-16..=160).
-    #[must_use]
-    pub(crate) const fn fifo_position(&self) -> i16 {
-        let p = self.d.position_in_line();
-        if p >= display::pos(-16) {
-            p as i16 - 256
-        } else {
-            p as i16
-        }
-    }
-
     #[inline]
     pub(crate) const fn set_tile_sel_glitch(&mut self, active: bool) {
         self.d.set_tile_sel_glitch(active);
-    }
-
-    /// Set while a CPU write to WX is landing (SameBoy's `wx_just_changed`).
-    #[inline]
-    pub(crate) const fn set_wx_just_changed(&mut self, active: bool) {
-        self.d.set_wx_just_changed(active);
-    }
-
-    /// Set while a CPU write that turns the window on is landing.
-    #[inline]
-    pub(crate) const fn set_window_enable_pending(&mut self, active: bool) {
-        self.d.set_window_enable_pending(active);
-    }
-
-    #[must_use]
-    pub(crate) const fn is_fetching_sprite(&self) -> bool {
-        self.d.fetching_object()
     }
 
     /// Whether `HBlank` was entered since the last call.
@@ -249,13 +275,6 @@ impl Ppu {
     /// Whether the LCD was switched off in a non-zero mode since the last call.
     pub(crate) const fn take_lcd_off_hdma_edge(&mut self) -> bool {
         self.d.take_lcd_off_hdma_edge()
-    }
-
-    /// The PPU is at the edge between HBlank and the OAM scan (SameBoy's
-    /// display state 7), where some register writes behave differently.
-    #[must_use]
-    pub(crate) fn at_oam_scan_edge(&self) -> bool {
-        self.d.state() == display::State::OamScanStart
     }
 
     #[must_use]
@@ -303,90 +322,6 @@ impl Ppu {
     #[must_use]
     pub(crate) const fn read_wy(&self) -> u8 {
         self.wy
-    }
-
-    /// Advances the PPU by one CPU T-cycle: a dot in single speed, half of
-    /// one in double speed.
-    pub(crate) fn tick_t_cycle(
-        &mut self,
-        ints: &mut Interrupts,
-        cgb_mode: CgbMode,
-        double_speed: bool,
-    ) {
-        self.cgb_mode = cgb_mode;
-        self.double_speed = double_speed;
-        self.count_chunk_cycle();
-        if self.lcdc & LCDC_ON_B == 0 {
-            return;
-        }
-        for _ in 0..if double_speed { 1 } else { 2 } {
-            if self.skip_units > 0 {
-                self.skip_units -= 1;
-                continue;
-            }
-            self.run_display(ints);
-            #[cfg(feature = "debug")]
-            self.trace_unit(ints);
-        }
-    }
-
-    /// Runs the display `cycles` T-cycles ahead of the CPU, which will not
-    /// run those cycles again.
-    pub(crate) fn run_ahead(
-        &mut self,
-        ints: &mut Interrupts,
-        cgb_mode: CgbMode,
-        double_speed: bool,
-        cycles: i32,
-    ) {
-        if self.lcdc & LCDC_ON_B == 0 {
-            return;
-        }
-        for _ in 0..cycles {
-            self.tick_t_cycle(ints, cgb_mode, double_speed);
-        }
-        let units = cycles * if double_speed { 1 } else { 2 };
-        self.skip_units = self
-            .skip_units
-            .saturating_add(u8::try_from(units).unwrap_or(u8::MAX));
-    }
-
-    pub(crate) const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
-        self.color_correction_mode = mode;
-    }
-
-    pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
-        #[cfg(feature = "debug")]
-        self.trace_write(0xFF40, val);
-        let was_on = self.lcdc & LCDC_ON_B != 0;
-        let is_on = val & LCDC_ON_B != 0;
-
-        if !self.cgb_c_lcdc_tracked() {
-            self.cgb_c_set_lcdc(val);
-        }
-        if is_on && !was_on {
-            self.d.restart();
-            self.timing_lcd_on(ints);
-        } else if !is_on && was_on {
-            self.lcd_off();
-            self.timing_lcd_off(ints);
-            self.rgba_buf_present.clear();
-        } else {
-            // The LCD stays as it is.
-        }
-
-        // Disabling objects while an object is being fetched aborts the
-        // fetch on non-CGB hardware.
-        self.abort_object_fetch_on_obj_disable(val);
-        if self.is_cgb_hardware() && self.lcdc & LCDC_WIN_EN_B != 0 && val & LCDC_WIN_EN_B == 0 {
-            self.cancel_window_start();
-        }
-
-        self.lcdc = val;
-        self.set_obj_size_fetch(val & LCDC_OBJ_SIZE_B != 0);
-        self.d.schedule_wy_check();
-        #[cfg(feature = "debug")]
-        self.trace_requests(ints);
     }
 
     #[cfg_attr(
@@ -441,31 +376,6 @@ impl Ppu {
         self.mixer_scx = self.scx;
     }
 
-    /// Place the PPU `dot` dots into `line` (post-boot state injection). The
-    /// PPU is restarted as if the LCD had just been turned on and run forward.
-    pub(crate) fn set_position(&mut self, line: u8, dot: i32) {
-        if self.lcdc & LCDC_ON_B == 0 {
-            return;
-        }
-        let mut ints = Interrupts::default();
-        self.d.restart();
-        self.timing_lcd_on(&mut ints);
-        // `line_clock` restarts on every visible line and keeps running
-        // through VBlank, starting from its first line.
-        let base = i32::from(line.saturating_sub(LINES)) * LINE_LENGTH;
-        // Two frames at most: a guard against a target never reached.
-        for _ in 0..(2 * i32::from(LINES_PER_FRAME) * LINE_LENGTH) {
-            if self.d.current_line() == line && self.d.line_clock() - base >= dot {
-                break;
-            }
-            self.run_display(&mut ints);
-        }
-        // Finish the dot the loop stopped in.
-        if self.d.half_dot() {
-            self.run_display(&mut ints);
-        }
-    }
-
     #[cfg_attr(
         not(feature = "debug"),
         expect(clippy::missing_const_for_fn, reason = "the debug feature traces it")
@@ -498,12 +408,6 @@ impl Ppu {
         self.wx = val;
     }
 
-    pub(crate) fn write_wy(&mut self, val: u8) {
-        self.cgb_c_write_wy(val);
-        self.wy = val;
-        self.d.schedule_wy_check();
-    }
-
     /// CGB palette RAM is blocked from the CPU while the PPU reads it.
     #[inline]
     #[must_use]
@@ -520,5 +424,155 @@ impl Ppu {
     #[inline]
     pub(crate) const fn leave_stop_mode(&mut self) {
         self.block_ppu_accesses(false);
+    }
+}
+
+impl Ppu {
+    /// `position_in_line` as a signed value (-16..=160).
+    #[must_use]
+    pub(crate) const fn fifo_position(&self) -> i16 {
+        let p = self.pace.position_in_line();
+        if p >= display::pos(-16) {
+            p as i16 - 256
+        } else {
+            p as i16
+        }
+    }
+
+    /// Set while a CPU write to WX is landing (SameBoy's `wx_just_changed`).
+    #[inline]
+    pub(crate) const fn set_wx_just_changed(&mut self, active: bool) {
+        self.pace.set_wx_just_changed(active);
+    }
+
+    /// Set while a CPU write that turns the window on is landing.
+    #[inline]
+    pub(crate) const fn set_window_enable_pending(&mut self, active: bool) {
+        self.pace.set_window_enable_pending(active);
+    }
+
+    #[must_use]
+    pub(crate) const fn is_fetching_sprite(&self) -> bool {
+        self.pace.fetching_object()
+    }
+
+    /// The PPU is at the edge between HBlank and the OAM scan (SameBoy's
+    /// display state 7), where some register writes behave differently.
+    #[must_use]
+    pub(crate) fn at_oam_scan_edge(&self) -> bool {
+        self.pace.state() == display::State::OamScanStart
+    }
+
+    /// Advances the PPU by one CPU T-cycle: a dot in single speed, half of
+    /// one in double speed.
+    pub(crate) fn tick_t_cycle(
+        &mut self,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+    ) {
+        self.cgb_mode = cgb_mode;
+        self.double_speed = double_speed;
+        self.count_chunk_cycle();
+        if self.lcdc & LCDC_ON_B == 0 {
+            return;
+        }
+        for _ in 0..if double_speed { 1 } else { 2 } {
+            if self.skip_units > 0 {
+                self.skip_units -= 1;
+                continue;
+            }
+            self.run_display(ints);
+            #[cfg(feature = "debug")]
+            self.trace_unit(ints);
+        }
+    }
+
+    /// Runs the display `cycles` T-cycles ahead of the CPU, which will not
+    /// run those cycles again.
+    pub(crate) fn run_ahead(
+        &mut self,
+        ints: &mut Interrupts,
+        cgb_mode: CgbMode,
+        double_speed: bool,
+        cycles: i32,
+    ) {
+        if self.lcdc & LCDC_ON_B == 0 {
+            return;
+        }
+        for _ in 0..cycles {
+            self.tick_t_cycle(ints, cgb_mode, double_speed);
+        }
+        let units = cycles * if double_speed { 1 } else { 2 };
+        self.skip_units = self
+            .skip_units
+            .saturating_add(u8::try_from(units).unwrap_or(u8::MAX));
+    }
+
+    pub(crate) fn write_lcdc(&mut self, val: u8, ints: &mut Interrupts) {
+        #[cfg(feature = "debug")]
+        self.trace_write(0xFF40, val);
+        let was_on = self.lcdc & LCDC_ON_B != 0;
+        let is_on = val & LCDC_ON_B != 0;
+
+        if !self.cgb_c_lcdc_tracked() {
+            self.cgb_c_set_lcdc(val);
+        }
+        if is_on && !was_on {
+            self.pace.restart();
+            self.d.restart();
+            self.timing_lcd_on(ints);
+        } else if !is_on && was_on {
+            self.lcd_off();
+            self.timing_lcd_off(ints);
+            self.rgba_buf_present.clear();
+        } else {
+            // The LCD stays as it is.
+        }
+
+        // Disabling objects while an object is being fetched aborts the
+        // fetch on non-CGB hardware.
+        self.abort_object_fetch_on_obj_disable(val);
+        if self.is_cgb_hardware() && self.lcdc & LCDC_WIN_EN_B != 0 && val & LCDC_WIN_EN_B == 0 {
+            self.cancel_window_start();
+        }
+
+        self.lcdc = val;
+        self.set_obj_size_fetch(val & LCDC_OBJ_SIZE_B != 0);
+        self.pace.schedule_wy_check();
+        #[cfg(feature = "debug")]
+        self.trace_requests(ints);
+    }
+
+    /// Place the PPU `dot` dots into `line` (post-boot state injection). The
+    /// PPU is restarted as if the LCD had just been turned on and run forward.
+    pub(crate) fn set_position(&mut self, line: u8, dot: i32) {
+        if self.lcdc & LCDC_ON_B == 0 {
+            return;
+        }
+        let mut ints = Interrupts::default();
+        self.pace.restart();
+        self.d.restart();
+        self.timing_lcd_on(&mut ints);
+        // `line_clock` restarts on every visible line and keeps running
+        // through VBlank, starting from its first line.
+        let base = i32::from(line.saturating_sub(LINES)) * LINE_LENGTH;
+        // Two frames at most: a guard against a target never reached.
+        for _ in 0..(2 * i32::from(LINES_PER_FRAME) * LINE_LENGTH) {
+            if self.d.current_line() == line && self.d.line_clock() - base >= dot {
+                break;
+            }
+            self.run_display(&mut ints);
+        }
+        // Finish the dot the loop stopped in.
+        if self.d.half_dot() {
+            self.run_display(&mut ints);
+        }
+    }
+
+    pub(crate) fn write_wy(&mut self, val: u8) {
+        self.cgb_c_write_wy(val);
+        self.wy = val;
+        self.pace.schedule_wy_check();
     }
 }

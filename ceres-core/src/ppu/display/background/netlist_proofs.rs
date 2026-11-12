@@ -56,19 +56,25 @@
 //! netlist's mode 3 stops a dot after ceres has drawn the line.
 //!
 //! Ceres's side is its mode 3 loop (`mode3::mode3`), run on the display's
-//! state alone (`check::Mode3Loop`): the reads, the object's row and the
-//! pixels' mixing do nothing there, the window's check runs
-//! (`Display::mode3_window`), and the loop itself steps the window's column
-//! and ends its first tile's fetch; the loop runs the window's pixel
-//! insertion and the fetcher's window glitches too, which a held WX and
-//! LCDC's bit never set off. `check::ceres_dot` wakes it as `step_state_machine`
-//! does, and takes `mode3_done`'s sleep into `HBlankStart`.
+//! pace (`check::Mode3Loop`): the window's check runs (`Pace::mode3_window`),
+//! and the loop itself steps the window's column and ends its first tile's
+//! fetch; it runs the window's pixel insertion and the fetcher's window
+//! glitches too, which a held WX and LCDC's bit never set off. The hooks
+//! the loop calls (`mode3::Mode3Ppu`) cannot change the pace: ceres's are
+//! `PpuCore`'s, which does not hold it, and get it to read
+//! (`mode3-hooks-keep-pace`). What they change and the loop reads back is
+//! the tile the fetcher holds, which it pushes onto the FIFO: here the
+//! fetcher's read and the object's push leave any tile in it, so the proofs
+//! hold for whatever ceres's reads find; the object's reads and the pixels'
+//! mixing do nothing. `check::ceres_dot` wakes the loop as
+//! `step_state_machine` does, and takes `mode3_done`'s sleep into
+//! `HBlankStart`.
 //!
 //! What it does not cover yet: the window's start with the objects on, the
 //! pixels the window draws, how it is armed at a line's start (WY's match,
 //! and a line's start with the window armed), WX outside 7 to 165, and
 //! writes of WX and LCDC's window bit (the loop stops ceres's window as a
-//! tile's fetch starts with the bit clear, `Display::window_before_fetch`);
+//! tile's fetch starts with the bit clear, `Pace::window_before_fetch`);
 //! objects at X 0 to 7 (they match in the lead-in), an object's mode 0 pulse
 //! at X 167, and writes of LCDC's object bit (the aborted fetch); line 0
 //! after the LCD is turned on, whose loop starts elsewhere; how a write
@@ -84,7 +90,7 @@ use {
             Ghost, INSIDE, Mode3Loop, expected, related_but_pipeline, start_agrees, step_agrees,
         },
     },
-    crate::ppu::display::{Display, fetcher::FetcherStep, fifo::Fifo, state::State},
+    crate::ppu::display::{Pace, fetcher::FetcherStep, fifo::Fifo, state::State},
     ceres_netlist::render_edge::{EdgeInputs, NetPipeline},
 };
 
@@ -236,28 +242,28 @@ fn any_background() -> Background {
         fifo,
         ..Background::default()
     };
-    bg.fetcher.step = any_step();
-    bg.fetcher.data = [kani::any(), kani::any()];
+    bg.step = any_step();
     bg
 }
 
-/// Ceres's loop with any background, sleep, objects and mixer's SCX, the
-/// window idle.
+/// Ceres's loop with any background, sleep, objects, fetched tile and
+/// mixer's SCX, the window idle.
 fn any_loop() -> Mode3Loop {
-    let mut d = Display::default();
-    d.bg = any_background();
-    d.wait = kani::any();
-    kani::assume((0..=3).contains(&d.wait));
+    let mut pace = Pace::default();
+    pace.bg = any_background();
+    pace.wait = kani::any();
+    kani::assume((0..=3).contains(&pace.wait));
     let count: u8 = kani::any();
     kani::assume(count <= 10);
-    d.objs.count = usize::from(count);
+    pace.objs.count = usize::from(count);
     let mut i = 0;
     while i < 10 {
-        d.objs.entries[i].x = kani::any();
+        pace.objs.entries[i].x = kani::any();
         i += 1;
     }
     Mode3Loop {
-        d,
+        pace,
+        fetcher: kani::any(),
         mixer_scx: kani::any(),
         objects_enabled: kani::any(),
         window_enabled: kani::any(),
@@ -270,16 +276,16 @@ fn any_loop() -> Mode3Loop {
 /// armed and its check short of WX (at it, the window starts).
 fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     let mut l = any_loop();
-    l.d.state = state;
+    l.pace.state = state;
     // The window's flags as `window_agrees` has them: not started, WY
     // matched if armed.
     l.window_enabled = armed;
-    l.d.window.wy_triggered = armed;
+    l.pace.window.wy_triggered = armed;
     if armed {
-        kani::assume(super::check::signed(l.d.bg.position) + 7 < i16::from(l.wx));
+        kani::assume(super::check::signed(l.pace.bg.position) + 7 < i16::from(l.wx));
     }
     // The sleep's dots left as `between_dots` has them.
-    l.d.wait = if matches!(state, State::Mode3ObjectAttributes | State::Mode3ObjectLow) {
+    l.pace.wait = if matches!(state, State::Mode3ObjectAttributes | State::Mode3ObjectLow) {
         1 + i32::from(kani::any::<bool>())
     } else {
         1
@@ -295,11 +301,11 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     // (`netlist_mode3_expected_carries`).
     let mut net = expected(&l, &any_carried(&l), g);
     let last_scx = l.mixer_scx;
-    let bg = &l.d.bg;
+    let bg = &l.pace.bg;
     let p = super::check::signed(bg.position);
     let related = related_but_pipeline(&l, &net, g);
     kani::cover!(
-        related & l.objects_enabled & matches!(l.d.state, State::Mode3ObjectWait),
+        related & l.objects_enabled & matches!(l.pace.state, State::Mode3ObjectWait),
         "object waits for the tile"
     );
     kani::cover!(related & (g.since_push == 0), "object pushed");
@@ -307,7 +313,7 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
         related & (g.since_push == 2) & (g.age == 7) & (bg.fifo.len() < 7),
         "netlist's fetcher ahead"
     );
-    kani::cover!(related & (l.d.objs.count >= 2), "two objects left");
+    kani::cover!(related & (l.pace.objs.count >= 2), "two objects left");
     kani::cover!(related & (p == -15), "unmatched lead-in");
     kani::cover!(related & (p == -16), "lead-in restarted");
     kani::cover!(
@@ -356,6 +362,7 @@ fn netlist_mode3_expected_carries() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -367,6 +374,7 @@ fn netlist_mode3_dot_pixel() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -378,6 +386,7 @@ fn netlist_mode3_dot_wait() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -389,6 +398,7 @@ fn netlist_mode3_dot_fetch_pushed() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -400,6 +410,7 @@ fn netlist_mode3_dot_fetch_after_push() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -411,6 +422,7 @@ fn netlist_mode3_dot_fetch() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -422,6 +434,7 @@ fn netlist_mode3_dot_attributes() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -433,6 +446,7 @@ fn netlist_mode3_dot_low() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -444,6 +458,7 @@ fn netlist_mode3_dot_high() {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
 #[kani::proof]
 #[kani::unwind(12)]
@@ -454,6 +469,7 @@ fn netlist_mode3_dot_drawn() {
 /// A dot from every related pair with the window armed where the loop sleeps after a pixel.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -464,6 +480,7 @@ fn netlist_mode3_armed_pixel() {
 /// A dot from every related pair with the window armed where an object's fetch waits for the tile.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -474,6 +491,7 @@ fn netlist_mode3_armed_wait() {
 /// A dot from every related pair with the window armed where an object's fetch starts as ceres pushes the last.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -484,6 +502,7 @@ fn netlist_mode3_armed_fetch_pushed() {
 /// A dot from every related pair with the window armed where an object's fetch starts a dot after ceres pushed the last.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -494,6 +513,7 @@ fn netlist_mode3_armed_fetch_after_push() {
 /// A dot from every related pair with the window armed where an object's fetch starts.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -504,6 +524,7 @@ fn netlist_mode3_armed_fetch() {
 /// A dot from every related pair with the window armed where an object's attributes are read.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -514,6 +535,7 @@ fn netlist_mode3_armed_attributes() {
 /// A dot from every related pair with the window armed where an object's low byte is read.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -524,6 +546,7 @@ fn netlist_mode3_armed_low() {
 /// A dot from every related pair with the window armed where an object's high byte is read.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -537,32 +560,32 @@ fn netlist_mode3_armed_high() {
 /// the loop sleeps after a pixel, or has drawn the line.
 fn window_dot(window: Option<u8>) {
     let mut l = any_loop();
-    l.d.state = if kani::any() {
+    l.pace.state = if kani::any() {
         State::Mode3Pixel
     } else {
         State::HBlankStart
     };
-    l.d.wait = 1;
+    l.pace.wait = 1;
     l.window_enabled = true;
     l.objects_enabled = false;
-    l.d.window.wy_triggered = true;
-    l.d.window.wx_triggered = kani::any();
-    l.d.window.being_fetched = kani::any();
-    l.d.window.tile_x = kani::any();
+    l.pace.window.wy_triggered = true;
+    l.pace.window.wx_triggered = kani::any();
+    l.pace.window.being_fetched = kani::any();
+    l.pace.window.tile_x = kani::any();
     let mut g = any_ghost();
     if let Some(dots) = window {
         g.window = dots;
     } else {
         kani::assume((g.window >= 1) & (g.window < INSIDE));
     }
-    let p = super::check::signed(l.d.bg.position);
+    let p = super::check::signed(l.pace.bg.position);
     if g.window == 0 {
         g.window_fine = 0;
         kani::assume(p + 7 == i16::from(l.wx));
     }
     let mut net = expected(&l, &any_carried(&l), g);
     let related = related_but_pipeline(&l, &net, g);
-    let drawn = matches!(l.d.state, State::HBlankStart);
+    let drawn = matches!(l.pace.state, State::HBlankStart);
     kani::cover!(related & (g.window == 0), "the check reaches WX");
     kani::cover!(related & (g.window == 1), "the window's first dot");
     kani::cover!(related & (g.window == 6), "the window's row pushed");
@@ -570,7 +593,7 @@ fn window_dot(window: Option<u8>) {
     kani::cover!(related & (g.window == 8) & drawn, "line drawn in the start");
     kani::cover!(related & (g.window == INSIDE) & !drawn, "in the window");
     kani::cover!(
-        related & (g.window == INSIDE) & (l.d.window.tile_x == 0),
+        related & (g.window == INSIDE) & (l.pace.window.tile_x == 0),
         "the window's column wrapped"
     );
     kani::cover!(
@@ -595,6 +618,7 @@ fn window_dot(window: Option<u8>) {
 /// ceres's check at WX: the window starts.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -605,6 +629,7 @@ fn netlist_mode3_window_reached() {
 /// A dot from every related pair in the nine dots of the window's start.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -615,6 +640,7 @@ fn netlist_mode3_window_starting() {
 /// A dot from every related pair in the window, past its start.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -647,6 +673,7 @@ fn any_ghost() -> Ghost {
 // @assumes transcription-render-edge
 // @assumes mapping-mode3-start
 // @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_start() {

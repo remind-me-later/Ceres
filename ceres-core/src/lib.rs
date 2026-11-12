@@ -446,7 +446,7 @@ impl<A: AudioCallback> Gb<A> {
     #[must_use]
     #[inline]
     pub const fn pixel_data_rgba(&self) -> &[u8] {
-        self.ppu.pixel_data_rgba()
+        self.ppu.core().pixel_data_rgba()
     }
 
     #[inline]
@@ -477,7 +477,7 @@ impl<A: AudioCallback> Gb<A> {
 
     #[inline]
     pub const fn set_color_correction_mode(&mut self, mode: ColorCorrectionMode) {
-        self.ppu.set_color_correction_mode(mode);
+        self.ppu.core_mut().set_color_correction_mode(mode);
     }
 
     #[inline]

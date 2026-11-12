@@ -5,7 +5,7 @@ use {
     super::{VRAM_BANK1, VRAM_OFFSET_MASK},
     crate::{
         memory::{DmaPhase, VRAM_START},
-        ppu::Ppu,
+        ppu::PpuCore,
     },
 };
 
@@ -103,7 +103,7 @@ impl CpuAccess {
     }
 }
 
-impl Ppu {
+impl PpuCore {
     /// VRAM at `address` (0x2000.. is bank 1), no bus conflicts.
     pub(super) const fn vram_raw(&self, address: u16) -> u8 {
         if address >= VRAM_BANK1 {

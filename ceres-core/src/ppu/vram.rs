@@ -1,4 +1,4 @@
-use crate::ppu::Ppu;
+use crate::ppu::PpuCore;
 
 pub(crate) struct Vram {
     bytes: [u8; Self::SIZE_CGB as usize],
@@ -72,7 +72,7 @@ impl Vram {
     }
 }
 
-impl Ppu {
+impl PpuCore {
     #[must_use]
     pub(crate) const fn read_vram(&self, addr: u16) -> u8 {
         if self.vram_read_blocked() {

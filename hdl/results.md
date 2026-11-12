@@ -844,6 +844,35 @@ itself: the hooks left write only data (the tile's bytes, the object's row,
 the pixels, the buses' conflicts), and the proofs' loop runs all of the
 window's logic. The A/V and state hashes are the same on 185 runs.
 
+That the hooks write only data was then a survey's word, and the proofs
+rested on it without saying so. The types say it now. What decides the
+display's timing is one struct, `display::Pace`: the state machine's sleep
+(`state`, `wait`, `cfl`), the background's pipeline (its position, the
+FIFO, the fetcher's step), the objects left to draw, whether an object's
+fetch runs or was aborted, and the window. The PPU holds it beside the
+rest, `Ppu { pace, core }`, and the hooks are the core's (`impl Mode3Ppu
+for PpuCore`): they get the pace as `&Pace`, and the loop takes the two
+apart, `mode3(&mut self.core, &mut self.pace, state)`. What the fetcher
+read moved to the core (`Fetcher`, its step stays in the pace), as did
+OAM's latches, which the object fetch's read writes. The loop reads one
+thing back from the hooks, the tile the fetcher holds, which it pushes
+onto the FIFO; the proofs' hooks now set that to anything, at the
+fetcher's read and the object's push, so the proofs hold for whatever
+ceres's reads find. The assumption is `mode3-hooks-keep-pace`, with a new
+kind of evidence, typed: the compiler checks it. The code that changes
+both (the state machine, the register writes that reach the pace, the
+object search) stays `Ppu`'s, which shows the core's fields and methods
+through `Deref`. The A/V and state hashes are the same on 185 runs, and
+the emulator runs 0.23% more instructions (1,162.1 G against 1,159.4 G
+on 40 runs).
+
+All 50 harnesses pass on it, and the six planted faults are caught. The
+22 mode 3 harnesses take 18% less in all (9,566 s against 11,617 s), each
+of them less, as Kani builds the pace rather than the whole display:
+`armed_high` 1,786 s against 2,251, `dot_high` 1,607 against 1,953. The
+CPU's harness (6.7 GB) and `armed_high` together went over the 9 GB cap,
+so `kani.sh` runs the CPU's harnesses after the others, one at a time.
+
 ## Ceres's CPU and the core
 
 Two spikes before the next phase of mode 3, to see what the CPU's side of

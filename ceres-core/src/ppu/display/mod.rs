@@ -4,7 +4,9 @@
 //! dots between observable events. This module keeps the same shape: `state`
 //! is the sleep the engine is currently in, `wait` is the number of dots
 //! left in it, and the state machine in `state.rs` holds the code that
-//! follows each sleep.
+//! follows each sleep. Those and mode 3's timing are the display's pace
+//! (`Pace`), which the PPU keeps apart from the rest (`Ppu::pace`), so that
+//! what mode 3's loop asks of the PPU cannot change it.
 //!
 //! - `state.rs`: the line and frame state machine
 //! - `objects.rs`: the mode 2 object search and the object fetch
@@ -35,12 +37,13 @@ use {
     bus::{CpuAccess, PpuBus},
     cgb_c::CgbC,
     core::mem,
+    fetcher::Fetcher,
     fifo::Fifo,
-    objects::{ObjectFetch, ObjectSearch},
+    objects::{OamLatches, ObjectFetch, ObjectSearch},
     window::Window,
 };
 
-use super::{LCDC_WIN_EN_B, PX_HEIGHT, Ppu, STAT_MODE_B, oam_bug::NO_ROW};
+use super::{LCDC_WIN_EN_B, PX_HEIGHT, Ppu, PpuCore, STAT_MODE_B, oam_bug::NO_ROW};
 
 pub(super) use state::State;
 
@@ -58,20 +61,42 @@ pub(super) const LINES: u8 = PX_HEIGHT;
 pub(super) const LAST_LINE: u8 = 153;
 pub(super) const LINES_PER_FRAME: u8 = LAST_LINE + 1;
 
-#[expect(
-    clippy::struct_excessive_bools,
-    reason = "Independent flags of the line state"
-)]
-#[derive(Clone)]
-pub(super) struct Display {
+/// The display's pace: what decides when it does what. The sleep the
+/// state machine is in, and mode 3's: the background's pipeline, the
+/// objects left to draw, the object fetch and the window.
+///
+/// Mode 3's loop (`mode3::mode3`) changes it; what the loop asks of the
+/// PPU (`mode3::Mode3Ppu`: the fetchers' reads, the object's row, the
+/// pixels) only reads it, as the PPU keeps it apart from the rest
+/// (`Ppu::pace`, beside `PpuCore`), and the hooks are the core's.
+#[derive(Clone, Default)]
+pub(super) struct Pace {
     /// The sleep the state machine is in.
     state: State,
     /// Dots left before the code following the current sleep runs.
     wait: i32,
-    /// Double speed: the first T-cycle of the current dot already ran.
-    half_dot: bool,
     /// `cycles_for_line`: SameBoy's line-length accounting.
     cfl: i32,
+    bg: Background,
+    objs: ObjectSearch,
+    /// An object's tile is being fetched.
+    fetching_object: bool,
+    /// The DMG aborted the object fetch (LCDC's object bit fell).
+    object_fetch_aborted: bool,
+    window: Window,
+}
+
+/// The rest of the display's state: what mode 3's hooks may change (the
+/// fetchers' reads, the object FIFO, the LCD's column) and what the line's
+/// timing keeps outside mode 3.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "Independent flags of the line state"
+)]
+#[derive(Clone, Default)]
+pub(super) struct Display {
+    /// Double speed: the first T-cycle of the current dot already ran.
+    half_dot: bool,
     /// Dots since the last `cycles_for_line` reset (diagnostics / injection).
     line_clock: i32,
 
@@ -88,12 +113,11 @@ pub(super) struct Display {
     /// The LCD was switched off with a non-zero STAT mode; consumed by the HDMA.
     lcd_off_hdma_edge: bool,
 
-    bg: Background,
+    /// What the background's fetcher reads.
+    fetcher: Fetcher,
     oam_fifo: Fifo,
-
-    objs: ObjectSearch,
+    oam_latches: OamLatches,
     obj_fetch: ObjectFetch,
-    window: Window,
     /// The line the WY check compares with on the DMG and in double speed
     /// (SameBoy's `ly_for_comparison`); `-1` around LY changes.
     ly_for_comparison: i32,
@@ -113,36 +137,7 @@ pub(super) const fn pos(signed: i8) -> u8 {
     signed.cast_unsigned()
 }
 
-impl Default for Display {
-    fn default() -> Self {
-        Self {
-            state: State::LcdOn,
-            wait: 0,
-            half_dot: false,
-            cfl: 0,
-            line_clock: 0,
-            current_line: 0,
-            lcd_x: 0,
-            hblank_hdma_edge: false,
-            hblank_hdma_delay: 0,
-            line_clock_valid: false,
-            lcd_off_hdma_edge: false,
-            bg: Background::default(),
-            oam_fifo: Fifo::default(),
-            objs: ObjectSearch::default(),
-            obj_fetch: ObjectFetch::default(),
-            window: Window::default(),
-            ly_for_comparison: 0,
-            line153_compare_pending: false,
-            cgb_c: CgbC::default(),
-            timing: timing::LcdTiming::default(),
-            bus: PpuBus::default(),
-            cpu: CpuAccess::default(),
-        }
-    }
-}
-
-impl Display {
+impl Pace {
     /// Sleep for `n` dots; the code of state `id` runs afterwards.
     #[inline]
     pub(super) const fn sleep(&mut self, id: State, n: i32) {
@@ -172,12 +167,43 @@ impl Display {
         self.wait = 0;
         self.cfl = 0;
         self.window.wy_units = 0;
-        self.half_dot = false;
-        self.cgb_c.restart();
     }
 
     pub(super) const fn state(&self) -> State {
         self.state
+    }
+
+    pub(super) const fn position_in_line(&self) -> u8 {
+        self.bg.position
+    }
+
+    /// The OAM row the PPU is reading (for the OAM bug).
+    pub(super) const fn accessed_oam_row(&self) -> u8 {
+        self.objs.accessed_oam_row
+    }
+
+    pub(super) const fn fetching_object(&self) -> bool {
+        self.fetching_object
+    }
+
+    pub(super) const fn set_wx_just_changed(&mut self, active: bool) {
+        self.window.wx_just_changed = active;
+    }
+
+    pub(super) const fn set_window_enable_pending(&mut self, active: bool) {
+        self.window.enable_pending = active;
+    }
+
+    /// Schedule the WY comparison that follows an LCDC/WY write.
+    pub(super) const fn schedule_wy_check(&mut self) {
+        self.window.wy_check_scheduled = true;
+    }
+}
+
+impl Display {
+    pub(super) const fn restart(&mut self) {
+        self.half_dot = false;
+        self.cgb_c.restart();
     }
 
     pub(super) const fn half_dot(&self) -> bool {
@@ -196,34 +222,13 @@ impl Display {
         self.current_line
     }
 
-    pub(super) const fn position_in_line(&self) -> u8 {
-        self.bg.position
-    }
-
-    /// The OAM row the PPU is reading (for the OAM bug).
-    pub(super) const fn accessed_oam_row(&self) -> u8 {
-        self.objs.accessed_oam_row
-    }
-
-    pub(super) const fn fetching_object(&self) -> bool {
-        self.obj_fetch.active
-    }
-
     /// The CPU's access to the memories the PPU uses.
     pub(super) const fn cpu(&self) -> &CpuAccess {
         &self.cpu
     }
 
     pub(super) const fn set_tile_sel_glitch(&mut self, active: bool) {
-        self.bg.fetcher.tile_sel_glitch = active;
-    }
-
-    pub(super) const fn set_wx_just_changed(&mut self, active: bool) {
-        self.window.wx_just_changed = active;
-    }
-
-    pub(super) const fn set_window_enable_pending(&mut self, active: bool) {
-        self.window.enable_pending = active;
+        self.fetcher.tile_sel_glitch = active;
     }
 
     /// Whether `HBlank` was entered since the last call.
@@ -238,11 +243,6 @@ impl Display {
     /// Whether the LCD was switched off in a non-zero mode since the last call.
     pub(super) const fn take_lcd_off_hdma_edge(&mut self) -> bool {
         mem::replace(&mut self.lcd_off_hdma_edge, false)
-    }
-
-    /// Schedule the WY comparison that follows an LCDC/WY write.
-    pub(super) const fn schedule_wy_check(&mut self) {
-        self.window.wy_check_scheduled = true;
     }
 }
 
@@ -260,7 +260,7 @@ const fn model_ge_cgb_d(m: Model) -> bool {
     matches!(m, Model::CgbD | Model::CgbE | Model::Agb)
 }
 
-impl Ppu {
+impl PpuCore {
     #[inline]
     pub(in crate::ppu) const fn is_cgb_hardware(&self) -> bool {
         self.model.is_cgb_hardware()
@@ -276,36 +276,39 @@ impl Ppu {
         self.double_speed
     }
 
+    pub(super) fn present_frame(&mut self) {
+        self.rgba_buf_present = mem::take(&mut self.rgb_buf);
+    }
+}
+
+impl Ppu {
     /// Sleep for `n` dots; the code of state `id` runs afterwards.
     #[inline]
     pub(super) const fn sleep(&mut self, id: State, n: i32) {
-        self.d.sleep(id, n);
+        self.pace.sleep(id, n);
     }
 
     /// Sleep for `n` dots that count towards the length of the line.
     #[inline]
     pub(super) const fn sleep_in_line(&mut self, id: State, n: i32) {
-        self.d.sleep_in_line(id, n);
+        self.pace.sleep_in_line(id, n);
     }
 
     pub(in crate::ppu) const fn lcd_off(&mut self) {
-        self.d.lcd_off_hdma_edge = self.stat & STAT_MODE_B != 0;
-        self.d.objs.accessed_oam_row = NO_ROW;
-        self.d.cfl = 0;
-        self.d.state = State::LcdOn;
-        self.d.wait = 0;
-        self.ly = 0;
-        self.stat &= !STAT_MODE_B;
-        self.d.current_line = 0;
-        self.d.ly_for_comparison = 0;
-        self.d.window.wy_triggered = false;
-        self.d.window.line0_wy_countdown = 0;
-        self.d.line_clock_valid = false;
-        self.d.cpu.unlock_all();
-    }
-
-    pub(super) fn present_frame(&mut self) {
-        self.rgba_buf_present = mem::take(&mut self.rgb_buf);
+        let core = &mut self.core;
+        core.d.lcd_off_hdma_edge = core.stat & STAT_MODE_B != 0;
+        self.pace.objs.accessed_oam_row = NO_ROW;
+        self.pace.cfl = 0;
+        self.pace.state = State::LcdOn;
+        self.pace.wait = 0;
+        core.ly = 0;
+        core.stat &= !STAT_MODE_B;
+        core.d.current_line = 0;
+        core.d.ly_for_comparison = 0;
+        self.pace.window.wy_triggered = false;
+        self.pace.window.line0_wy_countdown = 0;
+        core.d.line_clock_valid = false;
+        core.d.cpu.unlock_all();
     }
 
     /// Advance the display by one unit (half a dot, SameBoy's 8 MHz tick).
@@ -319,20 +322,21 @@ impl Ppu {
         self.timing_unit(ints);
         self.cgb_c_unit();
         // Pre-run bookkeeping (top of GB_display_run).
-        if self.d.window.wy_triggered {
-            self.d.window.wy_check_scheduled = false;
+        if self.pace.window.wy_triggered {
+            self.pace.window.wy_check_scheduled = false;
         }
 
         // A line that would outgrow 456 dots is cut off (mode 3 abort).
         // `balance` is SameBoy's `display_cycles`.
-        let balance = 2 - 2 * self.d.wait - i32::from(self.d.half_dot);
-        let cut = 2 * self.d.cfl + 1 + balance > 2 * LINE_LENGTH && self.d.state != State::LcdOn;
+        let balance = 2 - 2 * self.pace.wait - i32::from(self.d.half_dot);
+        let cut =
+            2 * self.pace.cfl + 1 + balance > 2 * LINE_LENGTH && self.pace.state != State::LcdOn;
         if cut {
-            if self.d.state == State::HBlankStart {
+            if self.pace.state == State::HBlankStart {
                 self.stat &= !STAT_MODE_B;
             }
-            self.d.state = State::Mode3Abort;
-            self.d.wait = 0;
+            self.pace.state = State::Mode3Abort;
+            self.pace.wait = 0;
         }
 
         self.d.half_dot = !self.d.half_dot;
@@ -341,10 +345,10 @@ impl Ppu {
             if count_down(&mut self.d.hblank_hdma_delay) {
                 self.d.hblank_hdma_edge = true;
             }
-            if count_down(&mut self.d.window.line0_wy_countdown) {
+            if count_down(&mut self.pace.window.line0_wy_countdown) {
                 // The trigger of line 0 is decided afresh: a WY that
                 // changed since the line began can also take it away.
-                self.d.window.wy_triggered = self.lcdc & LCDC_WIN_EN_B != 0 && self.wy == 0;
+                self.pace.window.wy_triggered = self.lcdc & LCDC_WIN_EN_B != 0 && self.wy == 0;
             }
             self.step_state_machine(ints);
         } else if self.d.line153_compare_pending {

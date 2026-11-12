@@ -31,10 +31,12 @@
 //! checked them.
 //!
 //! Ceres's side is its mode 3 loop itself (`mode3::mode3`), on the display's
-//! state alone (`Mode3Loop`): the loop runs all of the window's logic itself
-//! (its check, its start, its pixel insertion, the glitches its fetcher's
-//! step takes); only the fetchers' reads, the object's row and the pixels'
-//! mixing, which do not decide when the pixels come out, do nothing.
+//! pace (`Mode3Loop`): the loop runs all of the window's logic itself (its
+//! check, its start, its pixel insertion, the glitches its fetcher's step
+//! takes). Its hooks cannot change the pace (`Mode3Ppu`): the fetcher's read
+//! and the object's push leave any tile in the fetcher, which the loop
+//! pushes onto the FIFO, and the object's reads and the pixels' mixing do
+//! nothing.
 //! The window is off, armed, starting or started (`WindowPhase`,
 //! `window_agrees`). Armed, ceres's check compares WX with its position plus
 //! 7, the netlist's with its pixel counter (6 ahead) at the dot's rise, and
@@ -69,8 +71,8 @@ use {
     crate::ppu::{
         PX_WIDTH,
         display::{
-            Display,
-            fetcher::FetcherStep,
+            Pace,
+            fetcher::{Fetcher, FetcherStep},
             fifo::Item,
             mode3::{Mode3Flow, Mode3Ppu, mode3},
             pos,
@@ -80,12 +82,18 @@ use {
     ceres_netlist::render_edge::{EdgeInputs, NO_X, NetPipeline, SLOTS},
 };
 
-/// Ceres's mode 3 loop on the display's state alone: the loop runs all of the
-/// window's logic itself (its check, its start, its pixel insertion, the
-/// glitches its fetcher's step takes); only the reads, the object's row and
-/// the pixels' mixing do nothing, and no pixel is drawn.
+/// Ceres's mode 3 loop on the display's pace alone: the loop runs all of
+/// the window's logic itself (its check, its start, its pixel insertion,
+/// the glitches its fetcher's step takes); the hooks read the pace and
+/// cannot change it (`Mode3Ppu`). Here the fetcher's read and the object's
+/// push (the hooks that change what the fetcher holds) leave any tile in
+/// it, for Kani, which the loop pushes onto the FIFO: the proofs hold for
+/// whatever the PPU's reads find. The other hooks do nothing, and no pixel
+/// is drawn.
 pub(crate) struct Mode3Loop {
-    pub d: Display,
+    pub pace: Pace,
+    /// What the fetcher read.
+    pub fetcher: Fetcher,
     /// SCX as the pixel mixer sees it, LCDC's object and window enables, and
     /// WX.
     pub mixer_scx: u8,
@@ -94,11 +102,30 @@ pub(crate) struct Mode3Loop {
     pub wx: u8,
 }
 
-impl Mode3Ppu for Mode3Loop {
-    fn d(&mut self) -> &mut Display {
-        &mut self.d
+impl Mode3Loop {
+    /// Runs the loop from `resume`, its hooks beside the pace.
+    pub(crate) fn run(&mut self, resume: State) -> Mode3Flow {
+        let mut hooks = Hooks {
+            fetcher: &mut self.fetcher,
+            mixer_scx: self.mixer_scx,
+            objects_enabled: self.objects_enabled,
+            window_enabled: self.window_enabled,
+            wx: self.wx,
+        };
+        mode3(&mut hooks, &mut self.pace, resume)
     }
+}
 
+/// The loop's hooks: its registers, and the fetcher, which they change.
+struct Hooks<'a> {
+    fetcher: &'a mut Fetcher,
+    mixer_scx: u8,
+    objects_enabled: bool,
+    window_enabled: bool,
+    wx: u8,
+}
+
+impl Mode3Ppu for Hooks<'_> {
     fn objects_enabled(&self) -> bool {
         self.objects_enabled
     }
@@ -119,15 +146,29 @@ impl Mode3Ppu for Mode3Loop {
         false
     }
 
-    fn fetcher_read(&mut self) {}
+    fn fetcher(&self) -> &Fetcher {
+        self.fetcher
+    }
 
-    fn read_object_attributes(&mut self) {}
+    fn fetcher_read(&mut self, _: &Pace) {
+        #[cfg(kani)]
+        {
+            *self.fetcher = kani::any();
+        }
+    }
 
-    fn read_object_low(&mut self) {}
+    fn read_object_attributes(&mut self, _: &Pace) {}
 
-    fn read_object_high(&mut self) {}
+    fn read_object_low(&mut self, _: &Pace) {}
 
-    fn push_object(&mut self) {}
+    fn read_object_high(&mut self, _: &Pace) {}
+
+    fn push_object(&mut self, _: &Pace) {
+        #[cfg(kani)]
+        {
+            *self.fetcher = kani::any();
+        }
+    }
 
     fn mix_pixel(&mut self, _: Item, _: Popped) {}
 
@@ -139,33 +180,33 @@ impl Mode3Ppu for Mode3Loop {
 /// `HBlankStart` runs a dot later (`mode3_done`'s sleep: the rest of it
 /// starts the next line).
 pub(crate) fn ceres_dot(l: &mut Mode3Loop) {
-    if !l.d.wake() {
+    if !l.pace.wake() {
         return;
     }
-    let state = l.d.state;
-    if matches!(mode3(l, state), Mode3Flow::Done) {
-        l.d.sleep_in_line(State::HBlankStart, 1);
+    let state = l.pace.state;
+    if matches!(l.run(state), Mode3Flow::Done) {
+        l.pace.sleep_in_line(State::HBlankStart, 1);
     }
 }
 
 /// The loop's sleeps between two dots: a dot after its pixel, while an
 /// object's fetch waits for the tile or reads (two dots for the attributes
 /// and the low byte), or the line is drawn.
-const fn between_dots(d: &Display) -> bool {
-    match d.state {
+const fn between_dots(pace: &Pace) -> bool {
+    match pace.state {
         State::Mode3Pixel
         | State::Mode3ObjectWait
         | State::Mode3ObjectFetch
         | State::Mode3ObjectHigh
-        | State::HBlankStart => d.wait == 1,
-        State::Mode3ObjectAttributes | State::Mode3ObjectLow => (d.wait == 1) | (d.wait == 2),
+        | State::HBlankStart => pace.wait == 1,
+        State::Mode3ObjectAttributes | State::Mode3ObjectLow => (pace.wait == 1) | (pace.wait == 2),
         _ => false,
     }
 }
 
 /// The line is drawn: `HBlankStart` runs in the next dot.
-const fn drawn(d: &Display) -> bool {
-    matches!(d.state, State::HBlankStart)
+const fn drawn(pace: &Pace) -> bool {
+    matches!(pace.state, State::HBlankStart)
 }
 
 /// SCX's and WX's addresses.
@@ -355,13 +396,13 @@ pub(crate) struct Before {
 }
 
 impl Before {
-    pub(crate) const fn of(d: &Display) -> Self {
+    pub(crate) const fn of(pace: &Pace) -> Self {
         Self {
-            state: d.state,
-            wait: d.wait,
-            position: d.bg.position,
-            len: d.bg.fifo.len(),
-            window_started: d.window.wx_triggered,
+            state: pace.state,
+            wait: pace.wait,
+            position: pace.bg.position,
+            len: pace.bg.fifo.len(),
+            window_started: pace.window.wx_triggered,
         }
     }
 }
@@ -441,9 +482,9 @@ impl Ghost {
     /// its fine scroll begins a tile. Once ceres's window check has fired,
     /// the dots since, and the rest as with nothing fetched (the objects are
     /// off there).
-    pub(crate) fn after(self, before: Before, d: &Display) -> Self {
+    pub(crate) fn after(self, before: Before, pace: &Pace) -> Self {
         let (state, wait, position) = (before.state, before.wait, before.position);
-        let fired = !before.window_started & d.window.wx_triggered;
+        let fired = !before.window_started & pace.window.wx_triggered;
         let window = if fired {
             1
         } else if (self.window >= 1) & (self.window < INSIDE) {
@@ -460,7 +501,7 @@ impl Ghost {
                 } else {
                     self.window_fine
                 },
-                ..Self::at_rest(&d.bg)
+                ..Self::at_rest(&pace.bg)
             };
         }
         let pushed = matches!(state, State::Mode3ObjectHigh) & (wait == 1);
@@ -471,11 +512,11 @@ impl Ghost {
         } else {
             2
         };
-        let popped = d.bg.position != position;
-        let frozen = (since_push <= 1) | ((self.extra == 2) & fetching(d));
+        let popped = pace.bg.position != position;
+        let frozen = (since_push <= 1) | ((self.extra == 2) & fetching(pace));
         let extra = (self.extra + u8::from(!frozen)).wrapping_sub(u8::from(popped));
-        let rerun = self.rerun | ((position == pos(-9)) & (d.bg.position == pos(-16)));
-        let (p, len) = shifted(&d.bg, extra);
+        let rerun = self.rerun | ((position == pos(-9)) & (pace.bg.position == pos(-16)));
+        let (p, len) = shifted(&pace.bg, extra);
         let fine = fine_of(len);
         let age = if (p + i16::from(len) <= 0) & !rerun {
             fine
@@ -499,9 +540,9 @@ impl Ghost {
 }
 
 /// Ceres's loop is fetching an object: it waits for the tile, or reads.
-const fn fetching(d: &Display) -> bool {
+const fn fetching(pace: &Pace) -> bool {
     matches!(
-        d.state,
+        pace.state,
         State::Mode3ObjectWait
             | State::Mode3ObjectFetch
             | State::Mode3ObjectAttributes
@@ -521,7 +562,7 @@ pub(crate) const fn expected(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetP
         WindowPhase::Inside => return window_inside(l, net),
         WindowPhase::Off | WindowPhase::Armed => {}
     }
-    let (p, len) = shifted(&l.d.bg, g.extra);
+    let (p, len) = shifted(&l.pace.bg, g.extra);
     let first = (p + len as i16 <= 0) & !g.rerun;
     let mut e = pipeline_at(p, len, first, net);
     if !first {
@@ -531,7 +572,7 @@ pub(crate) const fn expected(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetP
         // RENE takes RYFA at each clock, and RYFA holds.
         e.rene = e.ryfa;
     }
-    let (state, wait) = (l.d.state, l.d.wait);
+    let (state, wait) = (l.pace.state, l.pace.wait);
     let sprite = match g.since_push {
         0 => Some((false, false, 4, true, true, true, true, false)),
         1 => Some((false, false, SPRITE_DONE, false, false, true, true, true)),
@@ -579,8 +620,8 @@ const fn len_at(fine: u8) -> u8 {
 /// no RYFA, and the window's column steps. In dot 9 the pixels go on, PYCO
 /// and NUNU fall, and RENE has no RYFA to take.
 const fn window_starting(l: &Mode3Loop, net: &NetPipeline, dot: u8, fine: u8) -> NetPipeline {
-    let d = &l.d;
-    let position = signed(d.bg.position);
+    let pace = &l.pace;
+    let position = signed(pace.bg.position);
     let held = if fine == 7 { 7 } else { fine + 1 };
     let started = NetPipeline {
         pyco: true,
@@ -628,7 +669,7 @@ const fn window_starting(l: &Mode3Loop, net: &NetPipeline, dot: u8, fine: u8) ->
             ryfa: false,
             rydy: false,
             win_x: 1,
-            ..pipeline_at(position, d.bg.fifo.len(), false, &started)
+            ..pipeline_at(position, pace.bg.fifo.len(), false, &started)
         }
     } else {
         NetPipeline {
@@ -638,7 +679,7 @@ const fn window_starting(l: &Mode3Loop, net: &NetPipeline, dot: u8, fine: u8) ->
             rydy: false,
             sovy: false,
             win_x: 1,
-            ..pipeline_at(position, d.bg.fifo.len(), false, &started)
+            ..pipeline_at(position, pace.bg.fifo.len(), false, &started)
         }
     }
 }
@@ -648,8 +689,8 @@ const fn window_starting(l: &Mode3Loop, net: &NetPipeline, dot: u8, fine: u8) ->
 /// in the window (NOPA and its latch), its column a tile behind ceres's
 /// from ceres's read of a tile's last byte to the netlist's restart for it.
 const fn window_inside(l: &Mode3Loop, net: &NetPipeline) -> NetPipeline {
-    let d = &l.d;
-    let inside = pipeline_at(signed(d.bg.position), d.bg.fifo.len(), false, net);
+    let pace = &l.pace;
+    let inside = pipeline_at(signed(pace.bg.position), pace.bg.fifo.len(), false, net);
     NetPipeline {
         pyco: false,
         nunu: false,
@@ -657,7 +698,7 @@ const fn window_inside(l: &Mode3Loop, net: &NetPipeline) -> NetPipeline {
         in_window: true,
         rydy: false,
         sovy: false,
-        win_x: d.window.tile_x.wrapping_sub((inside.fine >= 4) as u8) & WIN_X_MASK,
+        win_x: pace.window.tile_x.wrapping_sub((inside.fine >= 4) as u8) & WIN_X_MASK,
         ..inside
     }
 }
@@ -706,8 +747,8 @@ pub(crate) const fn before_start(net: &NetPipeline) -> NetPipeline {
 /// Ceres's first dot of the loop (`Mode3Start`): mode 3 starts
 /// (`mode3_start`, the background's part), then the loop.
 pub(crate) fn ceres_first_dot(l: &mut Mode3Loop) {
-    l.d.bg.start();
-    _ = mode3(l, State::Mode3);
+    l.pace.bg.start();
+    _ = l.run(State::Mode3);
 }
 
 /// The first dot from the netlist's state before it, and ceres's after the
@@ -726,10 +767,10 @@ pub(crate) fn start_agrees(
         & quiet(&net.inputs, l)
         & latch_holds(net)
         & (*net == before_start(net))
-        & (l.d.bg.position == pos(-16))
-        & !l.d.bg.insert_blank
+        & (l.pace.bg.position == pos(-16))
+        & !l.pace.bg.insert_blank
         & store_holds(net)
-        & window_agrees(l, net, Ghost::at_rest(&l.d.bg))
+        & window_agrees(l, net, Ghost::at_rest(&l.pace.bg))
         & starting_objects(l, net);
     if !(before
         & rising.clk
@@ -740,23 +781,23 @@ pub(crate) fn start_agrees(
     {
         return true;
     }
-    let snapshot = Before::of(&l.d);
+    let snapshot = Before::of(&l.pace);
     ceres_first_dot(l);
     net.edge(rising);
     net.edge(falling);
     let rest = Ghost {
         age: 0,
-        ..Ghost::at_rest(&l.d.bg)
+        ..Ghost::at_rest(&l.pace.bg)
     };
-    related(l, net, rest.after(snapshot, &l.d))
+    related(l, net, rest.after(snapshot, &l.pace))
 }
 
 /// As the line's loop starts, ceres's objects and the netlist's store hold
 /// the same sprites (the OAM scan's proofs), none fetched, at X 8 or more.
 fn starting_objects(l: &Mode3Loop, net: &NetPipeline) -> bool {
-    let rest = Ghost::at_rest(&l.d.bg);
+    let rest = Ghost::at_rest(&l.pace.bg);
     (net.fetched == 0)
-        & !l.d.obj_fetch.aborted
+        & !l.pace.object_fetch_aborted
         & objects_ok(l, rest)
         & (!l.objects_enabled | objects_agree(l, net, rest))
 }
@@ -770,12 +811,12 @@ fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         WindowPhase::Inside => return window_inside_ok(l, g),
         WindowPhase::Off | WindowPhase::Armed => {}
     }
-    let bg = &l.d.bg;
+    let bg = &l.pace.bg;
     let p = signed(bg.position);
     let len = bg.fifo.len();
     let shapes = (len >= 1)
         & (len <= FULL)
-        & fetcher_ok(&l.d, g)
+        & fetcher_ok(&l.pace, g)
         & !bg.insert_blank
         & (p >= LEAD_IN)
         & (p <= i16::from(PX_WIDTH))
@@ -815,8 +856,8 @@ fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         & round
         & lead_in
         & fetcher_ahead
-        & ghost_ok(&l.d, g)
-        & fetch_age_ok(&l.d, g)
+        & ghost_ok(&l.pace, g)
+        & fetch_age_ok(&l.pace, g)
         & objects_ok(l, g)
         & pending_compares(bg, latched, l.mixer_scx, g.rerun)
 }
@@ -827,7 +868,7 @@ fn ghost_rests(l: &Mode3Loop, g: Ghost) -> bool {
         rerun: g.rerun,
         window: g.window,
         window_fine: g.window_fine,
-        ..Ghost::at_rest(&l.d.bg)
+        ..Ghost::at_rest(&l.pace.bg)
     }
 }
 
@@ -837,23 +878,23 @@ fn ghost_rests(l: &Mode3Loop, g: Ghost) -> bool {
 /// the sixth, and a pixel a dot from the seventh, the first of which ends
 /// `being_fetched`.
 fn window_starting_ok(l: &Mode3Loop, g: Ghost, dot: u8, fine: u8) -> bool {
-    let d = &l.d;
-    let bg = &d.bg;
+    let pace = &l.pace;
+    let bg = &pace.bg;
     let p = signed(bg.position);
     let len = bg.fifo.len();
     let wx = i16::from(l.wx);
     let shape = if dot <= 5 {
         (len == 0)
-            & (bg.fetcher.step as u8 == dot)
+            & (bg.step as u8 == dot)
             & (p + WX_AHEAD == wx)
-            & d.window.being_fetched
-            & (d.window.tile_x == 0)
+            & pace.window.being_fetched
+            & (pace.window.tile_x == 0)
     } else {
         (len == 14 - dot)
-            & matches_step(bg.fetcher.step, step_for(len))
+            & matches_step(bg.step, step_for(len))
             & (p + 13 - i16::from(dot) == wx)
-            & (d.window.being_fetched == (dot == 6))
-            & (d.window.tile_x == 1)
+            & (pace.window.being_fetched == (dot == 6))
+            & (pace.window.tile_x == 1)
     };
     // With WX at 165 the line is drawn after the eighth dot.
     shape
@@ -868,17 +909,17 @@ fn window_starting_ok(l: &Mode3Loop, g: Ghost, dot: u8, fine: u8) -> bool {
 /// background's shapes past the window's start, a tile's fetch a FIFO, the
 /// window's column within its five bits.
 fn window_inside_ok(l: &Mode3Loop, g: Ghost) -> bool {
-    let d = &l.d;
-    let bg = &d.bg;
+    let pace = &l.pace;
+    let bg = &pace.bg;
     let p = signed(bg.position);
     let len = bg.fifo.len();
     (len >= 1)
         & (len <= FULL)
-        & matches_step(bg.fetcher.step, step_for(len))
+        & matches_step(bg.step, step_for(len))
         & (p + 3 >= i16::from(l.wx))
         & (p <= i16::from(PX_WIDTH))
-        & !d.window.being_fetched
-        & (d.window.tile_x <= WIN_X_MASK)
+        & !pace.window.being_fetched
+        & (pace.window.tile_x <= WIN_X_MASK)
         & !bg.insert_blank
         & ghost_rests(l, g)
         & objects_ok(l, g)
@@ -887,28 +928,28 @@ fn window_inside_ok(l: &Mode3Loop, g: Ghost) -> bool {
 /// The ghost against ceres's phase: the netlist's pixels stand still from
 /// the third dot of an object's fetch (two pixels past ceres's) to the dot
 /// after ceres's push, and draw on, a pixel behind, as ceres's do.
-const fn ghost_ok(d: &Display, g: Ghost) -> bool {
+const fn ghost_ok(pace: &Pace, g: Ghost) -> bool {
     match g.since_push {
         // Ceres's push: it drew a pixel, or fetches the next object at the
         // same X.
         0 => {
             g.frozen
-                & if fetching(d) {
+                & if fetching(pace) {
                     // The next object at the same X: its tile is there.
-                    matches!(d.state, State::Mode3ObjectFetch) & (g.extra == 2)
+                    matches!(pace.state, State::Mode3ObjectFetch) & (g.extra == 2)
                 } else {
                     g.extra == 1
                 }
         }
         1 => {
             g.frozen
-                & if fetching(d) {
+                & if fetching(pace) {
                     // Its attributes, or ceres drew a pixel and stopped at the
                     // next X.
-                    (matches!(d.state, State::Mode3ObjectAttributes)
-                        & (d.wait == 2)
+                    (matches!(pace.state, State::Mode3ObjectAttributes)
+                        & (pace.wait == 2)
                         & (g.extra == 2))
-                        | (matches!(d.state, State::Mode3ObjectWait | State::Mode3ObjectFetch)
+                        | (matches!(pace.state, State::Mode3ObjectWait | State::Mode3ObjectFetch)
                             & (g.extra == 1))
                 } else {
                     g.extra == 0
@@ -916,16 +957,16 @@ const fn ghost_ok(d: &Display, g: Ghost) -> bool {
         }
         _ => {
             let reads = matches!(
-                d.state,
+                pace.state,
                 State::Mode3ObjectAttributes | State::Mode3ObjectLow | State::Mode3ObjectHigh
             );
-            let second = !matches!(d.state, State::Mode3ObjectAttributes) | (d.wait == 1);
+            let second = !matches!(pace.state, State::Mode3ObjectAttributes) | (pace.wait == 1);
             if reads {
                 // The reads begin a dot after the stop at the earliest: the
                 // netlist drew its two pixels, and stands still from the
                 // attributes' second dot.
                 (g.extra == 2) & (!second | g.frozen)
-            } else if fetching(d) {
+            } else if fetching(pace) {
                 (g.extra >= 1) & (!g.frozen | (g.extra == 2))
             } else {
                 (g.extra == 0) & !g.frozen
@@ -938,71 +979,71 @@ const fn ghost_ok(d: &Display, g: Ghost) -> bool {
 /// a dot: two steps behind ceres's while ceres waits for the tile, then on
 /// to done as ceres reads (4 as it starts, 7 by the low byte), or further
 /// (its fine scroll's count, or an earlier object of the tile).
-const fn fetch_age_ok(d: &Display, g: Ghost) -> bool {
-    let (_, net_len) = shifted(&d.bg, g.extra);
+const fn fetch_age_ok(pace: &Pace, g: Ghost) -> bool {
+    let (_, net_len) = shifted(&pace.bg, g.extra);
     let fine = fine_of(net_len);
     if matches!(
-        d.state,
+        pace.state,
         State::Mode3ObjectFetch
             | State::Mode3ObjectAttributes
             | State::Mode3ObjectLow
             | State::Mode3ObjectHigh
-    ) & !matches_step(d.bg.fetcher.step, FetcherStep::Push)
+    ) & !matches_step(pace.bg.step, FetcherStep::Push)
     {
         // The fetch began with the fetcher at its high byte's second dot or
         // further, a tile in the FIFO, and stepped it to its push.
         return false;
     }
-    if matches!(d.state, State::Mode3ObjectFetch)
+    if matches!(pace.state, State::Mode3ObjectFetch)
         & (g.since_push == 2)
         & (g.extra == 2)
-        & (net_len > d.bg.fifo.len())
+        & (net_len > pace.bg.fifo.len())
     {
         // Two pixels or fewer left: ceres's fetcher waited at its push, and
         // the fetch began in the dot of the stop.
         return false;
     }
-    if matches!(d.state, State::Mode3ObjectWait | State::Mode3ObjectFetch)
+    if matches!(pace.state, State::Mode3ObjectWait | State::Mode3ObjectFetch)
         & (g.since_push == 2)
         & (g.extra == 2)
     {
         // The fetch waited for the tile, so ceres's fetcher was not at its
         // push when it stopped: the netlist's runs two steps behind it, and
         // the fetch began as ceres's reached its high byte's second dot.
-        let step = if matches!(d.state, State::Mode3ObjectFetch) {
+        let step = if matches!(pace.state, State::Mode3ObjectFetch) {
             FetcherStep::DataHighT2 as u8 + 1
         } else {
-            d.bg.fetcher.step as u8
+            pace.bg.step as u8
         };
         return g.age == step.wrapping_sub(2);
     }
-    if fetching(d) & (g.since_push <= 1) & (g.extra == 2) {
+    if fetching(pace) & (g.since_push <= 1) & (g.extra == 2) {
         // The next object at the same X: the netlist's fetcher was done
         // long before.
-        return (g.age == 7) | ((net_len > d.bg.fifo.len()) & (g.age == fine));
+        return (g.age == 7) | ((net_len > pace.bg.fifo.len()) & (g.age == fine));
     }
-    if matches!(d.state, State::Mode3ObjectAttributes)
-        & (d.wait == 2)
+    if matches!(pace.state, State::Mode3ObjectAttributes)
+        & (pace.wait == 2)
         & (g.since_push == 2)
         & !g.frozen
-        & (net_len <= d.bg.fifo.len())
+        & (net_len <= pace.bg.fifo.len())
     {
         // The fetch began in the dot of the stop, ceres's fetcher at its high
         // byte's second dot or further (the netlist's at 3 or more), and the
         // netlist drew on for two dots.
         return g.age >= 5;
     }
-    if !(fetching(d) & g.frozen & (g.since_push == 2)) {
+    if !(fetching(pace) & g.frozen & (g.since_push == 2)) {
         return true;
     }
-    if net_len > d.bg.fifo.len() {
+    if net_len > pace.bg.fifo.len() {
         return (g.age == fine) | (g.age == 7);
     }
-    let phase = match d.state {
-        State::Mode3ObjectWait => (d.bg.fetcher.step as u8).wrapping_sub(2),
+    let phase = match pace.state {
+        State::Mode3ObjectWait => (pace.bg.step as u8).wrapping_sub(2),
         State::Mode3ObjectFetch => 4,
         State::Mode3ObjectAttributes => {
-            if d.wait == 2 {
+            if pace.wait == 2 {
                 5
             } else {
                 6
@@ -1019,17 +1060,17 @@ const fn fetch_age_ok(d: &Display, g: Ghost) -> bool {
 /// count behind; once the netlist's fetcher ran on while the pixels stood
 /// still (its age past the fine scroll's count), ceres's ran on too, two
 /// steps ahead of the netlist's count, to its push.
-const fn fetcher_ok(d: &Display, g: Ghost) -> bool {
-    let bg = &d.bg;
+const fn fetcher_ok(pace: &Pace, g: Ghost) -> bool {
+    let bg = &pace.bg;
     let len = bg.fifo.len();
-    let step = bg.fetcher.step;
+    let step = bg.step;
     let (_, net_len) = shifted(bg, g.extra);
     // Ceres pushed its row a dot or two ago, before the netlist's pixels
     // reach the tile and its fetcher restarts for it.
     let fresh = matches_step(step, step_for(len)) & (len >= FULL - 1) & (net_len >= FULL - 1);
     if first_round(bg) & !g.rerun {
         matches_step(step, step_for(len))
-    } else if !fetching(d) & (len == FULL) {
+    } else if !fetching(pace) & (len == FULL) {
         // A full FIFO after a pixel: its row was pushed in this dot.
         matches_step(step, FetcherStep::GetTileT1)
     } else if net_len > len {
@@ -1039,7 +1080,7 @@ const fn fetcher_ok(d: &Display, g: Ghost) -> bool {
     } else if g.age == fine_of(net_len) {
         // While ceres stops for an object its fetcher runs on with the
         // netlist's pixels; otherwise it keeps to its own FIFO.
-        matches_step(step, step_for(if fetching(d) { net_len } else { len }))
+        matches_step(step, step_for(if fetching(pace) { net_len } else { len }))
     } else if g.age <= 3 {
         step as u8 == g.age + 2
     } else {
@@ -1051,8 +1092,8 @@ const fn fetcher_ok(d: &Display, g: Ghost) -> bool {
 /// lead-in's are left out), none left behind the position; while it fetches
 /// one, it is the nearest, at the position's X.
 fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
-    let objs = &l.d.objs;
-    let at = l.d.bg.object_match_x();
+    let objs = &l.pace.objs;
+    let at = l.pace.bg.object_match_x();
     let mut ok = objs.count <= MAX_OBJECTS;
     let mut i = 0;
     while i < MAX_OBJECTS {
@@ -1074,17 +1115,17 @@ fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
         Some(e) => l.objects_enabled & (e.x == at),
         None => false,
     };
-    let (_, net_len) = shifted(&l.d.bg, g.extra);
+    let (_, net_len) = shifted(&l.pace.bg, g.extra);
     let quiet_line = l.objects_enabled
         | ((g.since_push == 2) & (g.extra == 0) & !g.frozen & (g.age == fine_of(net_len)));
     // The fetch waits for the tile while the fetcher has not reached its
     // high byte's second dot, a step a dot (or the FIFO ran out and got its
     // row).
-    let step = l.d.bg.fetcher.step as u8;
-    let waits = !matches!(l.d.state, State::Mode3ObjectWait)
+    let step = l.pace.bg.step as u8;
+    let waits = !matches!(l.pace.state, State::Mode3ObjectWait)
         | (step <= FetcherStep::DataHighT2 as u8)
-        | ((l.d.bg.fifo.len() == FULL) & matches_step(l.d.bg.fetcher.step, FetcherStep::GetTileT1));
-    ok & ahead & (!fetching(&l.d) | fetched) & quiet_line & waits
+        | ((l.pace.bg.fifo.len() == FULL) & matches_step(l.pace.bg.step, FetcherStep::GetTileT1));
+    ok & ahead & (!fetching(&l.pace) | fetched) & quiet_line & waits
 }
 
 /// The netlist's sprite store against ceres's objects: at each X up to 167,
@@ -1105,7 +1146,7 @@ fn objects_agree(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
         }
         slot += 1;
     }
-    let objs = &l.d.objs;
+    let objs = &l.pace.objs;
     let mut i = 0;
     while i < MAX_OBJECTS {
         if (i < objs.count) && (objs.entries[i].x <= LAST_OBJECT_X) {
@@ -1138,7 +1179,7 @@ const fn net_objects_at(net: &NetPipeline, x: u8) -> u8 {
 }
 
 fn objects_at(l: &Mode3Loop, net: &NetPipeline, g: Ghost, at: u8) -> u8 {
-    let objs = &l.d.objs;
+    let objs = &l.pace.objs;
     let mut found = u8::from((g.since_push == 0) & (at == net.px));
     let mut i = 0;
     while i < MAX_OBJECTS {
@@ -1225,7 +1266,7 @@ const WIN_X_MASK: u8 = 0x1F;
 /// its start on this line as the phase has them (`being_fetched` only once
 /// it started: `reachable` says when).
 const fn ceres_window_waits(l: &Mode3Loop, wy_triggered: bool, started: bool) -> bool {
-    let w = &l.d.window;
+    let w = &l.pace.window;
     (w.wy_triggered == wy_triggered)
         & (w.wx_triggered == started)
         & (started | !w.being_fetched)
@@ -1257,7 +1298,7 @@ const fn window_agrees(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
                 & window_unstarted(g)
                 & net_window_waits(net)
                 & wx_held
-                & (signed(l.d.bg.position) + WX_AHEAD <= l.wx as i16)
+                & (signed(l.pace.bg.position) + WX_AHEAD <= l.wx as i16)
         }
         // The netlist's window is `expected`'s there.
         WindowPhase::Starting { .. } | WindowPhase::Inside => {
@@ -1316,9 +1357,9 @@ pub(crate) fn related_but_pipeline(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -
         & latch_holds(net)
         & store_holds(net)
         & window_agrees(l, net, g)
-        & between_dots(&l.d)
-        & (drawn(&l.d) == (l.d.bg.position == PX_WIDTH))
-        & !l.d.obj_fetch.aborted
+        & between_dots(&l.pace)
+        & (drawn(&l.pace) == (l.pace.bg.position == PX_WIDTH))
+        & !l.pace.object_fetch_aborted
         & reachable(l, net.scx, g)
         & objects_agree(l, net, g)
 }
@@ -1356,8 +1397,8 @@ pub(crate) fn step_agrees(
     {
         return true;
     }
-    let drawn = drawn(&l.d);
-    let before = Before::of(&l.d);
+    let drawn = drawn(&l.pace);
+    let before = Before::of(&l.pace);
     l.mixer_scx = mixer_scx;
     if !drawn {
         ceres_dot(l);
@@ -1368,6 +1409,6 @@ pub(crate) fn step_agrees(
     if drawn {
         !stopped_early & net.stop_mode3()
     } else {
-        !stopped_early & !net.stop_mode3() & related(l, net, g.after(before, &l.d))
+        !stopped_early & !net.stop_mode3() & related(l, net, g.after(before, &l.pace))
     }
 }
