@@ -813,6 +813,20 @@ beyond its five bits. Not proved yet: the window with objects on, how a
 line starts armed (WY's trigger against REJO), WX outside 7 to 165, writes
 of WX and of LCDC's window bit, and the pixels.
 
+The proofs take every state the relation allows, and the 803 ROMs reach
+only some of them, so `tests/render_edge_free.rs` compares `NetPipeline`
+with `NetRender` from states no ROM reaches: 2000 runs of three lines from
+power-on, with random LCDC, sprite X, CPU writes of SCX, WY and WX, and
+resets held as levels. Over 5,471,000 edges the two agree, with one
+exception, which the test leaves out and counts: the edge where the LCD's
+reset rises while mode 3 runs. Render's fetcher restart (TEVO) still sees
+mode 3 in the delta before the reset clears it, and clears the fetcher's
+count; the pipeline clears mode 3 first, and its count stays (56 of 1000
+such edges differ, a few of them in the window's column, a sprite's slot
+or the pixel counter). The proofs take no reset in mode 3, and the ROMs
+turn the LCD off outside it, so nothing rests on that edge yet; the LCD
+turned off in mode 3 will need the pipeline's reset in render's order.
+
 All 22 mode 3 harnesses pass on this relation. Two at a time under the 9 GB
 cap they take 92 minutes and 5.5 GB at the most; the longest are
 `armed_high` (35 minutes), `dot_high` (29), `armed_pixel` (22) and
