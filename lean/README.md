@@ -74,6 +74,14 @@ emulator's types yet.
   within its scope), the M-cycle blocks' (`hPer`, `blocks_steps` once it is
   plugged in), how an M-cycle's access looks to mode 3 dot by dot (`hDots`),
   and the SM83's two (`hOut`, `hNext`).
+- `Sketch/Instance.lean`: the outline's M-cycle blocks are the real ones.
+  `hPer_real` is `hPer` for `netBlocks` and `ceresBlocks`, from
+  `blocks_steps` and Kani's five claims, with mode 3's flags put into the
+  real input's `mode3End` (`endOf`). It shows what the outline still takes
+  for granted of the clock: an M-cycle has four dots, a dot is the edges
+  `2d` and `2d + 1` and mode 3 ends at the second (the real input names a
+  half dot, and an end at an even one is a known difference there), and
+  mode 3 ends at most once in an M-cycle (the real input holds one).
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
   axioms, with no `sorry`.
 
