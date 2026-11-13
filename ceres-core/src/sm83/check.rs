@@ -10,8 +10,9 @@
 //! fetch. Each M-cycle's access must be the same, and `boundary` must hold
 //! again after the last.
 //!
-//! No interrupt is requested here, and the core is neither halted, stopped
-//! nor in reset.
+//! The interrupt requests (IF's lines) are an input, which changes only as
+//! phase E starts (`Net::int`); the core is neither halted, stopped nor in
+//! reset.
 
 #![cfg_attr(
     not(any(kani, test)),
@@ -41,10 +42,10 @@ pub(super) enum Access {
     Write(u16, u8),
 }
 
-/// The core's inputs in a phase, with `d` on the chip's data bus: the
-/// oscillator stable, no reset, no interrupt requested, and an address the
-/// chip does not decode.
-pub(super) const fn inputs(phase: u8, d: u8) -> CoreInputs {
+/// The core's inputs in a phase, with `d` on the chip's data bus and `int`
+/// on IF's lines: the oscillator stable, no reset, and an address the chip
+/// does not decode.
+pub(super) const fn inputs(phase: u8, d: u8, int: u8) -> CoreInputs {
     CoreInputs {
         clk: phase == 0,
         exec_phase: phase != 0,
@@ -59,7 +60,7 @@ pub(super) const fn inputs(phase: u8, d: u8) -> CoreInputs {
         internal_access: false,
         shadow_access: false,
         shadow_override: false,
-        int: 0,
+        int,
         d,
     }
 }
@@ -82,6 +83,12 @@ pub(super) struct Net {
     /// `netlist_sm83_settles_*` harnesses show is enough: each pass costs
     /// Kani about as much as the next.
     pub confirm: bool,
+    /// IF's lines from phase E of the next M-cycle on, and before it (A to
+    /// D, what they were from the E before).
+    pub int: u8,
+    pub int_before: u8,
+    /// The interrupts the core acknowledged in the last M-cycle.
+    pub acks: u8,
 }
 
 impl Net {
@@ -110,9 +117,15 @@ impl Net {
         let mut access = Access::Idle;
         let mut settled = true;
         let mut last = (0xFF, CoreOutputs::default());
+        self.acks = 0;
         for phase in 0..PHASES {
             let kept = self.core.db;
-            let stale = inputs(phase, !self.low_before);
+            let int = if phase < PHASE_E {
+                self.int_before
+            } else {
+                self.int
+            };
+            let stale = inputs(phase, !self.low_before, int);
             self.core.edges(&stale);
             if repeats_clocks(phase) {
                 settled &= stale.d == last.0;
@@ -122,6 +135,7 @@ impl Net {
                     let out_again = again.settle_once(&stale, kept);
                     settled &= again.settled(&self.core) & (out_again == out);
                 }
+                self.acks |= out.inta;
                 if out.wr {
                     access = Access::Write(out.addr, out.db);
                 } else if (phase == PHASES - 1) & out.rd {
@@ -133,7 +147,7 @@ impl Net {
             }
             let first = self.settle(&stale, kept, &mut settled);
             let now_low = if first.rd { !read(first.addr) } else { 0 };
-            let driven = inputs(phase, !(now_low | self.low_before));
+            let driven = inputs(phase, !(now_low | self.low_before), int);
             // While the core reads, settled again with what the memory
             // drives (a pass that changes nothing if the bus had it
             // already); otherwise the bus is as it was.
@@ -144,6 +158,7 @@ impl Net {
             };
             self.low_before = now_low;
             last = (driven.d, out);
+            self.acks |= out.inta;
             if out.wr {
                 access = Access::Write(out.addr, out.db);
             } else if (phase == PHASES - 1) & out.rd {
@@ -152,6 +167,7 @@ impl Net {
                 // Nothing on the bus in this phase.
             }
         }
+        self.int_before = self.int;
         settled.then_some(access)
     }
 }

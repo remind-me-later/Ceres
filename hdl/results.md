@@ -976,10 +976,25 @@ instruction with no toggle, so it never met that state. The harness now
 takes the toggle as `run` does (`Sm83::take_ime_toggle`, which `run`
 calls too), and both pass.
 
-Interrupts are left out (`sm83-no-interrupt`). The core decides an
-interrupt's entry in the data phase of the M-cycle that fetches the next
-opcode, and ceres at the start of its step, before that fetch, so the two
-can only be compared with the interrupt block's timing in hand.
+Interrupts are left out of those harnesses (`sm83-no-interrupt`). The core
+decides an interrupt's entry in the data phase of the M-cycle that fetches
+the next opcode, and ceres at the start of its step, before that fetch.
+The two are the same edge: the core's request latch is open in phases A to
+D and closes as E starts, and ceres's M-cycle starts at the netlist's E
+(`mapping-m-cycle-at-e`). So both act on IF as that edge finds it.
+
+A second co-simulation, `interrupts_agree_with_the_core`, holds them to
+that. IF's lines are an input, rising as some M-cycle's phase E starts,
+with IE and IME random. Ceres runs up to eight instructions from random
+memory, a step at a time as the emulator does: EI's delay, the check
+before the fetch, the dispatch. The core runs as many M-cycles. Each
+M-cycle's access and each acknowledge must be the same. Of 49,971 runs,
+8,029 dispatch an interrupt and none differ. That includes 128 in which the
+dispatch's push lands on IE and takes the request away, so the core
+acknowledges nothing and jumps to 0, as ceres does. IE answers at its own
+address there; runs that touch IF's (29) are left out, as IF is its own
+block. Two deliberate breaks show the test can fail: ceres finding IF an
+M-cycle late (4,997 runs differ) and a wrong vector (4,407).
 
 The second spike is a CPU access to VRAM. `ceres-netlist`'s
 `tests/vram_gate.rs` runs the 43 ROMs that read and write VRAM around

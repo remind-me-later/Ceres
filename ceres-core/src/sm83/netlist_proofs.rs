@@ -291,7 +291,7 @@ const fn nmi_at_rest(core: &NetCore) -> bool {
 /// The core is settled in `phase` with `d` on the chip's data bus and its
 /// keeper holding `kept`: a pass changes nothing.
 fn settled_in(core: &NetCore, phase: u8, d: u8, kept: u8) -> bool {
-    let i = inputs(phase, d);
+    let i = inputs(phase, d, 0);
     let mut again = *core;
     _ = again.settle_once(&i, kept);
     (core.clk == i.clk) & (core.exec_phase == i.exec_phase) & again.settled(core)
@@ -315,7 +315,7 @@ fn settles_after_edges(phase: u8) {
     let before = if phase == 0 { PHASES - 1 } else { phase - 1 };
     kani::assume(settled_in(&core, before, kani::any(), kani::any()));
     kani::assume(nmi_at_rest(&core));
-    let i = inputs(phase, kani::any());
+    let i = inputs(phase, kani::any(), 0);
     let kept = core.db;
     let mut core = core;
     core.edges(&i);
@@ -333,8 +333,8 @@ fn settles_repeating(phase: u8) {
     kani::assume(settled_in(&core, phase - 1, d, kept));
     kani::assume(nmi_at_rest(&core));
     let mut before = core;
-    let out_before = before.settle_once(&inputs(phase - 1, d), kept);
-    let i = inputs(phase, d);
+    let out_before = before.settle_once(&inputs(phase - 1, d, 0), kept);
+    let i = inputs(phase, d, 0);
     let mut again = core;
     again.edges(&i);
     let out = again.settle_once(&i, core.db);
@@ -350,7 +350,7 @@ fn settles_driven(phase: u8) {
     let kept: u8 = kani::any();
     kani::assume(settled_in(&core, phase, kani::any(), kept));
     kani::assume(nmi_at_rest(&core));
-    one_pass_settles(core, &inputs(phase, kani::any()), kept);
+    one_pass_settles(core, &inputs(phase, kani::any(), 0), kept);
 }
 
 /// An instruction of the class `in_class` (its opcode, and the byte after
@@ -370,6 +370,9 @@ fn instruction_agrees(in_class: impl Fn(u8, u8) -> bool, counts: &[usize], mcycl
         core: core_between_any(&cpu, op),
         low_before: kani::any(),
         confirm: false,
+        int: 0,
+        int_before: 0,
+        acks: 0,
     };
     kani::assume(boundary(&net.core, &cpu, op));
     // Settled in the instruction before's last phase.
