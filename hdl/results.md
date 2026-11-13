@@ -996,6 +996,45 @@ address there; runs that touch IF's (29) are left out, as IF is its own
 block. Two deliberate breaks show the test can fail: ceres finding IF an
 M-cycle late (4,997 runs differ) and a wrong vector (4,407).
 
+What the core looks like where a step's first M-cycle ends, surveyed by
+that co-simulation, splits cleanly. Where ceres dispatches, the core is
+`entering`, its registers ceres's with PC one on (its fetch moved PC; the
+dispatch's first read did not). Where ceres fetches, it is not, and its
+request latches can hold a request when IME is off, or set but not yet
+shown (EI's delay). So the relation between instructions leaves the
+latches free, but for a request with IME set and shown, which is an entry
+(`check::takes_interrupt`), and a second relation, `check::entry_begins`,
+holds where an entry begins. Both hold after every step of every run.
+
+Kani then takes interrupts from every state. Every instruction harness
+gets IF's lines free in each M-cycle, changing as phase E starts, with the
+latches free at the start, and must end in `entry_begins` where ceres's
+next step would dispatch (IME set before EI's toggle, and IF and IE sharing
+a request as the fetch's E edge finds them), else in `boundary`, with no
+acknowledge on the way. A new harness, `netlist_sm83_interrupt_entry`,
+takes the entry from there: ceres's dispatch after its first read, and the
+fetch at the vector, against the core's next five M-cycles, with any lines
+from IF, and pushes anywhere but IF's address (they may write IE).
+Accesses and acknowledges agree, and `boundary` holds at the vector's
+opcode. The one-pass lemmas now take IF's lines too. `sm83-no-interrupt`
+is split into `sm83-requests-at-e` (the lines change only at E, and the
+CPU does not access IF) and `sm83-not-halted`.
+
+On the way, the harness's bus and then the co-simulation's had ceres find
+IF a half M-cycle late in the dispatch's last M-cycle: they ignored
+ceres's `defer(2)`, so a higher request rising there took the vector on
+ceres's side only (172 runs once requests could rise twice). Ceres's own
+bus is at an access's start when the access returns, and its dispatch
+reads IF and IE there, before the two dots it defers to the acknowledge:
+where the core's latch closes. With both test buses tracking that, the
+difference went, and a planted fault that reads them after the two dots
+(`dispatch-chooses-the-vector-late`) is caught.
+
+All 107 harnesses pass, and the eight planted faults are caught. The free
+lines cost little: ALU A,r takes 37 s, `CALL` 123 s where it took 115, the
+entry 87 s, and the CPU's 58 harnesses 44 minutes. HALT and STOP are what
+the CPU's comparison still leaves out.
+
 The second spike is a CPU access to VRAM. `ceres-netlist`'s
 `tests/vram_gate.rs` runs the 43 ROMs that read and write VRAM around
 mode 3 (Gambatte's `vram_m3` for the DMG, gbmicrotest's `vram` ROMs) on

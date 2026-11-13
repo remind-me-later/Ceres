@@ -195,25 +195,23 @@ pub(super) const fn registers_agree(core: &NetCore, cpu: &Sm83) -> bool {
         & (core.seq.ime_state == (cpu.ime ^ cpu.ime_toggle))
 }
 
-/// The core's control state where an instruction ends: phase H of an
-/// M-cycle that fetched `op`, which its opcode register shows next, with no
-/// interrupt taken or pending and nothing else under way.
-pub(super) const fn core_between(core: &NetCore, op: u8) -> bool {
+/// The core's control state where a fetch's M-cycle ends, whether it
+/// fetched an opcode or began an interrupt's entry: nothing else under way,
+/// no NMI, IE showing its master. The interrupts' request latches are
+/// free: they take IF's lines again in the next M-cycle.
+const fn after_fetch(core: &NetCore) -> bool {
     let s = &core.seq;
     let sampled = &core.sampled;
-    (s.ir_next == op)
-        & (s.mcyc <= 7)
+    (s.mcyc <= 7)
         & !s.cb_next
         & !s.halt
         & !s.stop
         & !s.halt_delayed
         & !s.stop_delayed
-        & !s.pending_delayed
         & !s.not_ready_1
         & !s.not_ready_2
         & s.no_nmi
         & s.no_nmi_1
-        & !s.entering
         & !s.int_entry
         & s.nmi_low_1
         & s.nmi_low_2
@@ -221,7 +219,8 @@ pub(super) const fn core_between(core: &NetCore, op: u8) -> bool {
         & !s.nmi_entering
         & !s.nmi_entry
         & !core.alu.cond_fail
-        & (core.ints.pending == 0)
+        & (sampled.int_pending == (core.ints.pending != 0))
+        & (core.ints.ie == core.ints.ie_next)
         & !core.clk
         & core.exec_phase
         & core.fetch
@@ -229,13 +228,38 @@ pub(super) const fn core_between(core: &NetCore, op: u8) -> bool {
         & !sampled.mread
         & !sampled.halt_step
         & !sampled.stop
-        & !sampled.int_pending
         & !sampled.not_ready
         & !sampled.nmi
+}
+
+/// A request latched with IME set, and shown set: the core enters.
+const fn takes_interrupt(core: &NetCore) -> bool {
+    core.sampled.int_pending & core.seq.ime_state & core.seq.ime
+}
+
+/// The core's control state where an instruction ends: phase H of an
+/// M-cycle that fetched `op`, which its opcode register shows next, and no
+/// interrupt taken.
+pub(super) const fn core_between(core: &NetCore, op: u8) -> bool {
+    after_fetch(core) & (core.seq.ir_next == op) & !core.seq.entering & !takes_interrupt(core)
+}
+
+/// The core where an interrupt's entry begins: phase H of the M-cycle
+/// that fetched, as ceres's dispatch reads, at PC, and the core took the
+/// request.
+pub(super) const fn core_entering(core: &NetCore) -> bool {
+    after_fetch(core) & core.seq.entering & takes_interrupt(core)
 }
 
 /// The two between instructions: ceres is about to execute `op`, which the
 /// core has just fetched.
 pub(super) const fn boundary(core: &NetCore, cpu: &Sm83, op: u8) -> bool {
     core_between(core, op) & registers_agree(core, cpu)
+}
+
+/// The two where an interrupt's entry begins: ceres has done its
+/// dispatch's first read, at PC, and the core its fetch there, which moved
+/// its PC on: `cpu` is ceres with PC one on.
+pub(super) const fn entry_begins(core: &NetCore, cpu: &Sm83) -> bool {
+    core_entering(core) & registers_agree(core, cpu)
 }

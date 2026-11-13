@@ -7,11 +7,16 @@
 //! written). Each M-cycle's access (a read, a write or none, with its
 //! address and byte) must be the same, and `boundary` must hold after the
 //! fetch that ends the instruction.
+//!
+//! The interrupts' (`interrupts_agree_with_the_core`) runs ceres's steps on
+//! a few instructions with IE and IF's requests, and holds each step's
+//! first M-cycle to `boundary`, or to `entry_begins` where ceres
+//! dispatches.
 
 use {
     super::{
         Bus, Sm83,
-        check::{Access, Net, boundary},
+        check::{Access, Net, boundary, entry_begins},
     },
     ceres_netlist::sm83::{Flags, NetCore, NetRegisters, Register},
     std::collections::BTreeMap,
@@ -71,25 +76,33 @@ impl Memory {
     }
 }
 
-/// IF's lines: `bits` rise as phase E of M-cycle `rise` starts (none if
-/// `bits` is 0), and stay until acknowledged.
+/// IF's lines: `bits` rise as phase E of M-cycle `rise` starts, and
+/// `later` as that of `rise_later` (none if 0); they stay until
+/// acknowledged.
 #[derive(Clone, Copy, Default)]
 struct Requests {
     rise: usize,
     bits: u8,
+    rise_later: usize,
+    later: u8,
 }
 
 impl Requests {
     /// The lines from phase E of M-cycle `m` on.
     const fn lines(self, m: usize) -> u8 {
-        if m >= self.rise { self.bits } else { 0 }
+        let first = if m >= self.rise { self.bits } else { 0 };
+        let second = if m >= self.rise_later { self.later } else { 0 };
+        first | second
     }
 }
 
 /// Ceres's bus on the memory, which remembers each M-cycle's access, with
-/// IE and IF's requests: ceres finds IF as the E edge of the M-cycle about
-/// to start has it (`mapping-m-cycle-at-e`), what the lines took from the
-/// E edge before.
+/// IE and IF's requests. As ceres's own bus, it is at an access's start
+/// when the access returns, and `defer` moves it into the access's
+/// M-cycle; between steps it is at the next M-cycle's start. Ceres's
+/// M-cycle starts at the netlist's E (`mapping-m-cycle-at-e`): at an
+/// M-cycle's start ceres finds IF as the lines took it at the E edge
+/// before, and once into it, as they took it at its own.
 struct TraceBus {
     memory: Memory,
     trace: Vec<Access>,
@@ -103,6 +116,8 @@ struct TraceBus {
     acks: Vec<(usize, u8)>,
     /// The dispatches (each triggers the OAM bug at SP, and only they do).
     dispatches: u32,
+    /// T-cycles into the last access's M-cycle (4: the next's start).
+    into: i32,
 }
 
 impl TraceBus {
@@ -116,19 +131,28 @@ impl TraceBus {
             acked: 0,
             acks: Vec::new(),
             dispatches: 0,
+            into: 4,
         }
     }
 
-    /// IF as the next M-cycle's E edge finds it.
+    /// IF where the bus is: at the last access's start, as its E edge
+    /// finds it; past that, with what the lines took there.
     fn flags(&self) -> u8 {
-        let before = self.trace.len().checked_sub(1);
-        before.map_or(0, |m| self.requests.lines(m)) & !self.acked
+        let back = if self.into == 0 { 2 } else { 1 };
+        let at = self.trace.len().checked_sub(back);
+        at.map_or(0, |m| self.requests.lines(m)) & !self.acked
+    }
+
+    /// An access: its M-cycle starts.
+    fn access(&mut self, access: Access) {
+        self.trace.push(access);
+        self.into = 0;
     }
 }
 
 impl Bus for TraceBus {
     fn tick(&mut self) {
-        self.trace.push(Access::Idle);
+        self.access(Access::Idle);
     }
 
     fn read(&mut self, addr: u16) -> u8 {
@@ -137,7 +161,7 @@ impl Bus for TraceBus {
         } else {
             self.memory.read(addr)
         };
-        self.trace.push(Access::Read(addr, value));
+        self.access(Access::Read(addr, value));
         value
     }
 
@@ -146,11 +170,11 @@ impl Bus for TraceBus {
             self.ie = val;
         }
         self.memory.write(addr, val);
-        self.trace.push(Access::Write(addr, val));
+        self.access(Access::Write(addr, val));
     }
 
     fn tick_oam_bug(&mut self, _: u16) {
-        self.trace.push(Access::Idle);
+        self.access(Access::Idle);
     }
 
     fn peek(&self, addr: u16) -> u8 {
@@ -162,7 +186,9 @@ impl Bus for TraceBus {
     }
 
     fn flush(&mut self) {}
-    fn defer(&mut self, _: i32) {}
+    fn defer(&mut self, t_cycles: i32) {
+        self.into = 4 - t_cycles;
+    }
     fn drop_deferred(&mut self) {}
     fn advance(&mut self, _: i32) {}
     fn is_cgb_hardware(&self) -> bool {
@@ -489,6 +515,72 @@ struct IntTally {
     first: Option<String>,
 }
 
+/// The core beside ceres's steps: its memory, its accesses and its
+/// acknowledges, M-cycle by M-cycle.
+struct CoreSide {
+    net: Net,
+    memory: Memory,
+    trace: Vec<Access>,
+    acks: Vec<(usize, u8)>,
+    acked: u8,
+    settles: bool,
+}
+
+impl CoreSide {
+    /// The next M-cycle, with IF's lines as `requests` has them, less
+    /// what the core acknowledged.
+    fn mcycle(&mut self, requests: Requests) -> Access {
+        let m = self.trace.len();
+        self.net.int = requests.lines(m) & !self.acked;
+        // The memory leaves the bus alone at IE's address, where the core's
+        // register drives it.
+        let memory = &self.memory;
+        let access = self.net.mcycle(|addr| {
+            if addr == IE_ADDR {
+                0xFF
+            } else {
+                memory.read(addr)
+            }
+        });
+        self.settles &= access.is_some();
+        let access = access.unwrap_or(Access::Idle);
+        if let Access::Write(addr, value) = access {
+            self.memory.write(addr, value);
+        }
+        let acks = self.net.acks;
+        if acks != 0 {
+            self.acks.push((m, acks));
+            self.acked |= acks;
+            self.net.int &= !acks;
+            self.net.int_before &= !acks;
+        }
+        self.trace.push(access);
+        access
+    }
+}
+
+/// An access at `at` in `trace`.
+fn touches(trace: &[Access], at: u16) -> bool {
+    trace.iter().any(
+        |access| matches!(access, Access::Read(addr, _) | Access::Write(addr, _) if *addr == at),
+    )
+}
+
+/// Ceres's registers and IME, as `cpu` has them.
+fn registers_of(cpu: &Sm83) -> Sm83 {
+    Sm83 {
+        af: cpu.af,
+        bc: cpu.bc,
+        de: cpu.de,
+        hl: cpu.hl,
+        sp: cpu.sp,
+        pc: cpu.pc,
+        ime: cpu.ime,
+        ime_toggle: cpu.ime_toggle,
+        ..Sm83::default()
+    }
+}
+
 /// Instructions from `cpu.pc` on, ceres a step at a time as it runs them
 /// (EI's delay, the check for an interrupt before the fetch, the
 /// dispatch), the core as many M-cycles, with IE and IF's requests on both:
@@ -516,66 +608,65 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
         writes: Vec::new(),
     };
     let ie = rng.word().to_le_bytes()[0];
+    let rise = usize::from(rng.word() % 24);
     let requests = Requests {
-        rise: usize::from(rng.word() % 24),
+        rise,
         bits: rng.word().to_le_bytes()[0] & 0x1F,
+        rise_later: rise + usize::from(rng.word() % 8),
+        later: rng.word().to_le_bytes()[0] & 0x1F,
     };
-    let mut net = Net {
-        core: core_with_ie(&cpu, rng.word(), ie),
-        low_before: 0,
-        confirm: true,
-        int: 0,
-        int_before: 0,
-        acks: 0,
+    let mut core = CoreSide {
+        net: Net {
+            core: core_with_ie(&cpu, rng.word(), ie),
+            low_before: 0,
+            confirm: true,
+            int: 0,
+            int_before: 0,
+            acks: 0,
+        },
+        memory: memory.clone(),
+        trace: Vec::new(),
+        acks: Vec::new(),
+        acked: 0,
+        settles: true,
     };
-    let mut net_memory = memory.clone();
     let mut bus = TraceBus::new(memory);
     bus.with_ie = true;
     bus.ie = ie;
     bus.requests = requests;
 
-    let mut net_trace = Vec::new();
-    let mut net_acks = Vec::new();
-    let mut net_acked = 0;
-    let mut settles = true;
+    // After each step's first M-cycle, `boundary` or `entry_begins`.
+    let mut related = true;
     for _ in 0..STEPS {
         let opcode = bus.peek(cpu.pc);
         if opcode != CB_PREFIX && !compared(opcode) {
             break;
         }
+        let start = bus.trace.len();
+        let dispatches_before = bus.dispatches;
+        // Ceres as the step's first M-cycle leaves it, PC one on (as the
+        // core's fetch has it, whether ceres fetched or began a dispatch).
+        let mut first = registers_of(&cpu);
+        first.pc = first.pc.wrapping_add(1);
         cpu.step(&mut bus);
-        while net_trace.len() < bus.trace.len() {
-            let m = net_trace.len();
-            net.int = requests.lines(m) & !net_acked;
-            // The memory leaves the bus alone at IE's address, where the
-            // core's register drives it.
-            let access = net.mcycle(|addr| {
-                if addr == IE_ADDR {
-                    0xFF
+        // Ceres's run takes the step's time: the next step starts at an
+        // M-cycle's start.
+        bus.into = 4;
+        let dispatched = bus.dispatches != dispatches_before;
+        while core.trace.len() < bus.trace.len() {
+            let m = core.trace.len();
+            let access = core.mcycle(requests);
+            if m == start {
+                let c = &core.net.core;
+                related &= if dispatched {
+                    entry_begins(c, &first)
                 } else {
-                    net_memory.read(addr)
-                }
-            });
-            settles &= access.is_some();
-            let access = access.unwrap_or(Access::Idle);
-            if let Access::Write(addr, value) = access {
-                net_memory.write(addr, value);
+                    matches!(access, Access::Read(_, op) if boundary(c, &first, op))
+                };
             }
-            if net.acks != 0 {
-                net_acks.push((m, net.acks));
-                net_acked |= net.acks;
-                net.int &= !net.acks;
-                net.int_before &= !net.acks;
-            }
-            net_trace.push(access);
         }
     }
-    let touches = |trace: &[Access], at: u16| {
-        trace.iter().any(|access| {
-            matches!(access, Access::Read(addr, _) | Access::Write(addr, _) if *addr == at)
-        })
-    };
-    if touches(&bus.trace, IF_ADDR) || touches(&net_trace, IF_ADDR) {
+    if touches(&bus.trace, IF_ADDR) || touches(&core.trace, IF_ADDR) {
         tally.at_if += 1;
         return;
     }
@@ -583,12 +674,13 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
     tally.at_ie += u64::from(touches(&bus.trace, IE_ADDR));
     tally.dispatched += u64::from(bus.dispatches != 0);
     tally.cancelled += u64::from(bus.dispatches as usize > bus.acks.len());
-    if !settles || net_trace != bus.trace || net_acks != bus.acks {
+    let settles = core.settles;
+    if !settles || !related || core.trace != bus.trace || core.acks != bus.acks {
         tally.differing += 1;
         tally.first.get_or_insert_with(|| {
             format!(
-                "IE {ie:02X}, IF {:02X} from M-cycle {}, IME {}\n  ceres {:?}\n        acks {:?}\n                   core  {:?}\n        acks {:?}\n  settles {settles}",
-                requests.bits, requests.rise, u8::from(cpu.ime), bus.trace, bus.acks, net_trace, net_acks
+                "IE {ie:02X}, IF {:02X} from M-cycle {}, {:02X} from {}, IME {}\n  ceres {:?}\n        acks {:?}\n                   core  {:?}\n        acks {:?}\n  settles {settles}, related {related}",
+                requests.bits, requests.rise, requests.later, requests.rise_later, u8::from(cpu.ime), bus.trace, bus.acks, core.trace, core.acks
             )
         });
     }

@@ -1,0 +1,24 @@
+# Ceres's dispatch reads IF and IE two dots into its last M-cycle, after the
+# core's request latch has closed: a request rising there takes the vector.
+# harness: netlist_sm83_interrupt_entry
+--- a/ceres-core/src/sm83/mod.rs
++++ b/ceres-core/src/sm83/mod.rs
+@@ -344,17 +344,13 @@
+         let old_enable = (self.sp == io_addr(IE)).then(|| bus.read_ie() & INT_MASK);
+ 
+         bus.write(self.sp, lo);
++        bus.defer(2);
+ 
+         let flags = old_flags.unwrap_or_else(|| bus.read_if() & INT_MASK);
+         let enable = old_enable.unwrap_or_else(|| bus.read_ie() & INT_MASK);
+ 
+         let queue = enable & flags;
+ 
+-        // The vector comes from IF and IE as the last M-cycle starts, where
+-        // the core's request latch closes; two of its four dots elapse
+-        // before the interrupt is acknowledged.
+-        bus.defer(2);
+-
+         if queue != 0 {
+             let bit = (queue.trailing_zeros() & 7) as u8;
+             bus.ack_interrupt(1 << bit);

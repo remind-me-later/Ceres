@@ -263,7 +263,12 @@ evidence = "measured"
 how = "ceres-core's sm83::cosim runs sm83::check's M-cycle on a memory of random bytes: every opcode but HALT, STOP and the eleven that are not instructions, and the 256 after the CB prefix, from 400 random states each (199,583 runs, the 17 with an access at FFFF left out): the accesses and the registers are ceres's."
 rests_on = ["transcription-sm83"]
 
-[sm83-no-interrupt]
-title = "No interrupt is requested while the CPU's instructions are compared, and the core is not halted or stopped"
+[sm83-requests-at-e]
+title = "IF's lines change only as phase E starts, and the CPU's accesses compared do not reach IF's address"
 evidence = "open"
-how = "The core decides an interrupt's entry in the data phase of the M-cycle that fetches the next opcode, and ceres at the start of its step, before that fetch: the two need the interrupt block's timing (if-step-agrees) to be compared. HALT's and STOP's steps are not compared either."
+how = "The core takes IF's lines through its request latch, open in phases A to D, so a change anywhere in A to D acts as one at the E edge before, and one in E to H as one at the next. Ceres finds IF as the E edge before its step's fetch has it (mapping-m-cycle-at-e). An access to IF (FF0F) is the IF block's (if-step-agrees), which the composition takes. Co-simulated in interrupts_agree_with_the_core."
+
+[sm83-not-halted]
+title = "The core is not halted or stopped while the CPU is compared"
+evidence = "open"
+how = "HALT's and STOP's steps, with the HALT bug and the wake-ups, are not compared yet."

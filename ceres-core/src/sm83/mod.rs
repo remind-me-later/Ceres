@@ -350,8 +350,9 @@ impl Sm83 {
 
         let queue = enable & flags;
 
-        // Two of the last M-cycle's four dots elapse before the interrupt is
-        // acknowledged and the vector is chosen.
+        // The vector comes from IF and IE as the last M-cycle starts, where
+        // the core's request latch closes; two of its four dots elapse
+        // before the interrupt is acknowledged.
         bus.defer(2);
 
         if queue != 0 {
