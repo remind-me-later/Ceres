@@ -947,6 +947,35 @@ core, rather than assuming it, so that Kani folds it.
 most. Each M-cycle adds about 1.1 GB, so the classes of three and four
 M-cycles should fit, and CALL's six would be near the cap.
 
+CALL's did not fit at first: Kani was killed at 9 GB. What made it fit is
+that the core's clocks change only in phases A, B, E and G. C and D give
+it B's clocks again, F gives E's and H gives G's, and with the same clocks
+and the same bus a settled core has nothing to move. The instruction
+harness therefore passes over C, D, F and H (`check::repeats_clocks`): it
+keeps the phase before's outputs and asserts that the bus is the same
+too. The co-simulation still settles them, and the four lemma harnesses
+`netlist_sm83_settles_repeating_*` prove that nothing moves in them. With
+that, ALU A,r takes 2.6 GB, PUSH no longer needs 7.4 GB, and CALL's six
+M-cycles take 6.3 GB.
+
+So every instruction ceres compares has a harness: 37 classes, which a
+script checked against the opcodes and M-cycle counts of the
+co-simulation's survey. A conditional class (JR, JP, CALL, RET cc) and the
+CB prefix's classes take a harness per count. Each asserts that ceres's
+count is one of the class's and assumes the harness's own, so that between
+them they take every run. The 57 CPU harnesses (37 classes, 20 lemmas) run
+one at a time in 39 minutes, from 30 s (one M-cycle) to 115 s (CALL), and a
+third planted fault goes with them: CALL pushing the wrong return address.
+
+The first full run failed RETI and the class of DI and EI, on IME. The
+harness widened ceres's state to any `ime_toggle` (an EI just before) but
+called `exec` alone. `run` applies that toggle before it executes an
+instruction. After EI, then, DI left `ime ^ ime_toggle` set where ceres
+clears it, and RETI the other way round. The co-simulation starts every
+instruction with no toggle, so it never met that state. The harness now
+takes the toggle as `run` does (`Sm83::take_ime_toggle`, which `run`
+calls too), and both pass.
+
 Interrupts are left out (`sm83-no-interrupt`). The core decides an
 interrupt's entry in the data phase of the M-cycle that fetches the next
 opcode, and ceres at the start of its step, before that fetch, so the two

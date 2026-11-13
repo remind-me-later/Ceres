@@ -64,16 +64,23 @@ pub(super) const fn inputs(phase: u8, d: u8) -> CoreInputs {
     }
 }
 
+/// The phases whose clocks are the phase before's: C and D (B's), F (E's)
+/// and H (G's). The clocks change only as A, B, E and G start.
+pub(super) const fn repeats_clocks(phase: u8) -> bool {
+    matches!(phase, 2 | 3 | 5 | 7)
+}
+
 /// The netlist's core, with what the memory left on the data bus.
 pub(super) struct Net {
     pub core: NetCore,
     /// The bits the memory pulled low in the phase before: they stay a
     /// while after the edge (`NetChip::data_low`).
     pub low_before: u8,
-    /// Each settle is confirmed by a second pass (the co-simulation). The
-    /// proofs settle in one pass, which the `netlist_sm83_settles_*`
-    /// harnesses show is enough: a second pass would cost Kani as much
-    /// again.
+    /// Each settle is confirmed by a second pass, and each phase passed
+    /// over is settled after all (the co-simulation). The proofs settle in
+    /// one pass, and pass over the phases with nothing new, which the
+    /// `netlist_sm83_settles_*` harnesses show is enough: each pass costs
+    /// Kani about as much as the next.
     pub confirm: bool,
 }
 
@@ -93,26 +100,50 @@ impl Net {
     /// An M-cycle, and its access: the read as phase H has it (the model's
     /// `BUS_TRACE`), the write as its last phase has it. `read` is the
     /// memory, which drives the bus while the core reads; the core is
-    /// settled twice a phase, as `NetChip` does, the second time with what
-    /// the memory drives (if that is what the bus had already, the core is
-    /// settled as it is). `None` if a confirmed settle took more than one
-    /// pass.
+    /// settled twice a phase while it reads, as `NetChip` does, the second
+    /// time with what the memory drives. A phase whose clocks are the phase before's
+    /// (`repeats_clocks`) finds the core settled for them, with the bus the
+    /// phase before left, and gives out what that one did. `None` if the
+    /// bus is not the phase before's there, or a confirmed settle took more
+    /// than one pass.
     pub(super) fn mcycle(&mut self, mut read: impl FnMut(u16) -> u8) -> Option<Access> {
         let mut access = Access::Idle;
         let mut settled = true;
+        let mut last = (0xFF, CoreOutputs::default());
         for phase in 0..PHASES {
             let kept = self.core.db;
             let stale = inputs(phase, !self.low_before);
             self.core.edges(&stale);
+            if repeats_clocks(phase) {
+                settled &= stale.d == last.0;
+                let out = last.1;
+                if self.confirm {
+                    let mut again = self.core;
+                    let out_again = again.settle_once(&stale, kept);
+                    settled &= again.settled(&self.core) & (out_again == out);
+                }
+                if out.wr {
+                    access = Access::Write(out.addr, out.db);
+                } else if (phase == PHASES - 1) & out.rd {
+                    access = Access::Read(out.addr, out.db);
+                } else {
+                    // Nothing on the bus in this phase.
+                }
+                continue;
+            }
             let first = self.settle(&stale, kept, &mut settled);
             let now_low = if first.rd { !read(first.addr) } else { 0 };
             let driven = inputs(phase, !(now_low | self.low_before));
-            let out = if driven.d == stale.d {
-                first
-            } else {
+            // While the core reads, settled again with what the memory
+            // drives (a pass that changes nothing if the bus had it
+            // already); otherwise the bus is as it was.
+            let out = if first.rd {
                 self.settle(&driven, kept, &mut settled)
+            } else {
+                first
             };
             self.low_before = now_low;
+            last = (driven.d, out);
             if out.wr {
                 access = Access::Write(out.addr, out.db);
             } else if (phase == PHASES - 1) & out.rd {

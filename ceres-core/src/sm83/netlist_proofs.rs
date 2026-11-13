@@ -16,7 +16,11 @@
 //! core between instructions is settled in phase H (an instruction's last
 //! phase, by those harnesses), so by induction every phase's one pass is
 //! the settle. (A second pass to check each would cost Kani as much again:
-//! with it, one M-cycle took 6.7 GB, which left no room for two.)
+//! with it, one M-cycle took 6.7 GB, which left no room for two.) And as
+//! the clocks change only as A, B, E and G start, the phases C, D, F and H,
+//! with the bus the phase before left, are passed over: from a core settled
+//! in the phase before, a pass with the same clocks and bus changes
+//! nothing and gives out the same (`netlist_sm83_settles_repeating_*`).
 
 use {
     super::{
@@ -318,6 +322,26 @@ fn settles_after_edges(phase: u8) {
     one_pass_settles(core, &i, kept);
 }
 
+/// From any core settled in the phase before `phase` with a bus and a
+/// keeper, the NMI's latches at rest, where `phase`'s clocks are that
+/// phase's (`check::repeats_clocks`): `phase`'s edges (none) and a pass with
+/// the same bus, the keeper holding the core's bus, change nothing, and it
+/// gives out what the phase before did.
+fn settles_repeating(phase: u8) {
+    let core = any_core();
+    let (d, kept): (u8, u8) = kani::any();
+    kani::assume(settled_in(&core, phase - 1, d, kept));
+    kani::assume(nmi_at_rest(&core));
+    let mut before = core;
+    let out_before = before.settle_once(&inputs(phase - 1, d), kept);
+    let i = inputs(phase, d);
+    let mut again = core;
+    again.edges(&i);
+    let out = again.settle_once(&i, core.db);
+    assert!(again.settled(&core), "the pass changes the core");
+    assert!(out == out_before, "it gives out something else");
+}
+
 /// From any core settled in `phase` with a bus and a keeper, the NMI's
 /// latches at rest: one pass with another bus (the memory's), the keeper
 /// the same.
@@ -329,14 +353,18 @@ fn settles_driven(phase: u8) {
     one_pass_settles(core, &inputs(phase, kani::any()), kept);
 }
 
-/// An instruction of the class `in_class`, which takes `mcycles` M-cycles
-/// with the fetch that ends it, from every related pair: the accesses
-/// agree, and the pair is related again. (The count is given, not taken
-/// from ceres's run: the solver would run the core for every count it
-/// cannot rule out.)
-fn instruction_agrees(in_class: impl Fn(u8) -> bool, mcycles: usize) {
+/// An instruction of the class `in_class` (its opcode, and the byte after
+/// it, which only the CB prefix's classes look at), which ceres runs in one
+/// of `counts` M-cycles with the fetch that ends it: from every related
+/// pair whose run takes `mcycles`, the accesses agree, and the pair is
+/// related again. A class with one count takes one harness; a conditional
+/// one, a harness per count, which together take every run. (The count is
+/// given, not taken from ceres's run: the solver would run the core for
+/// every count it cannot rule out.)
+fn instruction_agrees(in_class: impl Fn(u8, u8) -> bool, counts: &[usize], mcycles: usize) {
     let op: u8 = kani::any();
-    kani::assume(in_class(op));
+    let mut memory = AnyMemory::new();
+    kani::assume(in_class(op, memory.bytes[0]));
     let mut cpu = any_cpu();
     let mut net = Net {
         core: core_between_any(&cpu, op),
@@ -347,18 +375,28 @@ fn instruction_agrees(in_class: impl Fn(u8) -> bool, mcycles: usize) {
     // Settled in the instruction before's last phase.
     kani::assume(settled_in(&net.core, PHASES - 1, kani::any(), kani::any()));
 
-    let mut memory = AnyMemory::new();
+    // As `run` does: an EI just before counts from here on (no interrupt is
+    // pending, so IME as the boundary found it decides nothing).
+    cpu.take_ime_toggle();
     cpu.exec(&mut memory, op);
     let next = memory.read(cpu.pc);
     cpu.pc = cpu.pc.wrapping_add(1);
 
-    assert!(memory.count == mcycles);
+    assert!(
+        counts.contains(&memory.count),
+        "ceres takes one of the class's counts"
+    );
+    kani::assume(memory.count == mcycles);
     for m in 0..mcycles {
         let (byte, ceres) = (memory.bytes[m], memory.trace[m]);
         // IE's address is the core's own register's, not the memory's.
         kani::assume(address(ceres) != Some(IE_ADDR));
-        // Settled in one pass a phase, unconfirmed: always an access.
-        let access = net.mcycle(|_| byte).unwrap_or(Access::Idle);
+        // Settled in one pass a phase, unconfirmed, and the phases that
+        // repeat the clocks of the one before passed over: the bus must
+        // repeat too.
+        let access = net.mcycle(|_| byte);
+        assert!(access.is_some(), "the bus repeats where the clocks do");
+        let access = access.unwrap_or(Access::Idle);
         assert!(address(access) == address(ceres), "the same address");
         assert!(access == ceres, "the same access");
     }
@@ -374,7 +412,7 @@ fn instruction_agrees(in_class: impl Fn(u8) -> bool, mcycles: usize) {
 #[kani::proof]
 #[kani::unwind(9)]
 fn netlist_sm83_alu_a_r() {
-    instruction_agrees(|op| (0x80..=0xBF).contains(&op) && op & 7 != 6, 1);
+    instruction_agrees(|op, _| (0x80..=0xBF).contains(&op) && op & 7 != 6, &[1], 1);
 }
 
 /// LD r,d8: B, C, D, E, H, L or A takes the byte after the opcode (two
@@ -386,7 +424,400 @@ fn netlist_sm83_alu_a_r() {
 #[kani::proof]
 #[kani::unwind(9)]
 fn netlist_sm83_ld_r_d8() {
-    instruction_agrees(|op| op & 0xC7 == 0x06 && op != 0x36, 2);
+    instruction_agrees(|op, _| op & 0xC7 == 0x06 && op != 0x36, &[2], 2);
+}
+
+/// LD r,r': between B, C, D, E, H, L and A.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_r_r() {
+    instruction_agrees(
+        |op, _| (0x40..=0x7F).contains(&op) && op & 7 != 6 && op & 0x38 != 0x30,
+        &[1],
+        1,
+    );
+}
+
+/// INC r and DEC r.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_inc_dec_r() {
+    instruction_agrees(|op, _| op & 0xC6 == 0x04 && op & 0x38 != 0x30, &[1], 1);
+}
+
+/// The rotations of A (RLCA, RRCA, RLA, RRA), DAA, CPL, SCF and CCF.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_a_and_flags() {
+    instruction_agrees(|op, _| op & 0xC7 == 0x07, &[1], 1);
+}
+
+/// NOP, JP HL, DI and EI.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_nop_jp_hl_di_ei() {
+    instruction_agrees(|op, _| matches!(op, 0x00 | 0xE9 | 0xF3 | 0xFB), &[1], 1);
+}
+
+/// The 8-bit arithmetic and logic on A with the byte after the opcode.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_alu_a_d8() {
+    instruction_agrees(|op, _| op & 0xC7 == 0xC6, &[2], 2);
+}
+
+/// LD r,(HL).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_r_hl() {
+    instruction_agrees(|op, _| op & 0xC7 == 0x46 && op != 0x76, &[2], 2);
+}
+
+/// LD (HL),r.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_hl_r() {
+    instruction_agrees(|op, _| op & 0xF8 == 0x70 && op != 0x76, &[2], 2);
+}
+
+/// The 8-bit arithmetic and logic on A with (HL).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_alu_a_hl() {
+    instruction_agrees(|op, _| op & 0xC7 == 0x86, &[2], 2);
+}
+
+/// INC rr and DEC rr.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_inc_dec_rr() {
+    instruction_agrees(|op, _| op & 0xC7 == 0x03, &[2], 2);
+}
+
+/// ADD HL,rr.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_add_hl_rr() {
+    instruction_agrees(|op, _| op & 0xCF == 0x09, &[2], 2);
+}
+
+/// LD (BC),A, LD (DE),A, LD (HL+),A and LD (HL-),A, and their loads of A.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_indirect_a() {
+    instruction_agrees(|op, _| op & 0xC7 == 0x02, &[2], 2);
+}
+
+/// LDH (C),A and LDH A,(C).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ldh_c() {
+    instruction_agrees(|op, _| matches!(op, 0xE2 | 0xF2), &[2], 2);
+}
+
+/// LD SP,HL.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_sp_hl() {
+    instruction_agrees(|op, _| op == 0xF9, &[2], 2);
+}
+
+/// LD rr,d16.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_rr_d16() {
+    instruction_agrees(|op, _| op & 0xCF == 0x01, &[3], 3);
+}
+
+/// INC (HL), DEC (HL) and LD (HL),d8.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_hl_mem() {
+    instruction_agrees(|op, _| matches!(op, 0x34..=0x36), &[3], 3);
+}
+
+/// POP rr.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_pop() {
+    instruction_agrees(|op, _| op & 0xCF == 0xC1, &[3], 3);
+}
+
+/// LDH (a8),A and LDH A,(a8).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ldh_a8() {
+    instruction_agrees(|op, _| matches!(op, 0xE0 | 0xF0), &[3], 3);
+}
+
+/// LD HL,SP+e.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_hl_sp_e() {
+    instruction_agrees(|op, _| op == 0xF8, &[3], 3);
+}
+
+/// JR and JR cc, its condition false (two M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_jr_2() {
+    instruction_agrees(|op, _| op == 0x18 || op & 0xE7 == 0x20, &[2, 3], 2);
+}
+
+/// JR and JR cc, its condition true (three M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_jr_3() {
+    instruction_agrees(|op, _| op == 0x18 || op & 0xE7 == 0x20, &[2, 3], 3);
+}
+
+/// RET cc, its condition false (two M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ret_cc_2() {
+    instruction_agrees(|op, _| op & 0xE7 == 0xC0, &[2, 5], 2);
+}
+
+/// JP and JP cc, its condition false (three M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_jp_3() {
+    instruction_agrees(|op, _| op == 0xC3 || op & 0xE7 == 0xC2, &[3, 4], 3);
+}
+
+/// CALL and CALL cc, its condition false (three M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_call_3() {
+    instruction_agrees(|op, _| op == 0xCD || op & 0xE7 == 0xC4, &[3, 6], 3);
+}
+
+/// After the CB prefix, the rotations, shifts and bit operations on a register (two M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_cb_r() {
+    instruction_agrees(|op, cb| op == 0xCB && cb & 7 != 6, &[2, 3, 4], 2);
+}
+
+/// After the CB prefix, BIT b,(HL) (three M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_cb_bit_hl() {
+    instruction_agrees(|op, cb| op == 0xCB && cb & 0xC7 == 0x46, &[2, 3, 4], 3);
+}
+
+/// JP and JP cc, its condition true (four M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_jp_4() {
+    instruction_agrees(|op, _| op == 0xC3 || op & 0xE7 == 0xC2, &[3, 4], 4);
+}
+
+/// PUSH rr.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_push() {
+    instruction_agrees(|op, _| op & 0xCF == 0xC5, &[4], 4);
+}
+
+/// RST.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_rst() {
+    instruction_agrees(|op, _| op & 0xC7 == 0xC7, &[4], 4);
+}
+
+/// RET and RETI.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ret_reti() {
+    instruction_agrees(|op, _| matches!(op, 0xC9 | 0xD9), &[4], 4);
+}
+
+/// LD (a16),A and LD A,(a16).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_a16_a() {
+    instruction_agrees(|op, _| matches!(op, 0xEA | 0xFA), &[4], 4);
+}
+
+/// ADD SP,e.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_add_sp_e() {
+    instruction_agrees(|op, _| op == 0xE8, &[4], 4);
+}
+
+/// After the CB prefix, the rotations, shifts, RES and SET on (HL) (four M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_cb_hl() {
+    instruction_agrees(
+        |op, cb| op == 0xCB && cb & 7 == 6 && cb & 0xC0 != 0x40,
+        &[2, 3, 4],
+        4,
+    );
+}
+
+/// LD (a16),SP.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ld_a16_sp() {
+    instruction_agrees(|op, _| op == 0x08, &[5], 5);
+}
+
+/// RET cc, its condition true (five M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_ret_cc_5() {
+    instruction_agrees(|op, _| op & 0xE7 == 0xC0, &[2, 5], 5);
+}
+
+/// CALL and CALL cc, its condition true (six M-cycles).
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-no-interrupt
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_call_6() {
+    instruction_agrees(|op, _| op == 0xCD || op & 0xE7 == 0xC4, &[3, 6], 6);
 }
 
 /// Phase A's edges, then one pass, settle the core.
@@ -451,6 +882,38 @@ fn netlist_sm83_settles_after_edges_g() {
 #[kani::proof]
 fn netlist_sm83_settles_after_edges_h() {
     settles_after_edges(7);
+}
+
+/// Phase C, with the clocks and the bus of the phase before, changes nothing.
+// @assumes transcription-sm83
+// @discharges sm83-settles-in-one-pass
+#[kani::proof]
+fn netlist_sm83_settles_repeating_c() {
+    settles_repeating(2);
+}
+
+/// Phase D, with the clocks and the bus of the phase before, changes nothing.
+// @assumes transcription-sm83
+// @discharges sm83-settles-in-one-pass
+#[kani::proof]
+fn netlist_sm83_settles_repeating_d() {
+    settles_repeating(3);
+}
+
+/// Phase F, with the clocks and the bus of the phase before, changes nothing.
+// @assumes transcription-sm83
+// @discharges sm83-settles-in-one-pass
+#[kani::proof]
+fn netlist_sm83_settles_repeating_f() {
+    settles_repeating(5);
+}
+
+/// Phase H, with the clocks and the bus of the phase before, changes nothing.
+// @assumes transcription-sm83
+// @discharges sm83-settles-in-one-pass
+#[kani::proof]
+fn netlist_sm83_settles_repeating_h() {
+    settles_repeating(7);
 }
 
 /// One pass settles the core in phase A once the memory drives the bus.

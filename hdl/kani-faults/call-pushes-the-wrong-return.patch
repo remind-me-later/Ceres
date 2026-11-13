@@ -1,0 +1,14 @@
+# Ceres's CALL pushes the address after the return address.
+# harness: netlist_sm83_call_6
+diff --git a/ceres-core/src/sm83/mod.rs b/ceres-core/src/sm83/mod.rs
+--- a/ceres-core/src/sm83/mod.rs
++++ b/ceres-core/src/sm83/mod.rs
+@@ -364,7 +364,7 @@
+ impl Sm83 {
+     fn do_call(&mut self, bus: &mut impl Bus) {
+         let addr = self.imm16(bus);
+-        self.push(bus, self.pc);
++        self.push(bus, self.pc.wrapping_add(1));
+         self.pc = addr;
+     }
+ 

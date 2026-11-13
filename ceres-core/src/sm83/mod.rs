@@ -184,6 +184,18 @@ impl Sm83 {
         self.ime_toggle = false;
     }
 
+    /// Applies the EI before, which counts from this instruction on, and
+    /// gives IME as the instruction boundary found it (what decides an
+    /// interrupt here).
+    const fn take_ime_toggle(&mut self) -> bool {
+        let before = self.ime;
+        if self.ime_toggle {
+            self.ime = !self.ime;
+            self.ime_toggle = false;
+        }
+        before
+    }
+
     /// Halts or wakes the CPU (a state load).
     pub(crate) const fn set_halted(&mut self, halted: bool) {
         self.is_halted = halted;
@@ -262,11 +274,7 @@ impl Sm83 {
         }
         self.just_halted = false;
 
-        let effective_ime = self.ime;
-        if self.ime_toggle {
-            self.ime = !self.ime;
-            self.ime_toggle = false;
-        }
+        let effective_ime = self.take_ime_toggle();
 
         if self.is_halted && interrupt_pending && (!effective_ime || self.halt_bug) {
             // Wake up from HALT without calling the interrupt code. With the
