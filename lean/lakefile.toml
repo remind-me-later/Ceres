@@ -16,3 +16,10 @@ name = "Ceres"
 # hypotheses): not a default target, and not under `Ceres/Axioms.lean`.
 [[lean_lib]]
 name = "Sketch"
+
+# A pilot: Kani's step of the timer (`KaniTimer`) proved in Lean, through
+# hand-written models linked to the translation, to compare with Kani. Not
+# a default target, and not under `Ceres/Axioms.lean` (it uses
+# `bv_decide`).
+[[lean_lib]]
+name = "Pilot"

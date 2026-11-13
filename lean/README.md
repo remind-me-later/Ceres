@@ -87,6 +87,49 @@ emulator's types yet.
 
 `lake build Sketch` builds it.
 
+## The timer without Kani (a pilot)
+
+`Pilot/` proves `KaniTimer` in Lean, to compare with Kani, which takes 2 s
+for it (`netlist_timer_bisimulation`). It is not a default target, and not
+under `Ceres/Axioms.lean`: its proofs use `bv_decide`, whose certificates
+are checked by compiled code (one native axiom per call).
+
+- `Pilot/Timer/Models.lean`: the timer's two sides written by hand in plain
+  `BitVec` and `Bool`, the netlist's `NetTimer` and ceres's `Clock` on the
+  DMG, and the check's `related`, `known_difference` and `step_agrees`.
+- `Pilot/Timer/Step.lean`: the step on the hand models, by `bv_decide`, one
+  goal per shape of the access.
+- `Pilot/Timer/NetLink.lean`: the hand `Net` is Aeneas's translation of
+  `NetTimer`, function by function (`clock_of`, `settle`, `edge_a`,
+  `phase`, `read`, `m_cycle`).
+- `Pilot/Timer/CeresLink.lean`: the hand `Cer` is the translation of
+  `ceres_m_cycle`, on the clocks the step relates (no DIV-reset delay, not
+  stopped, no APU delay, a reload countdown of at most 8): `Clock`'s
+  functions, `run`'s loop over one T-cycle, the check host's hooks.
+- `Pilot/Timer/Kani.lean`: `kani_timer : timer_if.KaniTimer`, from the
+  links and the hand step.
+
+`lake build Pilot` builds it, from clean in 113 s at 0.9 GB: 5 s for the
+step, 43 s and 65 s for the two links. What the pilot found:
+
+- The step itself is as fast in Lean as in Kani, once the models are
+  written for `bv_decide`: every `bif` picks a value, never a whole state
+  (a field-by-field `pick` does that). Written the obvious way, the build
+  had not finished after an hour: unfolding one of its nine goals alone
+  ran past ten minutes.
+- The links are what costs, in the writing more than the checking. Each
+  needs the translation taken apart by hand: checked arithmetic made
+  unconditional (`if` no overflow `then ok … else fail`), comparisons and
+  equalities brought to `BitVec` at numeral widths (`U8`, not
+  `UScalarTy.U8.numBits`), branches between whole values pushed down to
+  the fields, `Result`'s binds and Aeneas's `uncurry` rewritten (neither
+  reduces by `rfl`). Aeneas's own simp set rewrites widths in a way that
+  once built an ill-typed term, so the links use `simp only` with lists of
+  their own.
+- Kani needs none of that, and checks the Rust itself rather than a
+  translation of it. Lean's proof composes: `KaniTimer` stops being a
+  hypothesis of `timer_and_if_agree`.
+
 ## Building
 
 With [elan](https://github.com/leanprover/elan) (which installs the Lean of
