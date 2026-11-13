@@ -302,7 +302,7 @@ fn core_after_fetch_any(cpu: &Sm83) -> NetCore {
     let low = |pair: u16| pair.to_le_bytes()[0];
     let s = &mut core.seq;
     s.cb_next = false;
-    (s.halt, s.stop, s.halt_delayed, s.stop_delayed) = (false, false, false, false);
+    (s.halt, s.stop, s.stop_delayed) = (false, false, false);
     (s.not_ready_1, s.not_ready_2) = (false, false);
     s.ime_state = cpu.ime ^ cpu.ime_toggle;
     (s.no_nmi, s.no_nmi_1, s.nmi_low_1, s.nmi_low_2) = (true, true, true, true);
@@ -355,7 +355,7 @@ const fn nmi_at_rest(core: &NetCore) -> bool {
 /// The core is settled in `phase` with `d` on the chip's data bus, its
 /// keeper holding `kept` and `int` on IF's lines: a pass changes nothing.
 fn settled_in(core: &NetCore, phase: u8, d: u8, kept: u8, int: u8) -> bool {
-    let i = inputs(phase, d, int);
+    let i = inputs(phase, d, int, true);
     let mut again = *core;
     _ = again.settle_once(&i, kept);
     (core.clk == i.clk) & (core.exec_phase == i.exec_phase) & again.settled(core)
@@ -383,7 +383,7 @@ fn settles_after_edges(phase: u8) {
     kani::assume(settled_in(&core, before, kani::any(), kani::any(), int));
     kani::assume(nmi_at_rest(&core));
     let int = if phase == PHASE_E { kani::any() } else { int };
-    let i = inputs(phase, kani::any(), int);
+    let i = inputs(phase, kani::any(), int, true);
     let kept = core.db;
     let mut core = core;
     core.edges(&i);
@@ -401,8 +401,8 @@ fn settles_repeating(phase: u8) {
     kani::assume(settled_in(&core, phase - 1, d, kept, int));
     kani::assume(nmi_at_rest(&core));
     let mut before = core;
-    let out_before = before.settle_once(&inputs(phase - 1, d, int), kept);
-    let i = inputs(phase, d, int);
+    let out_before = before.settle_once(&inputs(phase - 1, d, int, true), kept);
+    let i = inputs(phase, d, int, true);
     let mut again = core;
     again.edges(&i);
     let out = again.settle_once(&i, core.db);
@@ -418,7 +418,7 @@ fn settles_driven(phase: u8) {
     let (kept, int): (u8, u8) = kani::any();
     kani::assume(settled_in(&core, phase, kani::any(), kept, int));
     kani::assume(nmi_at_rest(&core));
-    one_pass_settles(core, &inputs(phase, kani::any(), int), kept);
+    one_pass_settles(core, &inputs(phase, kani::any(), int, true), kept);
 }
 
 /// An instruction of the class `in_class` (its opcode, and the byte after
@@ -441,6 +441,7 @@ fn instruction_agrees(in_class: impl Fn(u8, u8) -> bool, counts: &[usize], mcycl
         int: 0,
         int_before: memory.line(None),
         acks: 0,
+        halt_n: true,
     };
     kani::assume(boundary(&net.core, &cpu, op));
     memory.ie = net.core.ints.ie;
@@ -520,6 +521,7 @@ fn netlist_sm83_interrupt_entry() {
         int: 0,
         int_before: memory.line(Some(0)),
         acks: 0,
+        halt_n: true,
     };
     kani::assume(entry_begins(&net.core, &cpu));
     memory.ie = net.core.ints.ie;

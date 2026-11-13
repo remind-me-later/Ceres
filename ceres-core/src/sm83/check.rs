@@ -11,8 +11,9 @@
 //! again after the last.
 //!
 //! The interrupt requests (IF's lines) are an input, which changes only as
-//! phase E starts (`Net::int`); the core is neither halted, stopped nor in
-//! reset.
+//! phase E starts (`Net::int`). While the core holds `halt_n` low, the
+//! chip stops its clocks, as `NetChip` does; the core is neither stopped
+//! nor in reset.
 
 #![cfg_attr(
     not(any(kani, test)),
@@ -42,16 +43,19 @@ pub(super) enum Access {
     Write(u16, u8),
 }
 
-/// The core's inputs in a phase, with `d` on the chip's data bus and `int`
-/// on IF's lines: the oscillator stable, no reset, and an address the chip
-/// does not decode.
-pub(super) const fn inputs(phase: u8, d: u8, int: u8) -> CoreInputs {
+/// The core's inputs in a phase, with `d` on the chip's data bus, `int` on
+/// IF's lines and the core's clocks running if `clk_ena` (the core's
+/// `halt_n` as the phase before left it): the oscillator stable, no reset,
+/// and an address the chip does not decode.
+// @hw die: the clocks' BUVU BYXO BEDO, BELU BYRY BUDE BEVA, BAPY BERU BUFA BYLY, BATE BASU BUKE
+pub(super) const fn inputs(phase: u8, d: u8, int: u8, clk_ena: bool) -> CoreInputs {
+    let g_h_or_a = (phase == 0) | (phase >= PHASE_G);
     CoreInputs {
         clk: phase == 0,
-        exec_phase: phase != 0,
-        data_phase: phase >= PHASE_E,
-        write_phase: phase >= PHASE_G,
-        pch_phase: (phase != 0) & (phase < PHASE_G),
+        exec_phase: clk_ena & (phase != 0),
+        data_phase: clk_ena & (phase >= PHASE_E),
+        write_phase: clk_ena & (phase >= PHASE_G),
+        pch_phase: !clk_ena | !g_h_or_a,
         sys_reset: false,
         pwron_reset: false,
         clk_ready: true,
@@ -89,6 +93,9 @@ pub(super) struct Net {
     pub int_before: u8,
     /// The interrupts the core acknowledged in the last M-cycle.
     pub acks: u8,
+    /// The core's `halt_n` as the last phase left it: the chip runs the
+    /// core's clocks while it is high.
+    pub halt_n: bool,
 }
 
 impl Net {
@@ -116,7 +123,7 @@ impl Net {
     pub(super) fn mcycle(&mut self, mut read: impl FnMut(u16) -> u8) -> Option<Access> {
         let mut access = Access::Idle;
         let mut settled = true;
-        let mut last = (0xFF, CoreOutputs::default());
+        let mut last = (0xFF, CoreOutputs::default(), self.halt_n);
         self.acks = 0;
         for phase in 0..PHASES {
             let kept = self.core.db;
@@ -125,9 +132,10 @@ impl Net {
             } else {
                 self.int
             };
-            let stale = inputs(phase, !self.low_before, int);
+            let clk_ena = self.halt_n;
+            let stale = inputs(phase, !self.low_before, int, clk_ena);
             self.core.edges(&stale);
-            if repeats_clocks(phase) {
+            if repeats_clocks(phase) & (clk_ena == last.2) {
                 settled &= stale.d == last.0;
                 let out = last.1;
                 if self.confirm {
@@ -147,7 +155,7 @@ impl Net {
             }
             let first = self.settle(&stale, kept, &mut settled);
             let now_low = if first.rd { !read(first.addr) } else { 0 };
-            let driven = inputs(phase, !(now_low | self.low_before), int);
+            let driven = inputs(phase, !(now_low | self.low_before), int, clk_ena);
             // While the core reads, settled again with what the memory
             // drives (a pass that changes nothing if the bus had it
             // already); otherwise the bus is as it was.
@@ -157,7 +165,8 @@ impl Net {
                 first
             };
             self.low_before = now_low;
-            last = (driven.d, out);
+            self.halt_n = out.halt_n;
+            last = (driven.d, out, clk_ena);
             self.acks |= out.inta;
             if out.wr {
                 access = Access::Write(out.addr, out.db);
@@ -198,7 +207,9 @@ pub(super) const fn registers_agree(core: &NetCore, cpu: &Sm83) -> bool {
 /// The core's control state where a fetch's M-cycle ends, whether it
 /// fetched an opcode or began an interrupt's entry: nothing else under way,
 /// no NMI, IE showing its master. The interrupts' request latches are
-/// free: they take IF's lines again in the next M-cycle.
+/// free: they take IF's lines again in the next M-cycle; so is HALT's
+/// delayed step, which the next A edge overwrites before it is read (it
+/// is still set after the HALT bug's fetch).
 const fn after_fetch(core: &NetCore) -> bool {
     let s = &core.seq;
     let sampled = &core.sampled;
@@ -206,7 +217,6 @@ const fn after_fetch(core: &NetCore) -> bool {
         & !s.cb_next
         & !s.halt
         & !s.stop
-        & !s.halt_delayed
         & !s.stop_delayed
         & !s.not_ready_1
         & !s.not_ready_2

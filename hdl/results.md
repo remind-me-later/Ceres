@@ -1035,6 +1035,28 @@ lines cost little: ALU A,r takes 37 s, `CALL` 123 s where it took 115, the
 entry 87 s, and the CPU's 58 harnesses 44 minutes. HALT and STOP are what
 the CPU's comparison still leaves out.
 
+HALT then joined the interrupts' co-simulation (a run in four starts on
+one). Two things were missing from the comparison, not from ceres. The
+chip stops the core's clocks while the core holds `halt_n` low (`NetChip`
+takes `clk_ena` from it): without that, the check's inputs ran the core on
+through HALT. With it, the core's clocks are its `halt_n` as the phase
+before left it, as on the chip. And ceres keeps HALT in time, not in
+accesses: its HALT reads the next opcode and drops that read's time, so
+the read and the fetch after it share an M-cycle, and a halted step
+advances four dots with no access, sampling IF two dots in (at its start
+in the first step after HALT). The co-simulation's bus now keeps ceres's
+time as `cpu_bus` does (accesses at their M-cycle's start, deferred dots,
+`advance`, `drop_deferred`), places each access in the M-cycle its time
+falls in (two in one must be the same), and finds IF by where the time
+is. The relation between instructions leaves HALT's delayed step free:
+it is still set after the HALT bug's fetch, and the next A edge overwrites
+it before it is read.
+
+Of 49,962 runs, 13,048 halt, 1,143 hit the HALT bug, 3,447 wake to the
+next instruction and 3,484 to a dispatch, and none differ. Breaking
+ceres's halted steps to sample IF at their start makes 6,028 runs differ;
+leaving out the HALT bug, 990.
+
 The second spike is a CPU access to VRAM. `ceres-netlist`'s
 `tests/vram_gate.rs` runs the 43 ROMs that read and write VRAM around
 mode 3 (Gambatte's `vram_m3` for the DMG, gbmicrotest's `vram` ROMs) on

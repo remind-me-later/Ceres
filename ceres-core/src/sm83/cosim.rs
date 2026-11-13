@@ -97,12 +97,15 @@ impl Requests {
 }
 
 /// Ceres's bus on the memory, which remembers each M-cycle's access, with
-/// IE and IF's requests. As ceres's own bus, it is at an access's start
-/// when the access returns, and `defer` moves it into the access's
-/// M-cycle; between steps it is at the next M-cycle's start. Ceres's
-/// M-cycle starts at the netlist's E (`mapping-m-cycle-at-e`): at an
-/// M-cycle's start ceres finds IF as the lines took it at the E edge
-/// before, and once into it, as they took it at its own.
+/// IE and IF's requests. It keeps time as ceres's own bus does
+/// (`cpu_bus`): an access flushes the time deferred, happens at its
+/// M-cycle's start and defers the M-cycle's four dots; `tick` defers four
+/// more, `defer` flushes all but some, `advance` moves time on and
+/// `drop_deferred` forgets what is deferred; a step's end flushes it. An
+/// M-cycle with no access is idle. Ceres's M-cycle starts at the netlist's
+/// E (`mapping-m-cycle-at-e`): at an M-cycle's start ceres finds IF as the
+/// lines took it at the E edge before, and once into it, as they took it at
+/// its own.
 struct TraceBus {
     memory: Memory,
     trace: Vec<Access>,
@@ -116,8 +119,11 @@ struct TraceBus {
     acks: Vec<(usize, u8)>,
     /// The dispatches (each triggers the OAM bug at SP, and only they do).
     dispatches: u32,
-    /// T-cycles into the last access's M-cycle (4: the next's start).
-    into: i32,
+    /// The time, in dots, and the dots deferred.
+    time: usize,
+    deferred: usize,
+    /// The accesses that fell in one M-cycle were the same.
+    overlaps_agree: bool,
 }
 
 impl TraceBus {
@@ -131,28 +137,62 @@ impl TraceBus {
             acked: 0,
             acks: Vec::new(),
             dispatches: 0,
-            into: 4,
+            time: 0,
+            deferred: 0,
+            overlaps_agree: true,
         }
     }
 
-    /// IF where the bus is: at the last access's start, as its E edge
-    /// finds it; past that, with what the lines took there.
+    /// IF where the time is: at an M-cycle's start, as its E edge finds it;
+    /// past that, with what the lines took there.
     fn flags(&self) -> u8 {
-        let back = if self.into == 0 { 2 } else { 1 };
-        let at = self.trace.len().checked_sub(back);
+        let now = self.time / 4;
+        let at = if self.time.is_multiple_of(4) {
+            now.checked_sub(1)
+        } else {
+            Some(now)
+        };
         at.map_or(0, |m| self.requests.lines(m)) & !self.acked
     }
 
-    /// An access: its M-cycle starts.
+    /// `access` in M-cycle `m`, the M-cycles before it idle. An access in
+    /// an M-cycle that has one already (HALT's read, whose time ceres drops,
+    /// and the fetch after it) must be the same.
+    fn record(&mut self, m: usize, access: Access) {
+        while self.trace.len() < m {
+            self.trace.push(Access::Idle);
+        }
+        if let Some(had) = self.trace.get(m) {
+            self.overlaps_agree &= *had == access;
+        } else {
+            self.trace.push(access);
+        }
+    }
+
+    /// An access: the time deferred flushed, at its M-cycle's start, which
+    /// four dots are deferred.
     fn access(&mut self, access: Access) {
-        self.trace.push(access);
-        self.into = 0;
+        self.time += self.deferred;
+        self.deferred = 4;
+        self.record(self.time / 4, access);
+    }
+
+    /// A step's end: the time deferred flushed, and the M-cycles it took
+    /// with no access idle.
+    fn end_step(&mut self) {
+        self.time += self.deferred;
+        self.deferred = 0;
+        while self.trace.len() < self.time.div_ceil(4) {
+            self.trace.push(Access::Idle);
+        }
     }
 }
 
 impl Bus for TraceBus {
     fn tick(&mut self) {
-        self.access(Access::Idle);
+        let m = (self.time + self.deferred) / 4;
+        self.deferred += 4;
+        self.record(m, Access::Idle);
     }
 
     fn read(&mut self, addr: u16) -> u8 {
@@ -187,10 +227,16 @@ impl Bus for TraceBus {
 
     fn flush(&mut self) {}
     fn defer(&mut self, t_cycles: i32) {
-        self.into = 4 - t_cycles;
+        let keep = usize::try_from(t_cycles).unwrap_or(0);
+        self.time += self.deferred.saturating_sub(keep);
+        self.deferred = keep;
     }
-    fn drop_deferred(&mut self) {}
-    fn advance(&mut self, _: i32) {}
+    fn drop_deferred(&mut self) {
+        self.deferred = 0;
+    }
+    fn advance(&mut self, t_cycles: i32) {
+        self.time += usize::try_from(t_cycles).unwrap_or(0);
+    }
     fn is_cgb_hardware(&self) -> bool {
         false
     }
@@ -205,7 +251,7 @@ impl Bus for TraceBus {
     }
     fn ack_interrupt(&mut self, bit: u8) {
         self.acked |= bit;
-        self.acks.push((self.trace.len() - 1, bit));
+        self.acks.push((self.time / 4, bit));
     }
     fn clear_ie(&mut self) {}
     fn trigger_oam_bug(&mut self, _: u16) {
@@ -385,6 +431,7 @@ fn run(op: u8, prefixed: bool, rng: &mut Rng, tally: &mut Tally) {
         int: 0,
         int_before: 0,
         acks: 0,
+        halt_n: true,
     };
     let mut net_memory = memory.clone();
     // The core settles in every phase, in the passes `check` gives it.
@@ -492,9 +539,11 @@ fn instructions_agree_with_the_core() {
 
 /// IF's address.
 const IF_ADDR: u16 = 0xFF0F;
+/// HALT.
+const HALT: u8 = 0x76;
 /// Instructions a run of the interrupts' co-simulation goes on for, at
 /// most.
-const STEPS: usize = 8;
+const STEPS: usize = 16;
 /// Runs of it.
 const INTERRUPT_RUNS: u32 = 50_000;
 
@@ -511,6 +560,8 @@ struct IntTally {
     /// and a jump to 0.
     dispatched: u64,
     cancelled: u64,
+    /// Runs that went each of HALT's ways (`Steps::ways`).
+    ways: [u64; 4],
     differing: u64,
     first: Option<String>,
 }
@@ -566,6 +617,45 @@ fn touches(trace: &[Access], at: u16) -> bool {
     )
 }
 
+/// What a run of steps found, step by step: whether each step's first
+/// M-cycle left the two related (with the first failure), and which of
+/// HALT's ways it went.
+#[derive(Default)]
+struct Steps {
+    unrelated: Option<String>,
+    /// HALT's ways: halted, the HALT bug, woke to the next instruction,
+    /// woke to a dispatch.
+    ways: [bool; 4],
+}
+
+impl Steps {
+    /// After a step's first M-cycle `m`: the core `c` (whose access was
+    /// `access`) and ceres as that M-cycle left it (`first`) are related
+    /// as a fetch's end or an entry's beginning.
+    fn first_mcycle(
+        &mut self,
+        m: usize,
+        c: &NetCore,
+        first: &Sm83,
+        access: Access,
+        dispatched: bool,
+    ) {
+        let holds = if dispatched {
+            entry_begins(c, first)
+        } else {
+            matches!(access, Access::Read(_, op) if boundary(c, first, op))
+        };
+        if !holds && self.unrelated.is_none() {
+            self.unrelated = Some(format!(
+                "M-cycle {m}, {}: {}; {}",
+                if dispatched { "dispatch" } else { "fetch" },
+                differing(c, first),
+                shape(c),
+            ));
+        }
+    }
+}
+
 /// Ceres's registers and IME, as `cpu` has them.
 fn registers_of(cpu: &Sm83) -> Sm83 {
     Sm83 {
@@ -586,14 +676,15 @@ fn registers_of(cpu: &Sm83) -> Sm83 {
 /// dispatch), the core as many M-cycles, with IE and IF's requests on both:
 /// the accesses and the acknowledges must be the same, M-cycle by M-cycle.
 /// A run stops before HALT, STOP or an opcode that is not an instruction.
-fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
-    // One run in four with SP just above 0000, where a push writes IE.
+/// Any registers and IME, one state in four with SP just above 0000,
+/// where a push writes IE.
+fn random_cpu(rng: &mut Rng) -> Sm83 {
     let sp = if rng.word().is_multiple_of(4) {
         rng.word() % 4
     } else {
         rng.word()
     };
-    let mut cpu = Sm83 {
+    Sm83 {
         af: rng.word() & 0xFFF0,
         bc: rng.word(),
         de: rng.word(),
@@ -602,11 +693,19 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
         pc: rng.word(),
         ime: rng.flag(),
         ..Sm83::default()
-    };
-    let memory = Memory {
+    }
+}
+
+fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
+    let mut cpu = random_cpu(rng);
+    let mut memory = Memory {
         seed: rng.step(),
         writes: Vec::new(),
     };
+    // One run in four starts on a HALT.
+    if rng.word().is_multiple_of(4) {
+        memory.write(cpu.pc, HALT);
+    }
     let ie = rng.word().to_le_bytes()[0];
     let rise = usize::from(rng.word() % 24);
     let requests = Requests {
@@ -623,6 +722,7 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
             int: 0,
             int_before: 0,
             acks: 0,
+            halt_n: true,
         },
         memory: memory.clone(),
         trace: Vec::new(),
@@ -635,13 +735,16 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
     bus.ie = ie;
     bus.requests = requests;
 
-    // After each step's first M-cycle, `boundary` or `entry_begins`.
-    let mut related = true;
+    let mut steps = Steps::default();
     for _ in 0..STEPS {
         let opcode = bus.peek(cpu.pc);
-        if opcode != CB_PREFIX && !compared(opcode) {
+        if opcode != CB_PREFIX && opcode != HALT && !compared(opcode) {
             break;
         }
+        // A step from HALT, or with the HALT bug's fetch still to come, does
+        // not start where `boundary` or `entry_begins` speaks.
+        let halted_before = cpu.is_halted();
+        let was_halted = halted_before || cpu.halt_bug;
         let start = bus.trace.len();
         let dispatches_before = bus.dispatches;
         // Ceres as the step's first M-cycle leaves it, PC one on (as the
@@ -649,20 +752,22 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
         let mut first = registers_of(&cpu);
         first.pc = first.pc.wrapping_add(1);
         cpu.step(&mut bus);
-        // Ceres's run takes the step's time: the next step starts at an
-        // M-cycle's start.
-        bus.into = 4;
+        bus.end_step();
         let dispatched = bus.dispatches != dispatches_before;
+        let ways = [
+            cpu.is_halted(),
+            opcode == HALT && !halted_before && cpu.halt_bug,
+            halted_before && !cpu.is_halted() && !dispatched,
+            halted_before && dispatched,
+        ];
+        for (seen, now) in steps.ways.iter_mut().zip(ways) {
+            *seen |= now;
+        }
         while core.trace.len() < bus.trace.len() {
             let m = core.trace.len();
             let access = core.mcycle(requests);
-            if m == start {
-                let c = &core.net.core;
-                related &= if dispatched {
-                    entry_begins(c, &first)
-                } else {
-                    matches!(access, Access::Read(_, op) if boundary(c, &first, op))
-                };
+            if m == start && !was_halted {
+                steps.first_mcycle(m, &core.net.core, &first, access, dispatched);
             }
         }
     }
@@ -671,15 +776,25 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
         return;
     }
     tally.runs += 1;
+    for (count, seen) in tally.ways.iter_mut().zip(steps.ways) {
+        *count += u64::from(seen);
+    }
     tally.at_ie += u64::from(touches(&bus.trace, IE_ADDR));
     tally.dispatched += u64::from(bus.dispatches != 0);
     tally.cancelled += u64::from(bus.dispatches as usize > bus.acks.len());
     let settles = core.settles;
-    if !settles || !related || core.trace != bus.trace || core.acks != bus.acks {
+    let related = steps.unrelated.is_none();
+    let why = steps.unrelated.unwrap_or_default();
+    if !settles
+        || !related
+        || !bus.overlaps_agree
+        || core.trace != bus.trace
+        || core.acks != bus.acks
+    {
         tally.differing += 1;
         tally.first.get_or_insert_with(|| {
             format!(
-                "IE {ie:02X}, IF {:02X} from M-cycle {}, {:02X} from {}, IME {}\n  ceres {:?}\n        acks {:?}\n                   core  {:?}\n        acks {:?}\n  settles {settles}, related {related}",
+                "IE {ie:02X}, IF {:02X} from M-cycle {}, {:02X} from {}, IME {}\n  ceres {:?}\n        acks {:?}\n                   core  {:?}\n        acks {:?}\n  settles {settles}, related {related} {why}",
                 requests.bits, requests.rise, requests.later, requests.rise_later, u8::from(cpu.ime), bus.trace, bus.acks, core.trace, core.acks
             )
         });
@@ -701,6 +816,11 @@ fn interrupts_agree_with_the_core() {
         "{} runs compared ({} left out at IF's address; {} with an access at IE's), {} with a \
          dispatch ({} cancelled by a push to IE), {} differ",
         tally.runs, tally.at_if, tally.at_ie, tally.dispatched, tally.cancelled, tally.differing
+    );
+    eprintln!(
+        "  HALT: halted in {}, the HALT bug in {}; woke to the next instruction in {}, to a \
+         dispatch in {}",
+        tally.ways[0], tally.ways[1], tally.ways[2], tally.ways[3]
     );
     if let Some(first) = tally.first.as_ref() {
         eprintln!("the first:\n{first}");
