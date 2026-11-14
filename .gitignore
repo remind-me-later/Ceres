@@ -4,3 +4,6 @@ target/
 
 # Ignore test ROMs
 external/test-roms/
+
+# The dev shell direnv keeps (flake.nix, .envrc)
+.direnv/

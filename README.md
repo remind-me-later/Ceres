@@ -43,6 +43,18 @@ To build:
   `ceres-egui` and `ceres-winit`.
 - In the root directory `cargo build`
 
+### With Nix
+
+`flake.nix` has every tool the repository uses, `hdl/` and `lean/`
+included, at versions `flake.lock` pins: `nix develop`, or `direnv allow`
+once for `.envrc`. Then, the first time:
+
+- `rustup default stable`, and `rustup component add llvm-tools-preview`
+  for coverage.
+- For the Kani proofs, `cargo install --locked kani-verifier --version
+  0.68.0` and `cargo kani setup`. On NixOS, Kani's CBMC needs
+  `programs.nix-ld.enable = true`.
+
 ## Quick start
 
 - In the root directory `cargo run`.
