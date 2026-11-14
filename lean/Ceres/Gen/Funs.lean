@@ -3069,7 +3069,7 @@ def ppu.display.timing.LcdTiming.update_line
   else ok (false, { self with stat_line := line })
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_off]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 539:4-547:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 545:4-553:5 -/
 def ppu.display.timing.LcdTiming.turn_off
   (self : ppu.display.timing.LcdTiming) :
   Result ppu.display.timing.LcdTiming
@@ -3089,7 +3089,7 @@ def ppu.display.timing.LcdTiming.turn_off
   ok self1
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_on]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 510:4-523:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 516:4-529:5 -/
 def ppu.display.timing.LcdTiming.turn_on
   (self : ppu.display.timing.LcdTiming) (phases : ppu.display.timing.Phases) :
   Result (Bool × ppu.display.timing.LcdTiming)
@@ -3412,7 +3412,7 @@ def ppu.display.timing.RESYNC_H : Result Std.I32 := do
   i - 19#i32
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::resync]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 532:4-535:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 538:4-541:5 -/
 def ppu.display.timing.LcdTiming.resync
   (self : ppu.display.timing.LcdTiming) (line : Std.U8) :
   Result ppu.display.timing.LcdTiming
@@ -3435,7 +3435,7 @@ def ppu.display.timing.check.ceres_unit
   else ok (rose, t1, ahead)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::mode3_end]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 526:4-528:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 532:4-534:5 -/
 def ppu.display.timing.LcdTiming.mode3_end
   (self : ppu.display.timing.LcdTiming) :
   Result ppu.display.timing.LcdTiming
@@ -3464,7 +3464,7 @@ def ppu.display.timing.check.ceres_half_dot
   ppu.display.timing.check.ceres_unit t1 ahead
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_lyc]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 635:4-645:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 641:4-651:5 -/
 def ppu.display.timing.LcdTiming.write_lyc
   (self : ppu.display.timing.LcdTiming) (val : Std.U8)
   (delays : ppu.display.timing.Delays) :
@@ -3482,7 +3482,7 @@ def ppu.display.timing.LcdTiming.write_lyc
   else ok { self with lyc := val, lyc_pending := none }
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 611:4-630:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 617:4-636:5 -/
 def ppu.display.timing.LcdTiming.write_stat
   (self : ppu.display.timing.LcdTiming) (val : Std.U8)
   (delays : ppu.display.timing.Delays) :
@@ -3590,7 +3590,7 @@ def ppu.display.timing.LcdTiming.read_mode
       else ok 0#u8
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 592:8-603:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 598:8-609:9 -/
 @[rust_loop_body]
 def ppu.display.timing.LcdTiming.read_stat_loop.body
   (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
@@ -3631,7 +3631,7 @@ def ppu.display.timing.LcdTiming.read_stat_loop.body
   else ok (done (lyc_flag, mode))
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 592:8-603:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 598:8-609:9 -/
 @[rust_loop]
 def ppu.display.timing.LcdTiming.read_stat_loop
   (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
@@ -3646,7 +3646,7 @@ def ppu.display.timing.LcdTiming.read_stat_loop
     (t, lyc_flag, mode, k)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 575:4-605:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 581:4-611:5 -/
 def ppu.display.timing.LcdTiming.read_stat
   (self : ppu.display.timing.LcdTiming) (stat : Std.U8)
   (delays : ppu.display.timing.Delays) (double_speed : Bool) :
@@ -3682,7 +3682,7 @@ def ppu.display.timing.LcdTiming.read_stat
     ok (enables ||| i2)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 558:8-562:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 564:8-568:9 -/
 @[rust_loop_body]
 def ppu.display.timing.LcdTiming.read_ly_loop.body
   (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
@@ -3698,7 +3698,7 @@ def ppu.display.timing.LcdTiming.read_ly_loop.body
   else ok (done (t, before))
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 558:8-562:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 564:8-568:9 -/
 @[rust_loop]
 def ppu.display.timing.LcdTiming.read_ly_loop
   (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
@@ -3711,7 +3711,7 @@ def ppu.display.timing.LcdTiming.read_ly_loop
     (t, before, k)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 552:4-569:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 558:4-575:5 -/
 def ppu.display.timing.LcdTiming.read_ly
   (self : ppu.display.timing.LcdTiming) (delays : ppu.display.timing.Delays) :
   Result Std.U8
