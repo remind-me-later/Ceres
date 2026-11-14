@@ -77,10 +77,10 @@
         libxkbcommon
         vulkan-loader
         wayland
-        xorg.libX11
-        xorg.libXcursor
-        xorg.libXi
-        xorg.libXrandr
+        libx11
+        libxcursor
+        libxi
+        libxrandr
       ];
     in
     {
@@ -136,7 +136,7 @@
           if ! rustup show active-toolchain >/dev/null 2>&1; then
             echo "ceres: no Rust toolchain: rustup default stable" >&2
           fi
-          kani=$(cargo kani --version 2>/dev/null | awk '{ print $NF }')
+          kani=$(cargo kani --version 2>/dev/null | awk '/^Kani/ { print $4 }')
           if [ -z "$kani" ]; then
             echo "ceres: no Kani: cargo install --locked kani-verifier --version ${kaniVersion} && cargo kani setup" >&2
           elif [ "$kani" != "${kaniVersion}" ]; then
