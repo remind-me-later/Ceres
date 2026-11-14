@@ -2,6 +2,8 @@ mod dma;
 mod hdma;
 mod hram;
 mod key1;
+#[cfg(kani)]
+mod netlist_proofs;
 mod svbk;
 #[cfg(test)]
 mod tests;
@@ -29,6 +31,29 @@ pub(crate) const UNUSABLE_START: u16 = 0xFEA0;
 /// The I/O registers, then the high RAM and IE.
 pub(crate) const IO_START: u16 = 0xFF00;
 pub(crate) const HRAM_START: u16 = 0xFF80;
+
+/// The addresses of FF00 to FF7F that no block of the DMG decodes: a read
+/// finds the data bus as phase A precharged it, FF, and a write changes
+/// nothing. FF60, the test register, is written only with a test pin high
+/// and never read. The rest are the joypad, the serial port, the timer,
+/// IF, the sound (but FF15 and FF1F), wave RAM, the PPU, the DMA and FF50.
+// @hw die: the decoders of `hdl/rtl` (`joypad.vhd`, `serial.vhd`,
+// `divider.vhd`, `timer.vhd`, `interrupts.vhd`, `apu_*.vhd`,
+// `lcd_control.vhd`, `lcd_timing.vhd`, `render.vhd`, `dma.vhd`,
+// `boot_rom.vhd`, `test_mode.vhd`)
+#[cfg(any(test, kani))]
+pub(crate) const fn undecoded(addr: u16) -> bool {
+    matches!(
+        addr,
+        0xFF03
+            | 0xFF08..=0xFF0E
+            | 0xFF15
+            | 0xFF1F
+            | 0xFF27..=0xFF2F
+            | 0xFF4C..=0xFF4F
+            | 0xFF51..=0xFF7F
+    )
+}
 
 /// The address of the I/O register at `reg` (one of the offsets below).
 #[must_use]
@@ -182,7 +207,11 @@ impl<A: AudioCallback> Gb<A> {
                     0xFF
                 }
             }
-            OPRI if self.bootrom.is_enabled() => self.ppu.read_opri(),
+            // The DMG has no OPRI: FF6C is driven by nothing.
+            OPRI if self.model.is_cgb_hardware() && self.bootrom.is_enabled() => {
+                self.ppu.read_opri()
+            }
+            BANK => self.bootrom.read_bank(),
             SVBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.wram.svbk().read(),
             PCM12 if self.model.is_cgb_hardware() => self.apu.pcm12(),
             PCM34 if self.model.is_cgb_hardware() => self.apu.pcm34(),
@@ -292,11 +321,7 @@ impl<A: AudioCallback> Gb<A> {
                     self.cgb_mode = CgbMode::Compat;
                 }
             }
-            BANK => {
-                if val & 1 != 0 {
-                    self.bootrom.disable();
-                }
-            }
+            BANK => self.bootrom.write_bank(val),
             VBK if matches!(self.cgb_mode, CgbMode::Cgb) => self.ppu.vram_mut().write_vbk(val),
             KEY1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.key1.write(val),
             HDMA1 if matches!(self.cgb_mode, CgbMode::Cgb) => self.hdma.write_hdma1(val),
@@ -361,7 +386,11 @@ impl<A: AudioCallback> Gb<A> {
             return;
         };
         match addr {
-            // FIXME: we assume bootrom doesn't write to rom
+            // While the boot ROM is mapped, the DMG decodes its addresses
+            // itself: a write there does not leave the chip, and the
+            // cartridge never sees it.
+            // @hw die: TULO TUTU, ZLYZ (the netlist's `NetChip::internal_access`)
+            0x0000..=0x00FF if !self.model.is_cgb_hardware() && self.bootrom.is_enabled() => {}
             0x0000..=0x7FFF => self.cart.write_rom(addr, val),
             0x8000..=0x9FFF => {
                 #[cfg(feature = "debug")]

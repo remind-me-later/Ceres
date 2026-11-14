@@ -28,8 +28,7 @@ mkdir -p "$out"
 
 sha=$(git rev-parse --verify "$rev^{commit}")
 if [ -d "$base" ]; then
-	git -C "$base" checkout -q --detach "$sha"
-	git -C "$base" checkout -q -- .
+	git -C "$base" checkout -q -f --detach "$sha"
 else
 	git worktree add -q --detach "$base" "$sha"
 fi

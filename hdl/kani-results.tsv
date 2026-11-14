@@ -13,6 +13,7 @@ fault/window-fetch-never-ends	c8fd8e1b1abbedc0	caught	0	cadical
 fault/window-starts-late	c8fd8e1b1abbedc0	caught	0	cadical
 interrupts::netlist_proofs::netlist_if_bisimulation	57f4bf43715611ba	pass	2	cadical
 memory::dma::netlist_proofs::netlist_dma_bisimulation	57f4bf43715611ba	pass	1	cadical
+memory::netlist_proofs::netlist_bus_side	e7e5af00a89bf50d	pass	9	cadical
 netlist_proofs::ceres_timer_and_if_in_sequence	57f4bf43715611ba	pass	2	cadical
 netlist_proofs::netlist_timer_and_if	57f4bf43715611ba	pass	2	cadical
 ppu::display::background::netlist_proofs::netlist_mode3_armed_attributes	57f4bf43715611ba	pass	181	cadical

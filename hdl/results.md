@@ -1201,6 +1201,38 @@ writes and at 340 positions. What the CPU's address on FExx does to the
 scan during mode 2 is the OAM corruption bug, which dmg-sim's plain SRAM
 cannot show: `cpu-does-not-address-oam` now rests on `oam-corruption-bug`.
 
+## Ceres's bus side
+
+Kani (`memory::netlist_proofs::netlist_bus_side`, 5 s) holds ceres's HRAM
+and boot ROM to `NetBus` for the accesses the DMG decodes itself, which
+never reach the cartridge's pins: from any HRAM, any boot ROM image and
+either mapping, an M-cycle that reads or writes HRAM, FF50, the boot ROM's
+0000 to 00FF while it is mapped, or an address of FF00 to FF7F that no
+block decodes (`dmg-undecoded-io`) gives the same read and leaves HRAM and
+the mapping the same. `memory::tests::dmg_map_is_the_netlists` checks that
+ceres's DMG routes those addresses so, for every one of them.
+
+The netlist showed two places where ceres had parted from it, both seen
+only by code that runs while the boot ROM is mapped, which no test ROM
+reaches:
+
+- FF50 reads FE while the boot ROM is mapped: TEPU's bit 0 is driven onto
+  the bus (YULA YAZA, ZUFA ZADO), the other bits are precharged. Ceres read
+  FF. SameBoy reads `0xFE | boot_rom_finished`.
+- A write to 0000 to 00FF while the boot ROM is mapped does not leave the
+  chip (TULO TUTU gate the core's request), so the cartridge's MBC never
+  sees it. Ceres passed it to the MBC. The CGB keeps that, with no netlist
+  to say otherwise.
+
+Ceres also read OPRI (FF6C) on the DMG while the boot ROM was mapped; the
+DMG has no OPRI, and FF6C now reads FF there. The A/V hash (171 ROMs) is
+the same before and after.
+
+What a read of the cartridge bus gives is the board's byte as the pins
+hold it at the start of G, or FF where nothing drives them (the pads'
+pull-ups against the keeper); which byte the cartridge drives is the
+board's, not the chip's, and the lockstep oracle compares it above.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

@@ -46,6 +46,15 @@ impl Bootrom {
         }
     }
 
+    /// A mapped boot ROM with `data`, for the proofs.
+    #[cfg(kani)]
+    pub(crate) const fn from_image(data: Cow<'static, [u8]>) -> Self {
+        Self {
+            data,
+            is_enabled: true,
+        }
+    }
+
     /// A boot ROM other than the model's own (such as one that skips the
     /// logo), for tests.
     #[cfg(feature = "debug")]
@@ -53,6 +62,23 @@ impl Bootrom {
         Self {
             data: Cow::Owned(data.into_vec()),
             is_enabled: true,
+        }
+    }
+
+    /// FF50: bit 0 reads whether the boot ROM is unmapped; the other bits
+    /// are driven by nothing and read 1, as the data bus is precharged.
+    // @hw die: YULA YAZA, ZUFA ZADO (the netlist's `boot_rom.vhd`)
+    #[must_use]
+    pub(crate) const fn read_bank(&self) -> u8 {
+        0xFE | !self.is_enabled as u8
+    }
+
+    /// A write of FF50 with bit 0 set unmaps the boot ROM until the next
+    /// reset; a write with it clear does nothing.
+    // @hw die: TEPU (dffr), clocked by TUGE; SATO
+    pub(crate) const fn write_bank(&mut self, val: u8) {
+        if val & 1 != 0 {
+            self.disable();
         }
     }
 

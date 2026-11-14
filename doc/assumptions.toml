@@ -92,7 +92,19 @@ evidence = "replayed"
 how = "netlist_replay's replay of the core over the model's traces that have its fields, alone and in the whole chip (NetChip)."
 rests_on = ["readable-model-is-dmg-sim"]
 
-# How ceres's time maps onto the netlist's
+[transcription-bus]
+title = "NetBus is external_bus.vhd, high_ram.vhd, boot_rom.vhd, joypad.vhd and serial.vhd, phase by phase, and NetBoard the board's work RAM and cartridge"
+evidence = "replayed"
+how = "netlist_replay over the 269 traces with the bus side's fields (hdl/README.md): no difference, with 16 million reads on the cartridge bus, 400 thousand writes of HRAM and 189 serial transfers."
+rests_on = ["readable-model-is-dmg-sim"]
+
+[dmg-undecoded-io]
+title = "No block of the DMG decodes FF03, FF08 to FF0E, FF15, FF1F, FF27 to FF2F, FF4C to FF4F or FF51 to FF7F (memory::undecoded): a read finds the precharged bus, FF, and a write changes nothing"
+evidence = "measured"
+how = "Read from hdl/rtl: every FFxx address a block of the DMG's revision decodes, for a read or a write; FF60, the test register, is written only with a test pin high and has no read. The CGB's registers (cgb_mode.vhd, speed_switch.vhd, colour_palettes.vhd, wram_bank.vhd, vram_bus.vhd's FF4F) are not on the DMG-CPU B."
+rests_on = ["readable-model-is-dmg-sim"]
+
+# How ceres's time maps onto the netlist's)
 
 [mapping-m-cycle-at-e]
 title = "Ceres's M-cycle starts at the netlist's E: an IF write lands after its first T-cycle, an interrupt's acknowledge after its second, a source's rise in T-cycle 1, 2 or 3-4 is the netlist's in E-G, H or A-D"
