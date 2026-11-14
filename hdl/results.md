@@ -1141,6 +1141,33 @@ an M-cycle where mode 3 falls at C's or G's edge, and any access where it
 falls at A's; a sweep ROM (SCX 0 to 7 against a write and a read a cycle
 apart) would fill the table.
 
+Ceres follows the rule. `ceres-test-runner`'s `tests/vram_gate.rs` runs
+the same ROMs on ceres, with the PPU trace's CPU accesses to VRAM, the
+locks' changes and the timing unit's end of mode 3, and puts the netlist's
+mode 3 on ceres's clock by the mappings: it rises at h = 154 and falls
+two half dots after ceres's mode 3 ends. That is a half dot more than
+`mapping-mode3-end` says of mode 0: render's mode 3 latch (XYMU) clears
+the edge after mode 0 rises, through VOGA, on all 58,663 lines of the
+netlist's runs. In line 0 after the LCD is turned on, accesses fall at h = 2
+until the resync, and mode 3 rises at h = 160 (it falls as on the other
+lines, on ceres's clock). All 1,388,944 accesses follow the rule, 354,687
+of them with the LCD off and 39,833 in VBlank. The reads' patterns are the
+netlist tally's, ROM by ROM.
+(The first version left the trace's lines to the accesses, and then held a
+whole frame after the boot ROM's LCD-on as its line 0.) A late read lock,
+planted at the scan's end, fails the test.
+
+The trace also shows where ceres's locks change. On the 70,098 visible
+lines, the read lock comes on 9 half dots before mode 3 rises (OAM scan
+index 37), the write lock 1 before, and both come off 2 before its end,
+which is always odd. On the 74 first lines both come on at h = 159. At those
+positions the test holds ceres's locks to the rule for every end of mode 3
+and every access on the line's D edges, not only those the ROMs reach. They
+agree: ceres's lock and the netlist's window part only at half dots no
+access falls on (a write lock 1 early, a read lock 5 early and 1 late). So
+ceres's VRAM gate is the netlist's, given the mappings and these lock
+positions, which the PPU's state machine sets and the trace measured.
+
 ## The model's races
 
 `find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses

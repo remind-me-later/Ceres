@@ -145,9 +145,9 @@ evidence = "measured"
 how = "Gambatte's DMG late_sp traces: the run rose in index k's window and ceres hid from sprite k + 1 (k = 0, 2, 38), fell there and ceres hid up to k (k = 0, 2)."
 
 [mapping-mode3-end]
-title = "Render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (timing_mode3_end), on an even half dot of a visible line, before its end; it falls at the scan's line start (h = 906), but after line 143, where VBlank masks it; it pulses only for a sprite at X 167"
+title = "Render's mode 0 rises a half dot after ceres's pixel pipeline ends mode 3 (timing_mode3_end), on an even half dot of a visible line, before its end, and its mode 3 latch (XYMU) falls the edge after, through VOGA; mode 0 falls at the scan's line start (h = 906), but after line 143, where VBlank masks it; it pulses only for a sprite at X 167"
 evidence = "measured"
-how = "Model traces of 13 ROMs (gbmicrotest's hblank_int_scx0 to 7, gambatte's sprite m0irq, m0stat and m3stat ROMs) against ceres's timing_mode3_end (a temporary trace event): 11,020 lines a half dot after, 23 in line 0 after the LCD is turned on (ceres 2 half dots ahead), and 14 with a sprite at X 167 pulsing; rises at h = 500 to 720, all even; 12,859 falls at 906 and 85 at line 143's 908. Proved for the lines where the window is idle, with objects at X 8 or more (mode3-end-background)."
+how = "Model traces of 13 ROMs (gbmicrotest's hblank_int_scx0 to 7, gambatte's sprite m0irq, m0stat and m3stat ROMs) against ceres's timing_mode3_end (a temporary trace event): 11,020 lines a half dot after, 23 in line 0 after the LCD is turned on (ceres 2 half dots ahead), and 14 with a sprite at X 167 pulsing; rises at h = 500 to 720, all even; 12,859 falls at 906 and 85 at line 143's 908. XYMU: all 58,663 lines of ceres-netlist's tests/vram_gate.rs fall one edge after mode 0 (a temporary count); on ceres's clock, which reads 2 more in line 0 after the LCD is turned on, the fall is 2 half dots after timing_mode3_end there too (ceres-test-runner's tests/vram_gate.rs: the reads around it have the netlist tally's patterns). Proved for the lines where the window is idle, with objects at X 8 or more (mode3-end-background)."
 rests_on = ["readable-model-is-dmg-sim"]
 facts = ["sprite-at-167-mode-0-pulse"]
 

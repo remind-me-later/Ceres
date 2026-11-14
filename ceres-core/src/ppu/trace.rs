@@ -1,7 +1,9 @@
 //! What the CPU saw of the PPU (the `debug` feature): its LCD interrupt
 //! requests, its STAT and LYC writes and the values STAT and LY reads
 //! returned, each with where the display and the timing unit were; and what
-//! the pixel pipeline did: the pixels it pushed and the tile fetches it began.
+//! the pixel pipeline did: the pixels it pushed and the tile fetches it
+//! began; and the CPU's accesses to VRAM, with where the locks on them
+//! changed.
 
 use {
     super::{LCDC_ON_B, PpuCore},
@@ -28,6 +30,16 @@ pub enum PpuEventKind {
     Pixel { x: u8 },
     /// The background fetcher began a tile: the window's or the background's.
     TileFetch { window: bool },
+    /// The CPU read VRAM at `addr` and got `value`; the read lock was on.
+    VramRead { addr: u16, value: u8, locked: bool },
+    /// The CPU wrote `value` to VRAM at `addr`; the write lock was on.
+    VramWrite { addr: u16, value: u8, locked: bool },
+    /// The locks on the CPU's VRAM reads and writes became these (as the
+    /// half dot ran).
+    VramLocks { read: bool, write: bool },
+    /// Mode 3 ended for the timing unit: its HBlank gate rises in the next
+    /// half dot.
+    Mode3End,
 }
 
 /// An event and where the display was.
@@ -57,6 +69,8 @@ pub(super) struct Trace {
     unit: u64,
     /// `Interrupts::lcd_requests` when last looked at.
     lcd_requests: u32,
+    /// The VRAM locks when last looked at.
+    vram_locks: (bool, bool),
 }
 
 impl PpuCore {
@@ -106,6 +120,17 @@ impl PpuCore {
     pub(super) fn trace_unit(&mut self, ints: &Interrupts) {
         self.trace.unit += 1;
         self.trace_requests(ints);
+        if self.timing_mode3_ending() {
+            self.record(PpuEventKind::Mode3End);
+        }
+        let locks = (self.vram_read_blocked(), self.vram_write_blocked());
+        if locks != self.trace.vram_locks {
+            self.trace.vram_locks = locks;
+            self.record(PpuEventKind::VramLocks {
+                read: locks.0,
+                write: locks.1,
+            });
+        }
     }
 
     /// Records the LCD interrupt requests made since the last look.
@@ -132,12 +157,26 @@ impl PpuCore {
         self.record(PpuEventKind::Write { addr, value });
     }
 
-    /// The CPU read `value` from STAT or LY.
+    /// The CPU read `value` from STAT, LY or VRAM.
     pub(crate) fn trace_read(&mut self, addr: u16, value: u8) {
         match addr {
+            0x8000..=0x9FFF => self.record(PpuEventKind::VramRead {
+                addr,
+                value,
+                locked: self.vram_read_blocked(),
+            }),
             0xFF41 => self.record(PpuEventKind::StatRead(value)),
             0xFF44 => self.record(PpuEventKind::LyRead(value)),
             _ => {}
         }
+    }
+
+    /// The CPU is writing `value` to VRAM at `addr`.
+    pub(crate) fn trace_vram_write(&mut self, addr: u16, value: u8) {
+        self.record(PpuEventKind::VramWrite {
+            addr,
+            value,
+            locked: self.vram_write_blocked(),
+        });
     }
 }

@@ -449,6 +449,12 @@ impl PpuCore {
         self.d.timing.mode3_end();
     }
 
+    /// Mode 3 ended in this unit (`timing_mode3_end`): for traces.
+    #[cfg(feature = "debug")]
+    pub(in crate::ppu) const fn timing_mode3_ending(&self) -> bool {
+        self.d.timing.hblank_pending
+    }
+
     /// The LCD was turned on: the line clock starts at line 0.
     pub(in crate::ppu) const fn timing_lcd_on(&mut self, ints: &mut Interrupts) {
         let phases = if !self.is_cgb_hardware() {
