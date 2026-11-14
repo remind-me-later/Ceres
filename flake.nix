@@ -98,8 +98,10 @@
           libadwaita
           alsa-lib
 
-          # The boot ROMs and the test ROMs.
+          # The boot ROMs and the test ROMs (ceres-test-runner's build.rs
+          # downloads the collection with curl and unzips it).
           rgbds
+          unzip
 
           # hdl/: dmg-sim on Icarus (13, which smoke.sha256 was taken
           # with), the readable model on nvc, the knowledge base on Soufflé,

@@ -142,6 +142,18 @@ cargo test --package ceres-test-runner --test facts
 cargo run --package ceres-test-runner --example facts
 ```
 
+#### The A/V hash
+
+A refactor that should not change what ceres does is checked with the A/V
+hash: 171 test ROMs, a sample of each suite, run for 600 frames on the DMG and
+on the CGB, each run hashed by its sound, its picture and its final save
+state. The script runs it on a revision (`HEAD` by default) and on the working
+tree and diffs the two (about four minutes on 12 cores):
+
+```sh
+CARGO_BUILD_JOBS=4 ceres-test-runner/avhash.sh [REV] -- --jobs 12
+```
+
 ### CI/CD Pipeline
 
 GitHub Actions runs the tests on pushes and pull requests to `main`. It
