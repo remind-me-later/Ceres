@@ -94,8 +94,10 @@ pub(super) struct Net {
     /// The interrupts the core acknowledged in the last M-cycle.
     pub acks: u8,
     /// The core's `halt_n` as the last phase left it: the chip runs the
-    /// core's clocks while it is high.
+    /// core's clocks while it is high. Unless `may_halt`, the core must keep
+    /// it high, and the clocks run (which the proofs then fold).
     pub halt_n: bool,
+    pub may_halt: bool,
 }
 
 impl Net {
@@ -165,7 +167,12 @@ impl Net {
                 first
             };
             self.low_before = now_low;
-            self.halt_n = out.halt_n;
+            self.halt_n = if self.may_halt {
+                out.halt_n
+            } else {
+                assert!(out.halt_n, "the core does not halt");
+                true
+            };
             last = (driven.d, out, clk_ena);
             self.acks |= out.inta;
             if out.wr {
@@ -194,22 +201,27 @@ const fn pair_holds(high: Register, low: u8, value: u16) -> bool {
 /// counts an instruction later (ceres's `ime_toggle`). What the core shows
 /// of it (`seq.ime`) is the latch as the M-cycle before found it.
 pub(super) const fn registers_agree(core: &NetCore, cpu: &Sm83) -> bool {
+    registers_agree_at(core, cpu, cpu.pc)
+}
+
+/// The same, with PC `pc`.
+const fn registers_agree_at(core: &NetCore, cpu: &Sm83, pc: u16) -> bool {
     let regs = &core.regs;
     pair_holds(regs.a, core.alu.masters.bits(), cpu.af)
         & pair_holds(regs.b, regs.c.master, cpu.bc)
         & pair_holds(regs.d, regs.e.master, cpu.de)
         & pair_holds(regs.h, regs.l.master, cpu.hl)
         & pair_holds(regs.sph, regs.spl.master, cpu.sp)
-        & pair_holds(regs.pch, regs.pcl.master, cpu.pc)
+        & pair_holds(regs.pch, regs.pcl.master, pc)
         & (core.seq.ime_state == (cpu.ime ^ cpu.ime_toggle))
 }
 
 /// The core's control state where a fetch's M-cycle ends, whether it
-/// fetched an opcode or began an interrupt's entry: nothing else under way,
-/// no NMI, IE showing its master. The interrupts' request latches are
-/// free: they take IF's lines again in the next M-cycle; so is HALT's
-/// delayed step, which the next A edge overwrites before it is read (it
-/// is still set after the HALT bug's fetch).
+/// fetched an opcode, began an interrupt's entry or ended HALT's: nothing
+/// else under way, no NMI, IE showing its master. The interrupts' request
+/// latches are free: they take IF's lines again in the next M-cycle; so is
+/// HALT's delayed step, which the next A edge overwrites before it is read,
+/// and the HALT step sampled, which the callers pin.
 const fn after_fetch(core: &NetCore) -> bool {
     let s = &core.seq;
     let sampled = &core.sampled;
@@ -236,10 +248,15 @@ const fn after_fetch(core: &NetCore) -> bool {
         & core.fetch
         & (sampled.next_mcyc == 0)
         & !sampled.mread
-        & !sampled.halt_step
         & !sampled.stop
         & !sampled.not_ready
         & !sampled.nmi
+}
+
+/// HALT's step was sampled with a request latched, which will reset the
+/// halt it sets (the HALT bug), or not at all.
+const fn no_halt(core: &NetCore) -> bool {
+    !core.sampled.halt_step | core.sampled.int_pending
 }
 
 /// A request latched with IME set, and shown set: the core enters.
@@ -251,14 +268,81 @@ const fn takes_interrupt(core: &NetCore) -> bool {
 /// M-cycle that fetched `op`, which its opcode register shows next, and no
 /// interrupt taken.
 pub(super) const fn core_between(core: &NetCore, op: u8) -> bool {
-    after_fetch(core) & (core.seq.ir_next == op) & !core.seq.entering & !takes_interrupt(core)
+    after_fetch(core)
+        & no_halt(core)
+        & (core.seq.ir_next == op)
+        & !core.seq.entering
+        & !takes_interrupt(core)
 }
 
 /// The core where an interrupt's entry begins: phase H of the M-cycle
 /// that fetched, as ceres's dispatch reads, at PC, and the core took the
 /// request.
 pub(super) const fn core_entering(core: &NetCore) -> bool {
-    after_fetch(core) & core.seq.entering & takes_interrupt(core)
+    after_fetch(core) & no_halt(core) & core.seq.entering & takes_interrupt(core)
+}
+
+/// The core where HALT's M-cycle ends and it halts: its step sampled, no
+/// request latched to reset the halt it sets at the next A edge, and IME
+/// shown as its latch holds it (`exec_phase` fell at the M-cycle's end).
+pub(super) const fn core_halting(core: &NetCore) -> bool {
+    after_fetch(core)
+        & core.sampled.halt_step
+        & !core.sampled.int_pending
+        & !core.seq.entering
+        & (core.seq.ime == core.seq.ime_state)
+}
+
+/// The core with its halt set, where a phase H ends: its clocks stopped
+/// (`exec_phase` low, no fetch), its M-cycle counter at 7 (at 0 in the
+/// first halted M-cycle, HALT's step still delayed) and going to 7,
+/// nothing else under way, IME shown as its latch holds it (as HALT's
+/// M-cycle ended; nothing changes them while halted). With the clocks
+/// stopped `data_phase` stays low, so the request latch is open the whole
+/// M-cycle and holds what ceres's halted step sampled.
+const fn halted_shape(core: &NetCore) -> bool {
+    let s = &core.seq;
+    let sampled = &core.sampled;
+    s.halt
+        & ((s.mcyc == 7) | ((s.mcyc == 0) & s.halt_delayed))
+        & (s.ime == s.ime_state)
+        & !s.cb_next
+        & !s.stop
+        & !s.stop_delayed
+        & !s.not_ready_1
+        & !s.not_ready_2
+        & s.no_nmi
+        & s.no_nmi_1
+        & !s.entering
+        & !s.int_entry
+        & s.nmi_low_1
+        & s.nmi_low_2
+        & !s.nmi_req
+        & !s.nmi_entering
+        & !s.nmi_entry
+        & !core.alu.cond_fail
+        & (sampled.int_pending == (core.ints.pending != 0))
+        & (core.ints.ie == core.ints.ie_next)
+        & !core.clk
+        & !core.exec_phase
+        & !core.fetch
+        & (sampled.next_mcyc == 7)
+        & !sampled.mread
+        & !sampled.halt_step
+        & !sampled.stop
+        & !sampled.not_ready
+        & !sampled.nmi
+}
+
+/// The core halted, no request latched.
+pub(super) const fn core_halted(core: &NetCore) -> bool {
+    halted_shape(core) & !core.sampled.int_pending
+}
+
+/// The core halted with a request latched, which resets the halt at the
+/// next A edge: it wakes.
+pub(super) const fn core_waking(core: &NetCore) -> bool {
+    halted_shape(core) & core.sampled.int_pending
 }
 
 /// The two between instructions: ceres is about to execute `op`, which the
@@ -269,7 +353,34 @@ pub(super) const fn boundary(core: &NetCore, cpu: &Sm83, op: u8) -> bool {
 
 /// The two where an interrupt's entry begins: ceres has done its
 /// dispatch's first read, at PC, and the core its fetch there, which moved
-/// its PC on: `cpu` is ceres with PC one on.
+/// its PC on: `cpu` is ceres with PC one on (as ceres has PC after the HALT
+/// bug, whose fetch does not move it).
 pub(super) const fn entry_begins(core: &NetCore, cpu: &Sm83) -> bool {
     core_entering(core) & registers_agree(core, cpu)
+}
+
+/// The same where ceres is about to dispatch (its step's `begin` chose
+/// to): PC is where its dispatch reads, one before the core's but after the
+/// HALT bug.
+pub(super) const fn entry_from(core: &NetCore, cpu: &Sm83) -> bool {
+    let pc = cpu.pc.wrapping_add(!cpu.halt_bug as u16);
+    core_entering(core) & registers_agree_at(core, cpu, pc)
+}
+
+/// The two where HALT's M-cycle ends and both halt: ceres has executed
+/// HALT, PC past it.
+pub(super) const fn halt_begins(core: &NetCore, cpu: &Sm83) -> bool {
+    core_halting(core) & registers_agree(core, cpu)
+}
+
+/// The two halted, the core halting (where HALT's M-cycle ended) or
+/// halted.
+pub(super) const fn in_halt(core: &NetCore, cpu: &Sm83) -> bool {
+    (core_halting(core) | core_halted(core)) & registers_agree(core, cpu)
+}
+
+/// The two where a halted M-cycle ends with a request: ceres's halted step
+/// sampled it, and the core latched it.
+pub(super) const fn waking(core: &NetCore, cpu: &Sm83) -> bool {
+    core_waking(core) & registers_agree(core, cpu)
 }

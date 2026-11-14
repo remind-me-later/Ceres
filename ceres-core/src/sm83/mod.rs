@@ -31,6 +31,17 @@ const NF: u16 = 0x40;
 const HF: u16 = 0x20;
 const CF: u16 = 0x10;
 
+/// What a step does after `Sm83::begin`.
+#[cfg_attr(any(kani, test), derive(Debug, PartialEq, Eq))]
+enum Begin {
+    /// Still halted: the step is over.
+    Halted,
+    /// An interrupt's dispatch.
+    Dispatch,
+    /// The opcode fetched, to execute.
+    Fetched(u8),
+}
+
 /// A register pair, as an opcode names it.
 #[derive(Clone, Copy)]
 enum Pair {
@@ -245,8 +256,6 @@ impl Sm83 {
         // Port of SameBoy's `GB_cpu_run` control flow. All time of the
         // previous instruction has been flushed, so interrupt lines are
         // sampled with the hardware at instruction end.
-        let cgb = bus.is_cgb_hardware();
-
         if bus.is_stopped() {
             bus.advance(4);
             if bus.peek(io_addr(P1)) & 0xF != 0xF {
@@ -256,6 +265,26 @@ impl Sm83 {
             }
             return;
         }
+
+        match self.begin(bus) {
+            Begin::Halted => {}
+            Begin::Dispatch => self.dispatch_interrupt(bus),
+            Begin::Fetched(op) => self.exec(bus, op),
+        }
+    }
+
+    /// A step up to its instruction: HALT's time and its wake-up, EI's
+    /// toggle, and then an interrupt's dispatch to make, or the opcode
+    /// fetched (PC moved past it, but by the HALT bug).
+    fn begin<B: Bus>(&mut self, bus: &mut B) -> Begin {
+        let interrupt_pending = self.sample(bus);
+        self.choose(bus, interrupt_pending)
+    }
+
+    /// The interrupt lines, sampled: while halted, the halted step's time
+    /// passes around the sample.
+    fn sample<B: Bus>(&mut self, bus: &mut B) -> bool {
+        let cgb = bus.is_cgb_hardware();
 
         // While halted, DMG samples the interrupt lines two dots into each
         // 4-dot step; CGB (and the first step after HALT) samples at the start.
@@ -273,7 +302,12 @@ impl Sm83 {
             }
         }
         self.just_halted = false;
+        interrupt_pending
+    }
 
+    /// After the sample: EI's toggle, the wake-up, and then an interrupt's
+    /// dispatch to make, or the opcode fetched, or still halted.
+    fn choose<B: Bus>(&mut self, bus: &mut B, interrupt_pending: bool) -> Begin {
         let effective_ime = self.take_ime_toggle();
 
         if self.is_halted && interrupt_pending && (!effective_ime || self.halt_bug) {
@@ -289,28 +323,27 @@ impl Sm83 {
             self.is_halted = false;
             bus.wake_from_stop();
             bus.dma_run(woke);
-            self.dispatch_interrupt(bus);
-            return;
+            return Begin::Dispatch;
         } else {
             // Nothing to wake up for or to dispatch.
         }
 
-        if !self.is_halted {
-            let fetched = bus.read(self.pc);
-            let op = self.prefetched.take().unwrap_or(fetched);
-            self.pc = self.pc.wrapping_add(1);
-
-            // A pending HDMA burst steals the bus right after the opcode
-            // fetch, while the fetch's M-cycle is still pending.
-            bus.tick_hdma();
-
-            if self.halt_bug {
-                self.pc = self.pc.wrapping_sub(1);
-                self.halt_bug = false;
-            }
-
-            self.exec(bus, op);
+        if self.is_halted {
+            return Begin::Halted;
         }
+        let fetched = bus.read(self.pc);
+        let op = self.prefetched.take().unwrap_or(fetched);
+        self.pc = self.pc.wrapping_add(1);
+
+        // A pending HDMA burst steals the bus right after the opcode
+        // fetch, while the fetch's M-cycle is still pending.
+        bus.tick_hdma();
+
+        if self.halt_bug {
+            self.pc = self.pc.wrapping_sub(1);
+            self.halt_bug = false;
+        }
+        Begin::Fetched(op)
     }
 
     /// The five-M-cycle interrupt dispatch (SameBoy: fetch, OAM-bug cycle,

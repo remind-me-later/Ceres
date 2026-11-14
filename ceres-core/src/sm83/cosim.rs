@@ -16,7 +16,7 @@
 use {
     super::{
         Bus, Sm83,
-        check::{Access, Net, boundary, entry_begins},
+        check::{Access, Net, boundary, entry_begins, entry_from, halt_begins, in_halt, waking},
     },
     ceres_netlist::sm83::{Flags, NetCore, NetRegisters, Register},
     std::collections::BTreeMap,
@@ -432,6 +432,7 @@ fn run(op: u8, prefixed: bool, rng: &mut Rng, tally: &mut Tally) {
         int_before: 0,
         acks: 0,
         halt_n: true,
+        may_halt: false,
     };
     let mut net_memory = memory.clone();
     // The core settles in every phase, in the passes `check` gives it.
@@ -617,6 +618,24 @@ fn touches(trace: &[Access], at: u16) -> bool {
     )
 }
 
+/// A step of ceres's, for the relations after its M-cycles: where it
+/// starts, ceres as its first M-cycle and as the step leaves it, and what
+/// it did.
+#[expect(clippy::struct_excessive_bools, reason = "what a step did")]
+struct Step {
+    start: usize,
+    first: Sm83,
+    after: Sm83,
+    /// It executed HALT; it left ceres halted.
+    halt: bool,
+    halted: bool,
+    /// It started halted, or from a fetch (neither halted nor with the
+    /// HALT bug's fetch to come).
+    halted_before: bool,
+    from_fetch: bool,
+    dispatched: bool,
+}
+
 /// What a run of steps found, step by step: whether each step's first
 /// M-cycle left the two related (with the first failure), and which of
 /// HALT's ways it went.
@@ -645,18 +664,80 @@ impl Steps {
         } else {
             matches!(access, Access::Read(_, op) if boundary(c, first, op))
         };
+        let what = if dispatched { "dispatch" } else { "fetch" };
+        self.holds(holds, m, what, c, first);
+    }
+
+    /// After the step's M-cycle `m` (whose access was `access`), the core
+    /// `c` and ceres are related: after a fetch or a dispatch's first read;
+    /// after HALT's M-cycle (halting, or the HALT bug's fetch or dispatch
+    /// sharing it); halted, and then after the wake-up's fetch or
+    /// dispatch's first read.
+    fn after_mcycle(&mut self, step: &Step, m: usize, c: &NetCore, access: Access) {
+        let first = &step.first;
+        if m == step.start && step.from_fetch {
+            self.first_mcycle(m, c, first, access, step.dispatched);
+        }
+        if step.halt && m == step.start + 1 {
+            let after = &step.after;
+            if step.halted {
+                self.holds(halt_begins(c, after), m, "HALT", c, after);
+            } else {
+                let holds = if c.seq.entering {
+                    entry_from(c, after)
+                } else {
+                    matches!(access, Access::Read(_, op) if boundary(c, after, op))
+                };
+                self.holds(holds, m, "HALT bug", c, after);
+            }
+        }
+        if step.halted_before {
+            if m == step.start {
+                // The halted M-cycle: still halted, or woken by a request
+                // both sampled.
+                let mut before = registers_of(first);
+                before.pc = before.pc.wrapping_sub(1);
+                if step.halted {
+                    self.holds(in_halt(c, &before), m, "halted", c, &before);
+                } else {
+                    self.holds(waking(c, &before), m, "waking", c, &before);
+                }
+            } else if m == step.start + 1 {
+                self.first_mcycle(m, c, first, access, step.dispatched);
+            } else {
+                // The instruction or the dispatch goes on.
+            }
+        }
+    }
+
+    /// Which of HALT's ways a step went: from HALT (`at_halt`, the opcode
+    /// at PC) or halted, to `cpu`.
+    fn note_ways(&mut self, at_halt: bool, halted_before: bool, cpu: &Sm83, dispatched: bool) {
+        let ways = [
+            cpu.is_halted(),
+            at_halt && !halted_before && cpu.halt_bug,
+            halted_before && !cpu.is_halted() && !dispatched,
+            halted_before && dispatched,
+        ];
+        for (seen, now) in self.ways.iter_mut().zip(ways) {
+            *seen |= now;
+        }
+    }
+
+    /// A relation that must hold after M-cycle `m`, between the core `c`
+    /// and ceres `cpu`.
+    fn holds(&mut self, holds: bool, m: usize, what: &str, c: &NetCore, cpu: &Sm83) {
         if !holds && self.unrelated.is_none() {
             self.unrelated = Some(format!(
-                "M-cycle {m}, {}: {}; {}",
-                if dispatched { "dispatch" } else { "fetch" },
-                differing(c, first),
-                shape(c),
+                "M-cycle {m}, {what}: {}; {}",
+                differing(c, cpu),
+                shape(c)
             ));
         }
     }
 }
 
-/// Ceres's registers and IME, as `cpu` has them.
+/// Ceres's registers, IME and the HALT bug, as `cpu` has them.
 fn registers_of(cpu: &Sm83) -> Sm83 {
     Sm83 {
         af: cpu.af,
@@ -667,6 +748,7 @@ fn registers_of(cpu: &Sm83) -> Sm83 {
         pc: cpu.pc,
         ime: cpu.ime,
         ime_toggle: cpu.ime_toggle,
+        halt_bug: cpu.halt_bug,
         ..Sm83::default()
     }
 }
@@ -723,6 +805,7 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
             int_before: 0,
             acks: 0,
             halt_n: true,
+            may_halt: true,
         },
         memory: memory.clone(),
         trace: Vec::new(),
@@ -754,21 +837,21 @@ fn run_with_requests(rng: &mut Rng, tally: &mut IntTally) {
         cpu.step(&mut bus);
         bus.end_step();
         let dispatched = bus.dispatches != dispatches_before;
-        let ways = [
-            cpu.is_halted(),
-            opcode == HALT && !halted_before && cpu.halt_bug,
-            halted_before && !cpu.is_halted() && !dispatched,
-            halted_before && dispatched,
-        ];
-        for (seen, now) in steps.ways.iter_mut().zip(ways) {
-            *seen |= now;
-        }
+        steps.note_ways(opcode == HALT, halted_before, &cpu, dispatched);
+        let step = Step {
+            start,
+            first,
+            after: registers_of(&cpu),
+            halt: opcode == HALT && !halted_before && !dispatched,
+            halted: cpu.is_halted(),
+            halted_before,
+            from_fetch: !was_halted,
+            dispatched,
+        };
         while core.trace.len() < bus.trace.len() {
             let m = core.trace.len();
             let access = core.mcycle(requests);
-            if m == start && !was_halted {
-                steps.first_mcycle(m, &core.net.core, &first, access, dispatched);
-            }
+            steps.after_mcycle(&step, m, &core.net.core, access);
         }
     }
     if touches(&bus.trace, IF_ADDR) || touches(&core.trace, IF_ADDR) {

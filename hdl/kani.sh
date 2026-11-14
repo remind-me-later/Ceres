@@ -36,7 +36,7 @@
 # a memory cap where systemd-run is there (KANI_MEMORY, 9G; no swap), on
 # KANI_CORES if given (taskset's list), with KANI_SOLVER (cadical). The
 # harnesses that need the cap to themselves (SOLO: the CPU's against the
-# netlist's core, up to 6.3 GB, and the mode 3 pairs reach 8.3) run after
+# netlist's core, up to 7.4 GB, and the mode 3 pairs reach 8.3) run after
 # the others, one at a time.
 # Without Kani's concrete playback: it multiplies a harness's memory, and
 # only a failing harness needs it, for its counterexample:
@@ -262,7 +262,8 @@ faults)
             continue
         fi
         git -C "$WT" apply "$patch"
-        verdict=$(harnesses | grep -F "$harness" | kani | cut -d' ' -f2 | sort -u | tr '\n' ' ')
+        # The harness the patch names, exactly (others' names may contain it).
+        verdict=$(harnesses | awk -F'::' -v h="$harness" '$NF == h' | kani | cut -d' ' -f2 | sort -u | tr '\n' ' ')
         case "$verdict" in
         "fail ") outcome=caught ;;
         *) outcome=missed && missed=1 ;;

@@ -258,9 +258,9 @@ title = "From a core settled in the phase before, with the NMI's latches at rest
 evidence = "proved"
 
 [sm83-memory-as-the-chip-drives-it]
-title = "The core's harnesses drive its data bus as NetChip does for an address the chip does not decode: the memory's byte while the core's read is up, and the phase after; the oscillator stable, no reset, no test mode; no access at IE's address (FFFF), where the core's own register answers"
+title = "The core's harnesses drive its data bus as NetChip does for an address the chip does not decode: the memory's byte while the core's read is up, and the phase after; the oscillator stable, no reset, no test mode; at IE's address (FFFF) the core's own register answers, and the memory leaves the bus alone"
 evidence = "measured"
-how = "ceres-core's sm83::cosim runs sm83::check's M-cycle on a memory of random bytes: every opcode but HALT, STOP and the eleven that are not instructions, and the 256 after the CB prefix, from 400 random states each (199,583 runs, the 17 with an access at FFFF left out): the accesses and the registers are ceres's."
+how = "ceres-core's sm83::cosim runs sm83::check's M-cycle on a memory of random bytes: every opcode but HALT, STOP and the eleven that are not instructions, and the 256 after the CB prefix, from 400 random states each (199,583 runs, the 17 with an access at FFFF left out): the accesses and the registers are ceres's. The interrupts' co-simulation answers FFFF from IE on both sides (2,900 runs touch it)."
 rests_on = ["transcription-sm83"]
 
 [sm83-requests-at-e]
@@ -268,7 +268,7 @@ title = "IF's lines change only as phase E starts, and the CPU's accesses compar
 evidence = "open"
 how = "The core takes IF's lines through its request latch, open in phases A to D, so a change anywhere in A to D acts as one at the E edge before, and one in E to H as one at the next. Ceres finds IF as the E edge before its step's fetch has it (mapping-m-cycle-at-e). An access to IF (FF0F) is the IF block's (if-step-agrees), which the composition takes. Co-simulated in interrupts_agree_with_the_core."
 
-[sm83-not-halted]
-title = "The core is not halted or stopped while the CPU is compared"
+[sm83-not-stopped]
+title = "The core is not stopped while the CPU is compared"
 evidence = "open"
-how = "HALT's and STOP's steps, with the HALT bug and the wake-ups, are not compared yet."
+how = "STOP stops the oscillator: its step and its wake-up are the clock block's and the joypad's as much as the CPU's (ceres's leaves through P1 and resets the divider), and belong to their composition."

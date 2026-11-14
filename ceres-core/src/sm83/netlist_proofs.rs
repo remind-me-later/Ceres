@@ -6,10 +6,13 @@
 //! the next opcode, the core runs as many M-cycles, each M-cycle's access
 //! is the same (the memory gives any bytes, the same to both), and
 //! `boundary` holds again with the opcode read. IF's lines are anything in
-//! each M-cycle (changing as phase E starts): where ceres's next step would
-//! dispatch an interrupt, the core's fetch has begun its entry instead
-//! (`check::entry_begins`), and `netlist_sm83_interrupt_entry` takes the
-//! entry from there to the vector's opcode.
+//! each M-cycle (changing as phase E starts): where ceres's next step
+//! (`Sm83::begin`) dispatches an interrupt, the core's fetch has begun its
+//! entry instead (`check::entry_from`), and `netlist_sm83_interrupt_entry`
+//! takes the entry from there to the vector's opcode. `netlist_sm83_halt`
+//! takes HALT and the HALT bug, `netlist_sm83_halted` and
+//! `netlist_sm83_halted_from_halt` a halted M-cycle, and `netlist_sm83_wake`
+//! the wake-up. The memory keeps ceres's time, as its bus does.
 //!
 //! The core settles each phase in one pass there (`NetCore::settle_once`).
 //! The `netlist_sm83_settles_*` harnesses show that one is enough: from any
@@ -28,8 +31,8 @@
 
 use {
     super::{
-        Bus, Sm83,
-        check::{Access, Net, PHASES, boundary, entry_begins, inputs},
+        Begin, Bus, Sm83,
+        check::{Access, Net, PHASES, boundary, entry_from, in_halt, inputs, waking},
     },
     ceres_netlist::sm83::{
         CoreInputs, Flags, NetAlu, NetCore, NetCoreInterrupts, NetRegisters, NetSequencer,
@@ -42,8 +45,12 @@ const MCYCLES: usize = 7;
 /// IE's and IF's addresses.
 const IE_ADDR: u16 = 0xFFFF;
 const IF_ADDR: u16 = 0xFF0F;
-/// Phase E, where IF's lines change.
+/// Phase B, where the core's clocks take a `halt_n` changed in A, and
+/// phase E, where IF's lines change.
+const PHASE_B: u8 = 1;
 const PHASE_E: u8 = 4;
+/// HALT.
+const HALT: u8 = 0x76;
 
 /// The address of an access, if it has one.
 const fn address(access: Access) -> Option<u16> {
@@ -53,24 +60,31 @@ const fn address(access: Access) -> Option<u16> {
     }
 }
 
-/// A memory whose reads give any bytes, in order, and which remembers each
-/// M-cycle's access; with IE, and IF's lines, any in each M-cycle from its
-/// phase E on (and before the first), as the co-simulation has them: at an
-/// access's start (where an access leaves ceres's bus) ceres finds IF as
-/// the lines took it at the E edge before, and once into the M-cycle
-/// (`defer`), as they took it at its own; it acknowledges in the M-cycle
-/// under way.
+/// A memory whose reads give any bytes, one an M-cycle, and which
+/// remembers each M-cycle's access; with IE, and IF's lines, any in each
+/// M-cycle from its phase E on (and before the first). It keeps time as
+/// ceres's bus does (`cpu_bus`), as the co-simulation's does: an access
+/// flushes the time deferred, happens at its M-cycle's start and defers
+/// four dots; `tick` defers four more, `defer` flushes all but some,
+/// `advance` moves time on, `drop_deferred` forgets what is deferred, and a
+/// step's end flushes it. Each access is in the M-cycle its time falls in,
+/// and two in one must be the same (HALT's read, whose time ceres drops,
+/// and the fetch after it). At an M-cycle's start ceres finds IF as the
+/// lines took it at the E edge before, and once into it, as they took it
+/// at its own; it acknowledges in the M-cycle under way.
 struct AnyMemory {
     bytes: [u8; MCYCLES],
     trace: [Access; MCYCLES],
+    /// The M-cycles that had an access, or the last's index and one.
     count: usize,
     lines: [u8; MCYCLES],
     before: u8,
     ie: u8,
     acked: u8,
     acks: [u8; MCYCLES],
-    /// T-cycles into the last access's M-cycle (4: the next's start).
-    into: i32,
+    /// The time, in dots, and the dots deferred.
+    time: usize,
+    deferred: usize,
 }
 
 impl AnyMemory {
@@ -84,7 +98,8 @@ impl AnyMemory {
             ie: kani::any(),
             acked: 0,
             acks: [0; MCYCLES],
-            into: 4,
+            time: 0,
+            deferred: 0,
         }
     }
 
@@ -94,29 +109,61 @@ impl AnyMemory {
         m.map_or(self.before, |m| self.lines.get(m).copied().unwrap_or(0)) & 0x1F
     }
 
-    /// IF where the bus is (see the struct).
+    /// IF where the time is (see the struct).
     fn flags(&self) -> u8 {
-        let back = if self.into == 0 { 2 } else { 1 };
-        self.line(self.count.checked_sub(back)) & !self.acked
+        let now = self.time >> 2;
+        let at = if self.time & 3 == 0 {
+            now.checked_sub(1)
+        } else {
+            Some(now)
+        };
+        self.line(at) & !self.acked
     }
 
-    fn record(&mut self, access: Access) {
-        self.into = 0;
-        if let Some(slot) = self.trace.get_mut(self.count) {
-            *slot = access;
+    /// `access` in M-cycle `m`.
+    fn record(&mut self, m: usize, access: Access) {
+        if m < self.count {
+            let had = self.trace.get(m).copied().unwrap_or(Access::Idle);
+            assert!(had == access, "the accesses in one M-cycle are the same");
+        } else {
+            if let Some(slot) = self.trace.get_mut(m) {
+                *slot = access;
+            }
+            self.count = m + 1;
         }
-        self.count += 1;
+    }
+
+    /// An access starts: the time deferred flushed, four dots deferred; its
+    /// M-cycle.
+    const fn start(&mut self) -> usize {
+        self.time += self.deferred;
+        self.deferred = 4;
+        self.time >> 2
+    }
+
+    /// A step's end: the time deferred flushed.
+    const fn end_step(&mut self) {
+        self.time += self.deferred;
+        self.deferred = 0;
     }
 }
 
 impl Bus for AnyMemory {
     fn tick(&mut self) {
-        self.record(Access::Idle);
+        let m = (self.time + self.deferred) >> 2;
+        self.deferred += 4;
+        self.record(m, Access::Idle);
     }
 
     fn read(&mut self, addr: u16) -> u8 {
-        let value = self.bytes.get(self.count).copied().unwrap_or(0);
-        self.record(Access::Read(addr, value));
+        let m = self.start();
+        // IE answers at its address, as the core's own register does.
+        let value = if addr == IE_ADDR {
+            self.ie
+        } else {
+            self.bytes.get(m).copied().unwrap_or(0)
+        };
+        self.record(m, Access::Read(addr, value));
         value
     }
 
@@ -124,11 +171,13 @@ impl Bus for AnyMemory {
         if addr == IE_ADDR {
             self.ie = val;
         }
-        self.record(Access::Write(addr, val));
+        let m = self.start();
+        self.record(m, Access::Write(addr, val));
     }
 
     fn tick_oam_bug(&mut self, _: u16) {
-        self.record(Access::Idle);
+        let m = self.start();
+        self.record(m, Access::Idle);
     }
 
     fn peek(&self, _: u16) -> u8 {
@@ -137,10 +186,16 @@ impl Bus for AnyMemory {
 
     fn flush(&mut self) {}
     fn defer(&mut self, t_cycles: i32) {
-        self.into = 4 - t_cycles;
+        let keep = usize::try_from(t_cycles).unwrap_or(0);
+        self.time += self.deferred.saturating_sub(keep);
+        self.deferred = keep;
     }
-    fn drop_deferred(&mut self) {}
-    fn advance(&mut self, _: i32) {}
+    fn drop_deferred(&mut self) {
+        self.deferred = 0;
+    }
+    fn advance(&mut self, t_cycles: i32) {
+        self.time += usize::try_from(t_cycles).unwrap_or(0);
+    }
     fn is_cgb_hardware(&self) -> bool {
         false
     }
@@ -155,7 +210,7 @@ impl Bus for AnyMemory {
     }
     fn ack_interrupt(&mut self, bit: u8) {
         self.acked |= bit;
-        if let Some(slot) = self.count.checked_sub(1).and_then(|m| self.acks.get_mut(m)) {
+        if let Some(slot) = self.acks.get_mut(self.time >> 2) {
             *slot |= bit;
         }
     }
@@ -338,11 +393,31 @@ fn core_between_any(cpu: &Sm83, op: u8) -> NetCore {
     core
 }
 
-/// Any core where an interrupt's entry begins.
+/// Any core where an interrupt's entry begins, ceres about to dispatch
+/// (PC one on but after the HALT bug).
 fn core_entering_any(cpu: &Sm83) -> NetCore {
     let mut core = core_after_fetch_any(cpu);
+    let pc = cpu.pc.wrapping_add(u16::from(!cpu.halt_bug));
+    let [pcl, pch] = pc.to_le_bytes();
+    (core.regs.pch.master, core.regs.pcl.master) = (pch, pcl);
     core.seq.entering = true;
     core.seq.ime = true;
+    core
+}
+
+/// Any core halting (`core_after_fetch_any`, HALT's step sampled) or
+/// halted (its halt set and its clocks stopped), as `check::in_halt` pins
+/// them; the rest anything.
+fn core_in_halt_any(cpu: &Sm83, halted: bool) -> NetCore {
+    let mut core = core_after_fetch_any(cpu);
+    core.seq.entering = false;
+    core.seq.halt = halted;
+    core.sampled.halt_step = !halted;
+    core.sampled.int_pending = false;
+    core.ints.pending = 0;
+    core.seq.ime = core.seq.ime_state;
+    (core.exec_phase, core.fetch) = (!halted, !halted);
+    core.sampled.next_mcyc = if halted { 7 } else { 0 };
     core
 }
 
@@ -352,10 +427,26 @@ const fn nmi_at_rest(core: &NetCore) -> bool {
     s.no_nmi & s.no_nmi_1 & s.nmi_low_1 & s.nmi_low_2 & !s.nmi_req & !s.nmi_entering & !s.nmi_entry
 }
 
+/// What the one-pass lemmas take of the core besides: the NMI at rest;
+/// not stopped (`sm83-not-stopped`: no STOP runs); and HALT's step sampled
+/// only with no CB prefix pending. That one holds where it matters: the
+/// step is sampled in HALT's M-cycle only, which ends where the relations
+/// (`check::in_halt`, `check::boundary`) pin the prefix clear. (The halt
+/// it sets at the next A edge clears the prefix: a second pass there.)
+const fn at_rest(core: &NetCore) -> bool {
+    let s = &core.seq;
+    nmi_at_rest(core)
+        & !s.stop
+        & !s.stop_delayed
+        & !core.sampled.stop
+        & !(core.sampled.halt_step & s.cb_next)
+}
+
 /// The core is settled in `phase` with `d` on the chip's data bus, its
-/// keeper holding `kept` and `int` on IF's lines: a pass changes nothing.
-fn settled_in(core: &NetCore, phase: u8, d: u8, kept: u8, int: u8) -> bool {
-    let i = inputs(phase, d, int, true);
+/// keeper holding `kept`, `int` on IF's lines and its clocks running if
+/// `clk_ena`: a pass changes nothing.
+fn settled_in(core: &NetCore, phase: u8, d: u8, kept: u8, int: u8, clk_ena: bool) -> bool {
+    let i = inputs(phase, d, int, clk_ena);
     let mut again = *core;
     _ = again.settle_once(&i, kept);
     (core.clk == i.clk) & (core.exec_phase == i.exec_phase) & again.settled(core)
@@ -373,17 +464,32 @@ fn one_pass_settles(mut core: NetCore, i: &CoreInputs, kept: u8) {
 }
 
 /// From any core settled in the phase before `phase` (any bus, any keeper,
-/// any lines from IF), the NMI's latches at rest: `phase`'s edges, then one
-/// pass with any bus, and any lines from IF if `phase` is E (where they
-/// change), else the same.
+/// any lines from IF, its clocks running or not), the NMI's latches at
+/// rest: `phase`'s edges, then one pass with any bus, any lines from IF if
+/// `phase` is E (where they change), else the same, and its clocks running
+/// or not if `phase` is B, else as they were: the core's `halt_n` changes
+/// only in phase A's settle (its latch's set and reset change at the A
+/// edge), and the chip's clocks take it from the phase after.
 fn settles_after_edges(phase: u8) {
     let core = any_core();
     let before = if phase == 0 { PHASES - 1 } else { phase - 1 };
-    let int: u8 = kani::any();
-    kani::assume(settled_in(&core, before, kani::any(), kani::any(), int));
-    kani::assume(nmi_at_rest(&core));
+    let (int, clk_ena): (u8, bool) = kani::any();
+    kani::assume(settled_in(
+        &core,
+        before,
+        kani::any(),
+        kani::any(),
+        int,
+        clk_ena,
+    ));
+    kani::assume(at_rest(&core));
     let int = if phase == PHASE_E { kani::any() } else { int };
-    let i = inputs(phase, kani::any(), int, true);
+    let clk_ena = if phase == PHASE_B {
+        kani::any()
+    } else {
+        clk_ena
+    };
+    let i = inputs(phase, kani::any(), int, clk_ena);
     let kept = core.db;
     let mut core = core;
     core.edges(&i);
@@ -391,18 +497,19 @@ fn settles_after_edges(phase: u8) {
 }
 
 /// From any core settled in the phase before `phase` with a bus and a
-/// keeper and lines from IF, the NMI's latches at rest, where `phase`'s
-/// clocks are that phase's (`check::repeats_clocks`): `phase`'s edges (none) and a pass with
+/// keeper, lines from IF and clocks running or not, the NMI's latches at
+/// rest, where `phase`'s clocks are that phase's (`check::repeats_clocks`,
+/// and the clocks as they ran): `phase`'s edges (none) and a pass with
 /// the same bus, the keeper holding the core's bus, change nothing, and it
 /// gives out what the phase before did.
 fn settles_repeating(phase: u8) {
     let core = any_core();
-    let (d, kept, int): (u8, u8, u8) = kani::any();
-    kani::assume(settled_in(&core, phase - 1, d, kept, int));
-    kani::assume(nmi_at_rest(&core));
+    let (d, kept, int, clk_ena): (u8, u8, u8, bool) = kani::any();
+    kani::assume(settled_in(&core, phase - 1, d, kept, int, clk_ena));
+    kani::assume(at_rest(&core));
     let mut before = core;
-    let out_before = before.settle_once(&inputs(phase - 1, d, int, true), kept);
-    let i = inputs(phase, d, int, true);
+    let out_before = before.settle_once(&inputs(phase - 1, d, int, clk_ena), kept);
+    let i = inputs(phase, d, int, clk_ena);
     let mut again = core;
     again.edges(&i);
     let out = again.settle_once(&i, core.db);
@@ -410,15 +517,41 @@ fn settles_repeating(phase: u8) {
     assert!(out == out_before, "it gives out something else");
 }
 
-/// From any core settled in `phase` with a bus, a keeper and lines from
-/// IF, the NMI's latches at rest: one pass with another bus (the memory's),
-/// the keeper and the lines the same.
+/// From any core settled in `phase` with a bus, a keeper, lines from IF and
+/// clocks running or not, the NMI's latches at rest: one pass with another
+/// bus (the memory's), the rest the same.
 fn settles_driven(phase: u8) {
     let core = any_core();
-    let (kept, int): (u8, u8) = kani::any();
-    kani::assume(settled_in(&core, phase, kani::any(), kept, int));
-    kani::assume(nmi_at_rest(&core));
-    one_pass_settles(core, &inputs(phase, kani::any(), int, true), kept);
+    let (kept, int, clk_ena): (u8, u8, bool) = kani::any();
+    kani::assume(settled_in(&core, phase, kani::any(), kept, int, clk_ena));
+    kani::assume(at_rest(&core));
+    one_pass_settles(core, &inputs(phase, kani::any(), int, clk_ena), kept);
+}
+
+/// The core's M-cycles `mcycles` against ceres's accesses in `memory`,
+/// with IF's lines as `memory` has them, less what the core acknowledged:
+/// each the same, and the same acknowledge. IE's register drives the bus at
+/// its address, not the memory; an access at IF's is the IF block's.
+fn core_follows(net: &mut Net, memory: &AnyMemory, mcycles: core::ops::Range<usize>) {
+    let mut acked = 0;
+    for m in mcycles {
+        let byte = memory.bytes.get(m).copied().unwrap_or(0);
+        let ceres = memory.trace.get(m).copied().unwrap_or(Access::Idle);
+        kani::assume(address(ceres) != Some(IF_ADDR));
+        net.int = memory.line(Some(m)) & !acked;
+        // Settled in one pass a phase, unconfirmed, and the phases that
+        // repeat the clocks of the one before passed over: the bus must
+        // repeat too.
+        let access = net.mcycle(|addr| if addr == IE_ADDR { 0xFF } else { byte });
+        assert!(access.is_some(), "the bus repeats where the clocks do");
+        let access = access.unwrap_or(Access::Idle);
+        assert!(address(access) == address(ceres), "the same address");
+        assert!(access == ceres, "the same access");
+        let acks = memory.acks.get(m).copied().unwrap_or(0);
+        assert!(net.acks == acks, "the same acknowledge");
+        acked |= net.acks;
+        net.int_before &= !net.acks;
+    }
 }
 
 /// An instruction of the class `in_class` (its opcode, and the byte after
@@ -442,6 +575,7 @@ fn instruction_agrees(in_class: impl Fn(u8, u8) -> bool, counts: &[usize], mcycl
         int_before: memory.line(None),
         acks: 0,
         halt_n: true,
+        may_halt: false,
     };
     kani::assume(boundary(&net.core, &cpu, op));
     memory.ie = net.core.ints.ie;
@@ -452,53 +586,38 @@ fn instruction_agrees(in_class: impl Fn(u8, u8) -> bool, counts: &[usize], mcycl
         kani::any(),
         kani::any(),
         memory.line(None),
+        true,
     ));
 
     // As `run` does: an EI just before counts from here on (no interrupt is
     // taken here: the core's fetch did not take one).
     cpu.take_ime_toggle();
     cpu.exec(&mut memory, op);
-    let next = memory.read(cpu.pc);
-    cpu.pc = cpu.pc.wrapping_add(1);
+    memory.end_step();
+    // Ceres's next step up to its instruction: the fetch, or the dispatch's
+    // first read, at PC; the core's fetch took the request, or fetched.
+    let begun = cpu.begin(&mut memory);
+    if begun == Begin::Dispatch {
+        _ = memory.read(cpu.pc);
+    }
 
     assert!(
         counts.contains(&memory.count),
         "ceres takes one of the class's counts"
     );
     kani::assume(memory.count == mcycles);
-    for m in 0..mcycles {
-        let (byte, ceres) = (memory.bytes[m], memory.trace[m]);
-        // IE's address is the core's own register's, not the memory's, and
-        // IF's is the IF block's.
-        kani::assume(address(ceres) != Some(IE_ADDR));
-        kani::assume(address(ceres) != Some(IF_ADDR));
-        net.int = memory.line(Some(m));
-        // Settled in one pass a phase, unconfirmed, and the phases that
-        // repeat the clocks of the one before passed over: the bus must
-        // repeat too.
-        let access = net.mcycle(|_| byte);
-        assert!(access.is_some(), "the bus repeats where the clocks do");
-        let access = access.unwrap_or(Access::Idle);
-        assert!(address(access) == address(ceres), "the same address");
-        assert!(access == ceres, "the same access");
-        assert!(net.acks == 0, "no acknowledge in an instruction");
-    }
-    // Ceres's next step dispatches if IME was set before its EI's toggle,
-    // and IF and IE share a request as the fetch's E edge finds them. Its
-    // first M-cycle is the fetch's read, and the core's fetch took the
-    // request, or fetched.
-    let found = memory.line(mcycles.checked_sub(2));
-    if cpu.ime & (found & memory.ie != 0) {
-        assert!(entry_begins(&net.core, &cpu), "an interrupt's entry begins");
-    } else {
-        assert!(
+    core_follows(&mut net, &memory, 0..mcycles);
+    match begun {
+        Begin::Fetched(next) => assert!(
             boundary(&net.core, &cpu, next),
             "the next instruction begins"
-        );
+        ),
+        Begin::Dispatch => assert!(entry_from(&net.core, &cpu), "an interrupt's entry begins"),
+        Begin::Halted => panic!("not halted"),
     }
 }
 
-/// An interrupt's entry, from where it begins (`check::entry_begins`): ceres's
+/// An interrupt's entry, from where it begins (`check::entry_from`): ceres's
 /// dispatch after its first read, and the fetch of the vector's opcode,
 /// against the core's next five M-cycles, with any lines from IF and the
 /// pushes anywhere but IF (they may write IE, which can take the request
@@ -507,13 +626,17 @@ fn instruction_agrees(in_class: impl Fn(u8, u8) -> bool, counts: &[usize], mcycl
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
 fn netlist_sm83_interrupt_entry() {
     let mut memory = AnyMemory::new();
     let mut cpu = any_cpu();
+    // Where ceres's step chose to dispatch: EI's toggle taken, IME set, PC
+    // where the dispatch reads, maybe after the HALT bug.
+    cpu.halt_bug = kani::any();
+    kani::assume(!cpu.ime_toggle);
     let mut net = Net {
         core: core_entering_any(&cpu),
         low_before: kani::any(),
@@ -522,8 +645,9 @@ fn netlist_sm83_interrupt_entry() {
         int_before: memory.line(Some(0)),
         acks: 0,
         halt_n: true,
+        may_halt: false,
     };
-    kani::assume(entry_begins(&net.core, &cpu));
+    kani::assume(entry_from(&net.core, &cpu));
     memory.ie = net.core.ints.ie;
     kani::assume(settled_in(
         &net.core,
@@ -531,37 +655,226 @@ fn netlist_sm83_interrupt_entry() {
         kani::any(),
         kani::any(),
         memory.line(Some(0)),
+        true,
     ));
 
-    // Ceres's step: PC where the fetch read it, EI's toggle taken, IME set
-    // before it; then the dispatch, whose first read was that fetch, and
-    // the next step's fetch, at the vector.
-    cpu.pc = cpu.pc.wrapping_sub(1);
-    kani::assume(cpu.take_ime_toggle());
+    // The dispatch, whose first read was the fetch's M-cycle, and the next
+    // step up to its instruction: the fetch at the vector.
     cpu.dispatch_interrupt(&mut memory);
-    let next = memory.read(cpu.pc);
-    cpu.pc = cpu.pc.wrapping_add(1);
+    memory.end_step();
+    let begun = cpu.begin(&mut memory);
     assert!(memory.count == 6, "the dispatch takes five M-cycles");
-
-    let mut acked = 0;
-    for m in 1..6 {
-        let (byte, ceres) = (memory.bytes[m], memory.trace[m]);
-        kani::assume(address(ceres) != Some(IF_ADDR));
-        net.int = memory.line(Some(m)) & !acked;
-        // IE's register drives the bus at its address, not the memory.
-        let access = net.mcycle(|addr| if addr == IE_ADDR { 0xFF } else { byte });
-        assert!(access.is_some(), "the bus repeats where the clocks do");
-        let access = access.unwrap_or(Access::Idle);
-        assert!(address(access) == address(ceres), "the same address");
-        assert!(access == ceres, "the same access");
-        assert!(net.acks == memory.acks[m], "the same acknowledge");
-        acked |= net.acks;
-        net.int_before &= !net.acks;
-    }
+    core_follows(&mut net, &memory, 1..6);
     assert!(
-        boundary(&net.core, &cpu, next),
+        matches!(begun, Begin::Fetched(next) if boundary(&net.core, &cpu, next)),
         "the vector's opcode begins"
     );
+}
+
+/// HALT, from where it was fetched (`check::boundary`): ceres executes it
+/// (its read of the next opcode, whose time it drops) and the next step up
+/// to its instruction, in the same M-cycle; the core one M-cycle. Both halt
+/// (`check::in_halt`), or, with a request pending (the HALT bug), the next
+/// step's fetch or dispatch shares HALT's M-cycle, PC not moved past it.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-requests-at-e
+// @assumes sm83-not-stopped
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_halt() {
+    let mut memory = AnyMemory::new();
+    let mut cpu = any_cpu();
+    let mut net = Net {
+        core: core_between_any(&cpu, HALT),
+        low_before: kani::any(),
+        confirm: false,
+        int: 0,
+        int_before: memory.line(None),
+        acks: 0,
+        halt_n: true,
+        may_halt: false,
+    };
+    kani::assume(boundary(&net.core, &cpu, HALT));
+    memory.ie = net.core.ints.ie;
+    kani::assume(settled_in(
+        &net.core,
+        PHASES - 1,
+        kani::any(),
+        kani::any(),
+        memory.line(None),
+        true,
+    ));
+
+    cpu.take_ime_toggle();
+    cpu.exec(&mut memory, HALT);
+    memory.end_step();
+    let begun = cpu.begin(&mut memory);
+    if begun == Begin::Dispatch {
+        _ = memory.read(cpu.pc);
+    }
+    assert!(memory.count == 1, "HALT's M-cycle");
+    core_follows(&mut net, &memory, 0..1);
+    match begun {
+        Begin::Halted => {
+            assert!(in_halt(&net.core, &cpu), "both halt");
+            assert!(
+                halted_after(&cpu),
+                "ceres halted, past its first halted step"
+            );
+        }
+        Begin::Fetched(next) => assert!(boundary(&net.core, &cpu, next), "the HALT bug's fetch"),
+        Begin::Dispatch => assert!(entry_from(&net.core, &cpu), "the HALT bug's dispatch"),
+    }
+}
+
+/// Ceres halted as the halted harnesses take it: past its first halted
+/// step (which shares HALT's M-cycle), EI's toggle taken, no HALT bug.
+const fn halted_after(cpu: &Sm83) -> bool {
+    cpu.is_halted & !cpu.just_halted & !cpu.ime_toggle & !cpu.halt_bug
+}
+
+/// A halted M-cycle, from both halted (`check::in_halt`; ceres past its
+/// first halted step, which shares HALT's M-cycle), the core halting
+/// (`halted` clear: HALT's M-cycle just ended) or halted: ceres's halted
+/// step samples the lines as its time passes, the core runs an M-cycle.
+/// Without a request both are still halted; with one, ceres has sampled it
+/// and the core latched it (`check::waking`).
+fn halted_mcycle(halted: bool) {
+    let mut memory = AnyMemory::new();
+    let mut cpu = any_cpu();
+    // Halted: EI's toggle was taken by the step that fetched HALT.
+    cpu.is_halted = true;
+    cpu.ime_toggle = false;
+    let mut net = Net {
+        core: core_in_halt_any(&cpu, halted),
+        low_before: kani::any(),
+        confirm: false,
+        int: 0,
+        int_before: memory.line(None),
+        acks: 0,
+        halt_n: !halted,
+        may_halt: true,
+    };
+    kani::assume(in_halt(&net.core, &cpu));
+    memory.ie = net.core.ints.ie;
+    kani::assume(settled_in(
+        &net.core,
+        PHASES - 1,
+        kani::any(),
+        kani::any(),
+        memory.line(None),
+        !halted,
+    ));
+
+    let requested = cpu.sample(&mut memory);
+    core_follows(&mut net, &memory, 0..1);
+    if requested {
+        assert!(waking(&net.core, &cpu), "a request latched: both wake");
+        assert!(halted_after(&cpu), "ceres halted until its choice");
+        assert!(
+            net.core.ints.pending == memory.line(Some(0)) & memory.ie,
+            "the latch holds the lines from the M-cycle's E edge, and IE"
+        );
+    } else {
+        assert!(
+            cpu.choose(&mut memory, false) == Begin::Halted,
+            "no request: ceres still halted"
+        );
+        assert!(in_halt(&net.core, &cpu), "both still halted");
+        assert!(
+            halted_after(&cpu),
+            "ceres halted, past its first halted step"
+        );
+    }
+}
+
+/// The halted M-cycle after HALT's, the core halting.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-requests-at-e
+// @assumes sm83-not-stopped
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_halted_from_halt() {
+    halted_mcycle(false);
+}
+
+/// A halted M-cycle, the core halted.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-requests-at-e
+// @assumes sm83-not-stopped
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_halted() {
+    halted_mcycle(true);
+}
+
+/// The wake-up, from where a halted M-cycle ended with a request
+/// (`check::waking`): ceres's step goes on from its sample (EI's toggle,
+/// the wake-up, the dispatch or the fetch), the core runs an M-cycle, its
+/// halt reset. The next instruction begins, or an interrupt's entry.
+// @assumes transcription-sm83
+// @assumes sm83-memory-as-the-chip-drives-it
+// @assumes sm83-requests-at-e
+// @assumes sm83-not-stopped
+// @assumes sm83-settles-in-one-pass
+#[kani::proof]
+#[kani::unwind(9)]
+fn netlist_sm83_wake() {
+    let mut memory = AnyMemory::new();
+    let mut cpu = any_cpu();
+    // Halted: EI's toggle was taken by the step that fetched HALT.
+    cpu.is_halted = true;
+    cpu.ime_toggle = false;
+    let mut core = core_in_halt_any(&cpu, true);
+    core.ints.pending = kani::any();
+    core.sampled.int_pending = true;
+    let mut net = Net {
+        core,
+        low_before: kani::any(),
+        confirm: false,
+        int: 0,
+        int_before: memory.line(None),
+        acks: 0,
+        halt_n: false,
+        may_halt: true,
+    };
+    kani::assume(waking(&net.core, &cpu));
+    memory.ie = net.core.ints.ie;
+    // The latch, open the whole halted M-cycle, took the lines as they were
+    // from its E edge on, which ceres's sample found a request in.
+    kani::assume(net.core.ints.pending == memory.line(None) & memory.ie);
+    kani::assume(settled_in(
+        &net.core,
+        PHASES - 1,
+        kani::any(),
+        kani::any(),
+        memory.line(None),
+        false,
+    ));
+
+    let begun = cpu.choose(&mut memory, true);
+    if begun == Begin::Dispatch {
+        _ = memory.read(cpu.pc);
+    }
+    assert!(memory.count == 1, "the wake-up's M-cycle");
+    core_follows(&mut net, &memory, 0..1);
+    match begun {
+        Begin::Fetched(next) => assert!(
+            boundary(&net.core, &cpu, next),
+            "woken, the next instruction begins"
+        ),
+        Begin::Dispatch => assert!(
+            entry_from(&net.core, &cpu),
+            "woken, an interrupt's entry begins"
+        ),
+        Begin::Halted => panic!("a request wakes ceres"),
+    }
 }
 
 /// The 8-bit arithmetic and logic on A with a register: ADD, ADC, SUB,
@@ -569,7 +882,7 @@ fn netlist_sm83_interrupt_entry() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -582,7 +895,7 @@ fn netlist_sm83_alu_a_r() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -594,7 +907,7 @@ fn netlist_sm83_ld_r_d8() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -610,7 +923,7 @@ fn netlist_sm83_ld_r_r() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -622,7 +935,7 @@ fn netlist_sm83_inc_dec_r() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -634,7 +947,7 @@ fn netlist_sm83_a_and_flags() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -646,7 +959,7 @@ fn netlist_sm83_nop_jp_hl_di_ei() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -658,7 +971,7 @@ fn netlist_sm83_alu_a_d8() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -670,7 +983,7 @@ fn netlist_sm83_ld_r_hl() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -682,7 +995,7 @@ fn netlist_sm83_ld_hl_r() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -694,7 +1007,7 @@ fn netlist_sm83_alu_a_hl() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -706,7 +1019,7 @@ fn netlist_sm83_inc_dec_rr() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -718,7 +1031,7 @@ fn netlist_sm83_add_hl_rr() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -730,7 +1043,7 @@ fn netlist_sm83_ld_indirect_a() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -742,7 +1055,7 @@ fn netlist_sm83_ldh_c() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -754,7 +1067,7 @@ fn netlist_sm83_ld_sp_hl() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -766,7 +1079,7 @@ fn netlist_sm83_ld_rr_d16() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -778,7 +1091,7 @@ fn netlist_sm83_hl_mem() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -790,7 +1103,7 @@ fn netlist_sm83_pop() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -802,7 +1115,7 @@ fn netlist_sm83_ldh_a8() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -814,7 +1127,7 @@ fn netlist_sm83_ld_hl_sp_e() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -826,7 +1139,7 @@ fn netlist_sm83_jr_2() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -838,7 +1151,7 @@ fn netlist_sm83_jr_3() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -850,7 +1163,7 @@ fn netlist_sm83_ret_cc_2() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -862,7 +1175,7 @@ fn netlist_sm83_jp_3() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -874,7 +1187,7 @@ fn netlist_sm83_call_3() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -886,7 +1199,7 @@ fn netlist_sm83_cb_r() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -898,7 +1211,7 @@ fn netlist_sm83_cb_bit_hl() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -910,7 +1223,7 @@ fn netlist_sm83_jp_4() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -922,7 +1235,7 @@ fn netlist_sm83_push() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -934,7 +1247,7 @@ fn netlist_sm83_rst() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -946,7 +1259,7 @@ fn netlist_sm83_ret_reti() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -958,7 +1271,7 @@ fn netlist_sm83_ld_a16_a() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -970,7 +1283,7 @@ fn netlist_sm83_add_sp_e() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -986,7 +1299,7 @@ fn netlist_sm83_cb_hl() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -998,7 +1311,7 @@ fn netlist_sm83_ld_a16_sp() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]
@@ -1010,7 +1323,7 @@ fn netlist_sm83_ret_cc_5() {
 // @assumes transcription-sm83
 // @assumes sm83-memory-as-the-chip-drives-it
 // @assumes sm83-requests-at-e
-// @assumes sm83-not-halted
+// @assumes sm83-not-stopped
 // @assumes sm83-settles-in-one-pass
 #[kani::proof]
 #[kani::unwind(9)]

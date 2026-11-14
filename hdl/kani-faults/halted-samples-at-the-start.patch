@@ -1,0 +1,22 @@
+# Ceres's halted DMG steps sample the interrupt lines at their start, not
+# two dots in: a request rising there wakes it an M-cycle late.
+# harness: netlist_sm83_halted
+--- a/ceres-core/src/sm83/mod.rs
++++ b/ceres-core/src/sm83/mod.rs
+@@ -288,14 +288,12 @@
+ 
+         // While halted, DMG samples the interrupt lines two dots into each
+         // 4-dot step; CGB (and the first step after HALT) samples at the start.
+-        if self.is_halted && !cgb && !self.just_halted {
+-            bus.advance(2);
+-        }
++
+ 
+         let interrupt_pending = bus.interrupts_pending();
+ 
+         if self.is_halted {
+-            bus.advance(if cgb || self.just_halted { 4 } else { 2 });
++            bus.advance(4);
+             if bus.take_unhalt() {
+                 self.is_halted = false;
+                 bus.set_halted(false);

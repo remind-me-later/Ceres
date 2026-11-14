@@ -1057,6 +1057,59 @@ next instruction and 3,484 to a dispatch, and none differ. Breaking
 ceres's halted steps to sample IF at their start makes 6,028 runs differ;
 leaving out the HALT bug, 990.
 
+Kani then takes HALT from every state, in four harnesses that follow
+ceres's own code. Ceres's step is split, without a change in what it does
+(the hardware tests and both co-simulations agree): `Sm83::begin` is the
+step up to its instruction, which `sample` (the halted step's time and its
+sample of IF) and `choose` (EI's toggle, the wake-up, the dispatch or the
+fetch) make up. The instruction and entry harnesses now end through
+`begin` too, rather than through a copy of its decision, and the
+harnesses' memory keeps ceres's time as the co-simulation's does.
+
+- `netlist_sm83_halt`: from HALT fetched, ceres executes it and the next
+  step up to its instruction, which share HALT's M-cycle; the core runs
+  one. Both halt (`check::in_halt`), or with a request pending (the HALT
+  bug) the next instruction or an entry begins, PC not moved on.
+- `netlist_sm83_halted_from_halt` and `netlist_sm83_halted`: a halted
+  M-cycle, from the core halting or halted. With no request both stay
+  halted; with one, ceres has sampled it and the core latched it
+  (`check::waking`).
+- `netlist_sm83_wake`: from there, ceres's choice and the core's next
+  M-cycle: the next instruction or an entry begins.
+
+As one harness, the halted step with its wake-up was killed at the 9 GB
+cap twice: the core's clocks restart inside the M-cycle on a condition
+the solver must carry. Split at ceres's sample, each piece takes 20 to 35
+seconds and at most 3 GB. Three facts came out of the counterexamples,
+each an unreachable state the first relations let in. A halted core holds
+no request: with its clocks stopped, `data_phase` stays low and its
+request latch is open the whole M-cycle, so it ends holding what ceres's
+halted step sampled. The shown IME is its latch's while halted (it catches
+up as HALT's M-cycle ends, and nothing changes it after). And ceres's EI
+toggle is clear while halted, as the step that fetched HALT took it. Each
+is pinned in the relation, and the harness before proves it. Two planted
+faults go with them: HALT without its bug, and halted steps that sample IF
+at their start.
+
+Two things the halted harnesses brought in cost the others. With the
+clocks taken from the core's `halt_n`, the clocks of a phase are something
+Kani computes rather than a constant, and the phases passed over (C, D, F,
+H) stopped folding: `CALL` went past the 9 GB cap. So a harness says
+whether the core may halt (`Net::may_halt`); where it may not, each phase
+asserts that `halt_n` stays high, and the clocks stay constant. `CALL` takes
+7.4 GB that way (141 s). And the one-pass lemmas now take the clocks too, changing
+only between A and B (the halt latch changes in A's pass), with the core
+not stopped and HALT's step never sampled with a CB prefix pending: the
+halt it sets clears the prefix, a second pass, but the step is sampled only
+in HALT's M-cycle, which ends where the relations pin the prefix clear.
+
+STOP is what the CPU's comparison leaves out (`sm83-not-stopped`): it
+stops the oscillator, so its step and wake-up belong to the clock block's
+and the joypad's composition as much as to the CPU.
+
+All 111 harnesses pass, and the ten planted faults are caught; the CPU's
+62 harnesses take 50 minutes, the four HALT ones 17 to 32 seconds each.
+
 The second spike is a CPU access to VRAM. `ceres-netlist`'s
 `tests/vram_gate.rs` runs the 43 ROMs that read and write VRAM around
 mode 3 (Gambatte's `vram_m3` for the DMG, gbmicrotest's `vram` ROMs) on
