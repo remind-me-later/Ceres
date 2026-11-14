@@ -380,8 +380,10 @@ pass on the model (`run-gambatte.sh`, 2026-10-29), as on ceres, so the
 differences below are in what the ROMs do not check:
 
 - In their accesses (1): `oam_access/postread_scx3_2` (OAM read as mode 3
-  ends: 00 on ceres, `FF` on the model; with `xout1` in its name, Gambatte's
-  own runner, which looks for `dmg08_out`, does not run it on the DMG).
+  ends: 00 on ceres, `FF` on the model, the byte render's address left in
+  OAM's first latches, `oam-read-as-mode-3-ends`; with `xout1` in its name,
+  Gambatte's own runner, which looks for `dmg08_out`, does not run it on the
+  DMG).
 - In MODE, OAMB and VRAMB (2): `oamdma/late_sp00x_2` and `late_sp39x_2`.
 - In MODE only (4): `oamdma_late_halt_stat_1`,
   `oamdmasrc80_halt_lycirq_read8000`, `speedchange/key1_set` and
@@ -1167,6 +1169,37 @@ agree: ceres's lock and the netlist's window part only at half dots no
 access falls on (a write lock 1 early, a read lock 5 early and 1 late). So
 ceres's VRAM gate is the netlist's, given the mappings and these lock
 positions, which the PPU's state machine sets and the trace measured.
+
+OAM's gate goes the same way. `ceres-netlist`'s `tests/oam_gate.rs` runs
+93 ROMs (Gambatte's DMG `oam_access`, gbmicrotest's `oam` ROMs but the
+DMA ones, Mooneye's `mem_oam` and `intr_2_oam_ok_timing`, AGE's DMG
+`oam-read` and `oam-write`) and tallies each CPU access to FE00-FE9F by
+what held OAM as each phase ended: the scan, mode 3, an OAM DMA, or
+nothing. A write lands if OAM is free as E, F or G ends, as for VRAM, and
+in the nanosecond between the scan and mode 3 (`oam-write-as-mode-3-starts`:
+the 6 writes in an M-cycle where the scan ends and mode 3 starts all land).
+A read takes FF unless OAM is free as G and H end, where OAM drives the
+CPU's bus; it then takes OAM's first latches, which its read strobe opens
+up to F. So where mode 3 still held OAM as F ended, the latches hold the
+byte at render's address, the sprite store's index lines, not the CPU's
+(`oam-read-as-mode-3-ends`): two reads, one of them the `FF` of
+`postread_scx3_2`.
+
+`ceres-test-runner`'s `tests/oam_gate.rs` puts the holders on ceres's
+clock: the scan from h = 906 of the line before (the scan's line start)
+to 154, none in line 0 after the LCD is turned on, and mode 3 as for VRAM.
+Ceres's 2,820 accesses fall in the netlist tally's patterns, and all
+follow the rule but those two reads, where ceres takes OAM's byte. On the
+148,832 visible lines followed by a scan, ceres's write lock is on from
+h = 905 of the line before to 145 (scan index 37), off up to 153 (the gap
+before mode 3), on to 2 half dots before mode 3's end. Its read lock (a
+DMG read meets the write lock too) is on from 903 of the line before to the
+same end. On the 177 first lines both are on from 155. At those positions
+the test holds the locks to the rule for every end of mode 3 and every
+access position. A write lock kept on through the gap fails it at the 6
+writes and at 340 positions. What the CPU's address on FExx does to the
+scan during mode 2 is the OAM corruption bug, which dmg-sim's plain SRAM
+cannot show: `cpu-does-not-address-oam` now rests on `oam-corruption-bug`.
 
 ## The model's races
 

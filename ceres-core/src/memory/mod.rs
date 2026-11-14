@@ -203,7 +203,12 @@ impl<A: AudioCallback> Gb<A> {
     pub fn cpu_read_mem(&mut self, addr: u16) -> u8 {
         if (OAM_START..IO_START).contains(&addr) {
             let dma_blocked = self.dma.blocks_oam();
-            return self.ppu.cpu_read_oam_area(addr, dma_blocked);
+            let value = self.ppu.cpu_read_oam_area(addr, dma_blocked);
+            #[cfg(feature = "debug")]
+            if addr < UNUSABLE_START {
+                self.ppu.trace_oam_read(addr, value, dma_blocked);
+            }
+            return value;
         }
         let value = self
             .dma_read_redirect(addr)
@@ -368,6 +373,10 @@ impl<A: AudioCallback> Gb<A> {
             0xD000..=0xDFFF | 0xF000..=0xFDFF => self.wram.write_wram_hi(addr, val),
             0xFE00..=0xFEFF => {
                 let dma_blocked = self.dma.blocks_oam();
+                #[cfg(feature = "debug")]
+                if addr < UNUSABLE_START {
+                    self.ppu.trace_oam_write(addr, val, dma_blocked);
+                }
                 self.ppu.cpu_write_oam_area(addr, val, dma_blocked);
             }
             0xFF00..=0xFFFF => self.write_io((addr & 0xFF) as u8, val),

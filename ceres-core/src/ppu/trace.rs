@@ -2,11 +2,11 @@
 //! requests, its STAT and LYC writes and the values STAT and LY reads
 //! returned, each with where the display and the timing unit were; and what
 //! the pixel pipeline did: the pixels it pushed and the tile fetches it
-//! began; and the CPU's accesses to VRAM, with where the locks on them
-//! changed.
+//! began; and the CPU's accesses to VRAM and OAM, with where the locks on
+//! them changed.
 
 use {
-    super::{LCDC_ON_B, PpuCore},
+    super::{LCDC_ON_B, Ppu, PpuCore},
     crate::interrupts::Interrupts,
     alloc::vec::Vec,
     core::mem,
@@ -37,6 +37,25 @@ pub enum PpuEventKind {
     /// The locks on the CPU's VRAM reads and writes became these (as the
     /// half dot ran).
     VramLocks { read: bool, write: bool },
+    /// The CPU read OAM at `addr` (below FEA0) and got `value`; ceres's
+    /// locks held it off, an OAM DMA did.
+    OamRead {
+        addr: u16,
+        value: u8,
+        locked: bool,
+        dma: bool,
+    },
+    /// The CPU wrote `value` to OAM at `addr` (below FEA0); ceres's lock
+    /// held it off, an OAM DMA did.
+    OamWrite {
+        addr: u16,
+        value: u8,
+        locked: bool,
+        dma: bool,
+    },
+    /// The locks on the CPU's OAM reads and writes became these (as the half
+    /// dot ran).
+    OamLocks { read: bool, write: bool },
     /// Mode 3 ended for the timing unit: its HBlank gate rises in the next
     /// half dot.
     Mode3End,
@@ -69,8 +88,9 @@ pub(super) struct Trace {
     unit: u64,
     /// `Interrupts::lcd_requests` when last looked at.
     lcd_requests: u32,
-    /// The VRAM locks when last looked at.
+    /// The VRAM and OAM locks when last looked at.
     vram_locks: (bool, bool),
+    oam_locks: (bool, bool),
 }
 
 impl PpuCore {
@@ -123,12 +143,23 @@ impl PpuCore {
         if self.timing_mode3_ending() {
             self.record(PpuEventKind::Mode3End);
         }
-        let locks = (self.vram_read_blocked(), self.vram_write_blocked());
-        if locks != self.trace.vram_locks {
-            self.trace.vram_locks = locks;
+        let vram = (self.vram_read_blocked(), self.vram_write_blocked());
+        if vram != self.trace.vram_locks {
+            self.trace.vram_locks = vram;
             self.record(PpuEventKind::VramLocks {
-                read: locks.0,
-                write: locks.1,
+                read: vram.0,
+                write: vram.1,
+            });
+        }
+        let oam = (
+            self.d.cpu().oam_read_blocked,
+            self.d.cpu().oam_write_blocked,
+        );
+        if oam != self.trace.oam_locks {
+            self.trace.oam_locks = oam;
+            self.record(PpuEventKind::OamLocks {
+                read: oam.0,
+                write: oam.1,
             });
         }
     }
@@ -177,6 +208,33 @@ impl PpuCore {
             addr,
             value,
             locked: self.vram_write_blocked(),
+        });
+    }
+}
+
+impl Ppu {
+    /// The CPU read `value` from OAM at `addr`, below FEA0; an OAM DMA held
+    /// OAM (`dma`). Ceres's locks did as `cpu_read_oam_area` has them.
+    pub(crate) fn trace_oam_read(&mut self, addr: u16, value: u8, dma: bool) {
+        let cpu = self.d.cpu();
+        let locked = cpu.oam_read_blocked || cpu.oam_write_blocked && !self.is_cgb_hardware();
+        self.record(PpuEventKind::OamRead {
+            addr,
+            value,
+            locked,
+            dma,
+        });
+    }
+
+    /// The CPU is writing `value` to OAM at `addr`, below FEA0; an OAM DMA
+    /// holds OAM (`dma`). Ceres's lock is as `cpu_write_oam_area` has it.
+    pub(crate) fn trace_oam_write(&mut self, addr: u16, value: u8, dma: bool) {
+        let locked = self.cgb_c_oam_write_blocked(self.d.cpu().oam_write_blocked);
+        self.record(PpuEventKind::OamWrite {
+            addr,
+            value,
+            locked,
+            dma,
         });
     }
 }

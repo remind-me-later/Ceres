@@ -248,8 +248,9 @@ evidence = "proved"
 
 [cpu-does-not-address-oam]
 title = "The CPU does not address OAM (FExx) during the OAM scan"
-evidence = "open"
-how = "Its read strobe opens OAM's first latches, and its address changes the precharge (oam.vhd); the scan's harnesses leave it out."
+evidence = "fact"
+how = "Its read strobe opens OAM's first latches, and its address holds off the precharge (oam.vhd); the scan's harnesses leave it out. What the CPU's own access comes to is measured (ceres-test-runner's tests/oam_gate.rs: a read takes FF and a write is lost in mode 2, as in the netlist); what it does to the scan is the OAM corruption bug, which ceres runs as SameBoy does and dmg-sim's plain SRAM cannot show."
+facts = ["oam-corruption-bug"]
 
 # The CPU
 

@@ -339,6 +339,8 @@ impl Ppu {
             }
             return 0xFF;
         }
+        // @fact oam-read-as-mode-3-ends: OAM's byte, also where the
+        // netlist's read takes the byte render latched.
         if addr < UNUSABLE_START {
             self.oam.read(addr)
         } else {

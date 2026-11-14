@@ -211,6 +211,19 @@ race = "width"
 tests = ["age-test-roms/oam/oam-write-dmgC.gb"]
 note = "On dmg-sim the write strobe falls 0.3 ns after the scan's address reaches OAM, before the RAM's column lines select its word; the model wrote the CPU's byte into the scan's words 39 and 0 for a few deltas. AGE's ROM reads FE00 as 00 then on dmg-sim, 81 on a DMG-CPU C, where its row of results depends on when the LCD was last turned off."
 
+[oam-read-as-mode-3-ends]
+title = "A CPU read of OAM in the M-cycle where mode 3 ends after F and before G takes the byte render's address left in OAM's first latches"
+models = ["dmg"]
+netlist = "differs"
+hardware = "none"
+tests = [
+  "gambatte/oam_access/postread_scx3_2_dmg08_xout1_cgb04c_out0.gbc",
+  "gambatte/oam_access/10spritesprline_postread_2_dmg08_cgb04c_out0.gbc",
+]
+open = ["doc/hardware-tests.md#a-cpu-read-of-oam-as-mode-3-ends"]
+needs = ["flash-cart", "dmg-b"]
+note = "The CPU's read strobe opens OAM's first latches up to F while mode 3 still gives OAM render's address (the sprite store's index lines, word 2i + 1, FF past the 80 words); OAM is free for G and H, where the CPU takes the latches (ceres-netlist's tests/oam_gate.rs). Ceres takes OAM's byte at the CPU's address: 00 where the model reads FF in postread_scx3_2, whose DMG result Gambatte's runner does not check (xout1); 10spritesprline_postread_2 reads the same byte either way."
+
 [lcdc-write-latch-delay]
 title = "A write to LCDC reaches the PPU a moment after the CPU's strobe"
 models = ["dmg", "cgb"]

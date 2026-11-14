@@ -333,6 +333,26 @@ CGB is left to check, since there is no netlist for it.
 - **Needs:** a test ROM; a logic analyser on the cartridge bus to see who
   drives it.
 
+### A CPU read of OAM as mode 3 ends
+
+- **Measure:** Gambatte's `oam_access/postread_scx3_2` on a DMG-CPU B, and
+  a variant that fetches a sprite last at a known OAM index, so that the byte
+  render latched differs from both `FF` and the byte the CPU addresses.
+- **The evidence:** none on the DMG: the ROM's name has `xout1`, and
+  Gambatte's runner does not check it there.
+- **The netlist:** the CPU's read strobe opens OAM's first latches up to F,
+  while mode 3 still gives OAM render's address (the sprite store's index
+  lines); mode 3 ends before G, OAM drives the CPU's bus in G and H, and the
+  CPU takes the latches: the byte at render's address, `FF` past OAM's 80
+  words (`ceres-netlist`'s `tests/oam_gate.rs`). The model reads `FF` in
+  `postread_scx3_2`.
+- **Ceres today:** takes OAM's byte at the CPU's address (`00` there).
+- **Outcomes:** render's byte or `FF`: ceres should take OAM's first latches
+  as render left them, which needs the sprite store's index lines at mode
+  3's end. The CPU's byte: the chip's latches close earlier than the
+  netlist's.
+- **Needs:** a test ROM; a DMG-CPU B.
+
 ### `halt_op_dupe_delay` and `stat_write_glitch_l154_d`
 
 - **Measure:** the two gbmicrotest ROMs on a B and on a C.
