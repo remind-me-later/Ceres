@@ -1,0 +1,15 @@
+# FF50 reads FF whether or not the boot ROM is mapped, as ceres did.
+# harness: netlist_bus_side
+diff --git a/ceres-core/src/bootrom.rs b/ceres-core/src/bootrom.rs
+index ee1b62d..c704407 100644
+--- a/ceres-core/src/bootrom.rs
++++ b/ceres-core/src/bootrom.rs
+@@ -70,7 +70,7 @@ impl Bootrom {
+     // @hw die: YULA YAZA, ZUFA ZADO (the netlist's `boot_rom.vhd`)
+     #[must_use]
+     pub(crate) const fn read_bank(&self) -> u8 {
+-        0xFE | !self.is_enabled as u8
++        0xFF
+     }
+ 
+     /// A write of FF50 with bit 0 set unmaps the boot ROM until the next

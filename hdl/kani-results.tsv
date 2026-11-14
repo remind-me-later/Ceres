@@ -4,6 +4,7 @@
 fault/adc-half-carry-without-carry	c8fd8e1b1abbedc0	caught	0	cadical
 fault/call-pushes-the-wrong-return	c8fd8e1b1abbedc0	caught	0	cadical
 fault/dispatch-chooses-the-vector-late	c8fd8e1b1abbedc0	caught	0	cadical
+fault/ff50-reads-ff	e7e5af00a89bf50d	caught	0	cadical
 fault/halt-without-the-bug	c8fd8e1b1abbedc0	caught	0	cadical
 fault/halted-samples-at-the-start	c8fd8e1b1abbedc0	caught	0	cadical
 fault/netlist-sbc-without-carry	c8fd8e1b1abbedc0	caught	0	cadical
