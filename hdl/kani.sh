@@ -12,8 +12,8 @@
 #                           unless all are verified
 #   kani.sh run [NAME...]   run the harnesses that are not verified on these
 #                           sources (those whose names contain a NAME, if
-#                           given), and record their verdicts; exits 1 if
-#                           one fails
+#                           given), but those whose program is unchanged,
+#                           and record their verdicts; exits 1 if one fails
 #   kani.sh rerun NAME...   run those harnesses again, verified or not
 #   kani.sh faults [NAME]   the planted faults, kani-faults/*.patch: each
 #                           names a harness that must fail with it applied,
@@ -31,6 +31,16 @@
 # Cargo.toml and Cargo.lock. That is everything a harness could reach, so
 # any change there makes every verdict stale; the crates' tests and examples
 # are outside it.
+#
+# A stale verdict can still hold: the change may not reach its harness.
+# `run` first compiles every harness (`cargo kani --only-codegen`, under a
+# minute) and hashes each one's goto program in a canonical form, with
+# its attributes and Kani's, CBMC's and the solver's versions
+# (program_hashes, kani-program.pl); a harness whose last verdict passed
+# on a program of the same hash keeps it for these sources without running.
+# The program's hash is the verdict's last field. Each planted fault changes
+# its harness's program; a comment, or code a harness does not reach, does
+# not. `rerun` always runs.
 #
 # A run is one `cargo kani` with KANI_JOBS harnesses at a time (2), under
 # a memory cap where systemd-run is there (KANI_MEMORY, 9G; no swap), on
@@ -116,18 +126,19 @@ recorded() {
     fi
 }
 
-# Records name, hash, verdict, seconds: replaces the name's line.
+# Records name, hash, verdict, seconds and, for a harness, the hash of its
+# program (program_hashes): replaces the name's line.
 record() {
     {
         if [ -f "$RESULTS" ]; then
             grep -v '^#' "$RESULTS" | awk -F '\t' -v name="$1" '$1 != name'
         fi
-        printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$SOLVER"
+        printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$SOLVER" "${5:--}"
     } | LC_ALL=C sort >"$RESULTS.new"
     {
         echo "# Kani's verdicts, written by hdl/kani.sh: the harness (or the planted"
-        echo "# fault), the hash of the sources it ran on, the verdict, the seconds"
-        echo "# and the solver."
+        echo "# fault), the hash of the sources it ran on, the verdict, the seconds,"
+        echo "# the solver and the hash of the harness's program (see kani.sh)."
         cat "$RESULTS.new"
     } >"$RESULTS"
     rm "$RESULTS.new"
@@ -191,16 +202,72 @@ kani() {
     verdicts "$log"
 }
 
-# Runs the harnesses of the standard input and records their verdicts.
+# The hash of each harness's program, as the worktree compiles it: "name
+# hash" lines in $LOGS/programs. `cargo kani --only-codegen` compiles every
+# harness to its own goto program; goto-instrument dumps it, and
+# kani-program.pl puts the dump in a canonical form, which ignores the
+# crate-wide numbering of statics and globals and the source locations (see
+# it). The hash takes in the harness's attributes as Kani records them (its
+# unwinding, solver and stubs), Kani's and CBMC's versions and the solver.
+# A passing verdict whose program has the same hash still holds: CBMC would
+# be given the same program.
+program_hashes() {
+    version=$(cd "$WT" && cargo kani --version 2>/dev/null | tr '\n' ' ')
+    kani_version=$(printf '%s' "$version" | awk '{ print $4 }')
+    gi=${KANI_GOTO_INSTRUMENT:-$HOME/.kani/kani-$kani_version/bin/goto-instrument}
+    set -- cargo kani -p ceres-core --only-codegen
+    if command -v systemd-run >/dev/null; then
+        set -- systemd-run --user --scope -q -p "MemoryMax=$MEMORY" -p MemorySwapMax=0 "$@"
+    fi
+    (cd "$WT" && nice "$@" >"$LOGS/codegen.log" 2>&1) || {
+        echo "the harnesses do not compile (see $LOGS/codegen.log)" >&2
+        return 1
+    }
+    meta=$(ls -t "$WT"/target/kani/*/debug/build/ceres-core/*/out/*.kani-metadata.json | head -n 1)
+    tab=$(printf '\t')
+    # shellcheck disable=SC2016
+    perl -ne 'while (/\{"pretty_name":"([^"]*)".*?"goto_file":"([^"]*)","attributes":(\{.*?\}),"contract"/g) { print "$1\t$2\t$3\n" }' "$meta" |
+        while IFS=$tab read -r name goto attributes; do
+            program=$("$gi" --show-goto-functions "${goto%.symtab.out}.out" | perl "$HDL/kani-program.pl") || return 1
+            hash=$(printf '%s\n%s\n%s\n%s\n' "$program" "$attributes" "$version" "$SOLVER" |
+                sha256sum | cut -c1-16)
+            printf '%s %s\n' "$name" "$hash"
+        done >"$LOGS/programs"
+    [ -s "$LOGS/programs" ]
+}
+
+# The hash of the program of harness $1, from $LOGS/programs.
+program_of() {
+    awk -v name="$1" '$1 == name { print $2 }' "$LOGS/programs"
+}
+
+# Runs the harnesses of the standard input and records their verdicts. With
+# $2 "keep", a harness whose last verdict passed on a program of the same
+# hash keeps it, with the sources' new hash, and does not run.
 run_and_record() {
     hash=$1
     failed=0
+    program_hashes || return 1
+    if [ "${2:-}" = keep ]; then
+        rm -f "$LOGS/todo.run"
+        while read -r name; do
+            line=$(recorded "$name")
+            program=$(program_of "$name")
+            if [ -n "$program" ] && [ "$(printf '%s' "$line" | cut -f3,6)" = "$(printf 'pass\t%s' "$program")" ]; then
+                record "$name" "$hash" pass "$(printf '%s' "$line" | cut -f4)" "$program"
+                echo "kept $name (its program is unchanged)"
+            else
+                echo "$name" >>"$LOGS/todo.run"
+            fi
+        done <"$LOGS/todo"
+        mv "$LOGS/todo.run" "$LOGS/todo" 2>/dev/null || : >"$LOGS/todo"
+    fi
     {
         grep -v -e "$SOLO" "$LOGS/todo" | kani
         grep -e "$SOLO" "$LOGS/todo" | kani 1 -solo
     } >"$LOGS.verdicts" 2>/dev/null || true
     while read -r name verdict seconds; do
-        record "$name" "$hash" "$verdict" "$seconds"
+        record "$name" "$hash" "$verdict" "$seconds" "$(program_of "$name")"
         echo "$verdict $name (${seconds}s)"
         [ "$verdict" = pass ] || failed=1
     done <"$LOGS.verdicts"
@@ -245,8 +312,28 @@ run | rerun)
             done
         fi
     done >"$LOGS/todo"
-    echo "$(wc -l <"$LOGS/todo") harnesses to run on $hash, $JOBS at a time"
-    run_and_record "$hash" <"$LOGS/todo"
+    echo "$(wc -l <"$LOGS/todo") harnesses not verified on $hash"
+    status=0
+    if [ "$command" = run ]; then
+        run_and_record "$hash" keep <"$LOGS/todo" || status=1
+    else
+        run_and_record "$hash" <"$LOGS/todo" || status=1
+    fi
+    # A verdict on these sources, recorded without its program's hash (from
+    # before kani.sh kept them): the program is the one it ran on.
+    if [ -s "$LOGS/programs" ]; then
+        # The states first: record rewrites the verdicts states reads.
+        harnesses | states "$hash" >"$LOGS/states"
+        while read -r state name; do
+            line=$(recorded "$name")
+            if [ "$state" = verified ] && [ "$(printf '%s' "$line" | cut -f6)" != "$(program_of "$name")" ]; then
+                if [ -z "$(printf '%s' "$line" | cut -f6)" ] || [ "$(printf '%s' "$line" | cut -f6)" = - ]; then
+                    record "$name" "$hash" pass "$(printf '%s' "$line" | cut -f4)" "$(program_of "$name")"
+                fi
+            fi
+        done <"$LOGS/states"
+    fi
+    exit "$status"
     ;;
 faults)
     shift
