@@ -451,7 +451,7 @@ impl PpuCore {
 
     /// Mode 3 ended in this unit (`timing_mode3_end`): for traces and the
     /// lock proofs.
-    #[cfg(any(feature = "debug", kani))]
+    #[cfg(any(feature = "debug", kani, test))]
     pub(in crate::ppu) const fn timing_mode3_ending(&self) -> bool {
         self.d.timing.hblank_pending
     }

@@ -263,6 +263,12 @@ title = "What the OAM scan matches for a sprite reaches only the object store: n
 evidence = "typed"
 how = "add_object_from_index hands the match to ObjectSearch::consider, which takes the store (Pace::objs) alone; the rest of add_object_from_index reads OAM through its latches and the DMA's bus and returns, with no write of the locks (CpuAccess) or of the pace's state and wait."
 
+[locks-with-mode-0-pulse]
+title = "On a line whose mode 0 pulses before mode 3 ends (a sprite at X 167, the WX 166 glitch), the netlist's mode 3 holds VRAM and OAM to the end, as ceres's locks do"
+evidence = "open"
+how = "Ceres's locks fall 2 units before HBlankStart on every line (ppu::display::lock_proofs; 256 of the test's 73,728 lines pulse), but its timing unit takes the pulse as mode 3's end, and the gate tests place the netlist's fall from that first end. On the netlist the pulse lasts about 4 ns (sprite-at-167-mode-0-pulse) and mode 3 is held again; whether render's mode 3 latch (XYMU) falls in it is not known: no ROM of the VRAM or OAM tallies has such a line. A tally of such lines on the netlist settles it."
+facts = ["sprite-at-167-mode-0-pulse"]
+
 [dmg-lines-not-cut]
 title = "No DMG line is cut off by the 456-dot abort (Mode3Abort), which skips mode3_done and the next line's scan, so that the CPU's locks would stay on"
 evidence = "open"

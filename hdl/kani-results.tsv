@@ -10,7 +10,7 @@ fault/halted-samples-at-the-start	c8fd8e1b1abbedc0	caught	0	cadical
 fault/netlist-sbc-without-carry	c8fd8e1b1abbedc0	caught	0	cadical
 fault/netlist-window-no-restart	c8fd8e1b1abbedc0	caught	0	cadical
 fault/object-low-byte-a-dot-short	c8fd8e1b1abbedc0	caught	0	cadical
-fault/vram-read-lock-late	4e01391240353cbd	caught	0	cadical
+fault/vram-read-lock-late	b381ac44cfa3895b	caught	0	cadical
 fault/window-fetch-never-ends	c8fd8e1b1abbedc0	caught	0	cadical
 fault/window-starts-late	c8fd8e1b1abbedc0	caught	0	cadical
 interrupts::netlist_proofs::netlist_if_bisimulation	e7e5af00a89bf50d	pass	2	cadical
@@ -40,8 +40,8 @@ ppu::display::background::netlist_proofs::netlist_mode3_start	e7e5af00a89bf50d	p
 ppu::display::background::netlist_proofs::netlist_mode3_window_inside	e7e5af00a89bf50d	pass	71	cadical
 ppu::display::background::netlist_proofs::netlist_mode3_window_reached	e7e5af00a89bf50d	pass	77	cadical
 ppu::display::background::netlist_proofs::netlist_mode3_window_starting	e7e5af00a89bf50d	pass	78	cadical
-ppu::display::lock_proofs::vram_locks_at_mode3_end	4e01391240353cbd	pass	2	cadical
-ppu::display::lock_proofs::vram_locks_at_scan_end	4e01391240353cbd	pass	5	cadical
+ppu::display::lock_proofs::cpu_locks_at_mode3_end	8e9cf55342997937	pass	2	cadical
+ppu::display::lock_proofs::cpu_locks_at_scan_end	8e9cf55342997937	pass	5	cadical
 ppu::display::objects::netlist_proofs::netlist_scan_consider	e7e5af00a89bf50d	pass	42	cadical
 ppu::display::objects::netlist_proofs::netlist_scan_dma	e7e5af00a89bf50d	pass	287	cadical
 ppu::display::objects::netlist_proofs::netlist_scan_selection	e7e5af00a89bf50d	pass	120	cadical

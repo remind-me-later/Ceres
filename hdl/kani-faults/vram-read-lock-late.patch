@@ -1,5 +1,5 @@
 # The scan locks VRAM reads at sprite 38, 4 units late.
-# harness: vram_locks_at_scan_end
+# harness: cpu_locks_at_scan_end
 diff --git a/ceres-core/src/ppu/display/state.rs b/ceres-core/src/ppu/display/state.rs
 index 0ed7e93..a557549 100644
 --- a/ceres-core/src/ppu/display/state.rs
