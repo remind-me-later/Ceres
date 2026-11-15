@@ -1,0 +1,15 @@
+# The scan locks VRAM reads at sprite 38, 4 units late.
+# harness: vram_locks_at_scan_end
+diff --git a/ceres-core/src/ppu/display/state.rs b/ceres-core/src/ppu/display/state.rs
+index 0ed7e93..a557549 100644
+--- a/ceres-core/src/ppu/display/state.rs
++++ b/ceres-core/src/ppu/display/state.rs
+@@ -24,7 +24,7 @@ const HBLANK_HDMA_DELAY: u8 = 1;
+ 
+ /// The OAM scan index at which the CPU's VRAM and palette access changes
+ /// (SameBoy's 37).
+-const OAM_SCAN_UNLOCK_INDEX: u8 = 37;
++const OAM_SCAN_UNLOCK_INDEX: u8 = 38;
+ 
+ #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+ #[repr(u8)]

@@ -10,6 +10,7 @@ fault/halted-samples-at-the-start	c8fd8e1b1abbedc0	caught	0	cadical
 fault/netlist-sbc-without-carry	c8fd8e1b1abbedc0	caught	0	cadical
 fault/netlist-window-no-restart	c8fd8e1b1abbedc0	caught	0	cadical
 fault/object-low-byte-a-dot-short	c8fd8e1b1abbedc0	caught	0	cadical
+fault/vram-read-lock-late	4e01391240353cbd	caught	0	cadical
 fault/window-fetch-never-ends	c8fd8e1b1abbedc0	caught	0	cadical
 fault/window-starts-late	c8fd8e1b1abbedc0	caught	0	cadical
 interrupts::netlist_proofs::netlist_if_bisimulation	e7e5af00a89bf50d	pass	2	cadical
