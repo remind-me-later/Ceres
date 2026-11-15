@@ -113,6 +113,8 @@
           gawk
           bc
           parallel
+          # kani.sh's kept verdicts (kani-program.pl).
+          perl
           imagemagick
           zlib
           vhdl-ls
