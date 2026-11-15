@@ -1143,6 +1143,19 @@ an M-cycle where mode 3 falls at C's or G's edge, and any access where it
 falls at A's; a sweep ROM (SCX 0 to 7 against a write and a read a cycle
 apart) would fill the table.
 
+`check/vram_sweep.asm` is that ROM (`make build/vram_sweep.gb`), and the
+four tallies now run it: it reads and writes VRAM (8010) and OAM (FE9E)
+across mode 3's end, SCX 0 to 3 moving the end a dot at a time through
+the four alignments it can fall on and a NOP sled the access an M-cycle at
+a time, ten M-cycles from 3 before the end, every other line from mode 2's
+interrupt (HALT, IME off), twice: without sprites and with tall sprites at
+X 167 on every line. On the netlist the writes where mode 3 falls at C's
+and at G's edge now appear (`11000000` and `11111100`, both landing, as the
+rule has it), with OAM's the same, and every access follows the rules. A
+fall at A's edge leaves an access's M-cycle with mode 3 off throughout and
+the one before with it on throughout: the rule's plain cases, so nothing
+was missing there.
+
 Ceres follows the rule. `ceres-test-runner`'s `tests/vram_gate.rs` runs
 the same ROMs on ceres, with the PPU trace's CPU accesses to VRAM, the
 locks' changes and the timing unit's end of mode 3, and puts the netlist's
@@ -1202,9 +1215,13 @@ pulse. On the netlist the latch holds through the pulse: `ceres-netlist`'s
 (80 s), and on all 124 pulses render's mode 3 latch (XYMU) stays up and
 falls 13, 35 or 109 edges later. So the netlist, as ceres, holds VRAM and
 OAM to the real end, and on those lines the gate tests would place the
-fall at the pulse. Whether ceres's unlock stands to that fall as on the
-other lines is not measured: no ROM accesses VRAM or OAM there
-(`locks-with-mode-0-pulse`, open; a sweep ROM settles it).
+fall at the pulse. The sweep ROM's second pass settles it: the lockstep
+oracle runs it on ceres and `NetChip` side by side, and all 208,693
+accesses are the same, the writes read back in HBlank. The gate tests set
+those lines apart (626 lines, 118 accesses), and leave them to the oracle
+(`locks-with-mode-0-pulse`, measured). The WX 166 glitch, which also ends
+ceres's mode 3 for the timing unit early, is in no ROM
+(`locks-with-wx-166-glitch`, open).
 
 Line 0 after the LCD is turned on, which has no scan, is proved too
 (`cpu_locks_in_first_line`, 5 s, and a test of the whole line from

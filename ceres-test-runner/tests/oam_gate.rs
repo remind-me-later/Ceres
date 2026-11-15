@@ -130,6 +130,11 @@ struct Found {
     /// where ceres's mode 3 did not end.
     misaligned: u64,
     unplaced: u64,
+    /// Lines whose mode 0 pulsed before mode 3 ended (a sprite at X 167),
+    /// and their accesses: the trace's first end there is the pulse, and
+    /// they are left to the lockstep oracle (`locks-with-mode-0-pulse`).
+    pulsed: u64,
+    pulsed_accesses: u64,
     /// The visible lines' lock layouts, and how many lines had them.
     layouts: BTreeMap<Layout, u64>,
 }
@@ -182,6 +187,17 @@ fn rule(write: bool, holders: &str) -> (bool, bool) {
 
 /// A line, done: its lock layout and its accesses tallied.
 fn finish(line: &Line, found: &mut Found) {
+    // The locks fall after the first end the trace gave: a pulse.
+    if let Some(end) = line.end
+        && line
+            .locks
+            .iter()
+            .any(|&(h, read, _)| !read && h > end && END_RELATIVE.contains(&h))
+    {
+        found.pulsed += 1;
+        found.pulsed_accesses += line.accesses.len() as u64;
+        return;
+    }
     if line.number < VBLANK_LINE
         && !line.cut
         && let Some(end) = line.end
@@ -380,6 +396,8 @@ fn roms(root: &Path) -> Vec<PathBuf> {
             "intr_2_oam_ok_timing",
             &[][..],
         ),
+        // hdl/check/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
+        ("hdl/build", "vram_sweep", &[][..]),
     ] {
         for entry in fs::read_dir(root.join(dir)).expect("the ROMs' directory") {
             let path = entry.expect("a ROM").path();
@@ -393,6 +411,10 @@ fn roms(root: &Path) -> Vec<PathBuf> {
         }
     }
     roms.sort();
+    assert!(
+        roms.iter().any(|rom| rom.ends_with("vram_sweep.gb")),
+        "no sweep ROM: make -C hdl build/vram_sweep.gb"
+    );
     roms
 }
 
@@ -445,6 +467,10 @@ fn oam_accesses_follow_the_netlists_rule() {
         }
         eprintln!("  {kind} {levels}: {}", parts.join(", "));
     }
+    eprintln!(
+        "{} lines with a mode 0 pulse before mode 3's end, {} accesses on them, left to the lockstep oracle",
+        found.pulsed, found.pulsed_accesses
+    );
     eprintln!("ceres's lock layouts on the visible lines:");
     for (layout, count) in &found.layouts {
         eprintln!("  {count} lines: {layout:?}");

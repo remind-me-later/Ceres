@@ -260,6 +260,7 @@ fn cpu_locks_in_first_line() {
 /// ends 2 units later.
 // @assumes dmg-lines-not-cut
 // @assumes locks-with-mode-0-pulse
+// @assumes locks-with-wx-166-glitch
 #[cfg(kani)]
 #[kani::proof]
 #[kani::unwind(6)]

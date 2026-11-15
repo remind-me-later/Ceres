@@ -138,6 +138,11 @@ struct Found {
     /// Accesses on a visible line where ceres's mode 3 did not end (the LCD
     /// was turned off) that mode 3 may have reached.
     unplaced: u64,
+    /// Lines whose mode 0 pulsed before mode 3 ended (a sprite at X 167),
+    /// and their accesses: the trace's first end there is the pulse, and
+    /// they are left to the lockstep oracle (`locks-with-mode-0-pulse`).
+    pulsed: u64,
+    pulsed_accesses: u64,
     /// The visible lines' locks, and how many lines had them.
     locks: BTreeMap<Locks, u64>,
 }
@@ -166,6 +171,13 @@ fn pattern(h: i32, rise: i32, fall: i32) -> String {
 
 /// A line, done: its accesses tallied.
 fn finish(line: &Line, found: &mut Found) {
+    if let (Some(end), Some(off)) = (line.end, line.off)
+        && off > end
+    {
+        found.pulsed += 1;
+        found.pulsed_accesses += line.accesses.len() as u64;
+        return;
+    }
     let mapping = if line.first { &FIRST_LINE } else { &LINE };
     if let (Some(end), Some(read_on), Some(write_on), Some(off)) =
         (line.end, line.read_on, line.write_on, line.off)
@@ -334,6 +346,8 @@ fn vram_accesses_follow_the_netlists_rule() {
     for (dir, wanted) in [
         ("external/test-roms/gambatte/vram_m3", "dmg08"),
         ("external/test-roms/gbmicrotest", "vram"),
+        // hdl/check/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
+        ("hdl/build", "vram_sweep"),
     ] {
         for entry in fs::read_dir(root.join(dir)).expect("the ROMs' directory") {
             let path = entry.expect("a ROM").path();
@@ -347,6 +361,10 @@ fn vram_accesses_follow_the_netlists_rule() {
         }
     }
     roms.sort();
+    assert!(
+        roms.iter().any(|rom| rom.ends_with("vram_sweep.gb")),
+        "no sweep ROM: make -C hdl build/vram_sweep.gb"
+    );
     assert!(!roms.is_empty(), "no ROMs");
 
     let mut found = Found::default();
@@ -382,6 +400,10 @@ fn vram_accesses_follow_the_netlists_rule() {
         eprintln!("  {kind} {levels}: {}", parts.join(", "));
     }
     eprintln!("ceres's locks on the visible lines: {:?}", found.locks);
+    eprintln!(
+        "{} lines with a mode 0 pulse before mode 3's end, {} accesses on them, left to the lockstep oracle",
+        found.pulsed, found.pulsed_accesses
+    );
     assert!(!found.locks.is_empty(), "no locks seen");
     for &locks in found.locks.keys() {
         let differ = disagreements(locks);

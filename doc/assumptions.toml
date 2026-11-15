@@ -264,9 +264,15 @@ evidence = "typed"
 how = "add_object_from_index hands the match to ObjectSearch::consider, which takes the store (Pace::objs) alone; the rest of add_object_from_index reads OAM through its latches and the DMA's bus and returns, with no write of the locks (CpuAccess) or of the pace's state and wait."
 
 [locks-with-mode-0-pulse]
-title = "On a line whose mode 0 pulses before mode 3 ends (a sprite at X 167, the WX 166 glitch), ceres's unlock falls against the netlist's mode 3 latch as on the other lines"
+title = "On a line where a sprite at X 167 pulses mode 0 before mode 3 ends, ceres's accesses to VRAM and OAM come out as the netlist's, as on the other lines"
+evidence = "measured"
+how = "Ceres's locks fall 2 units before HBlankStart on every line (ppu::display::lock_proofs; 256 of its test's 73,728 lines pulse); its timing unit takes the pulse as mode 3's end, so the gate tests set such lines apart. On NetChip (ceres-netlist's tests/mode0_pulse.rs: Gambatte's 10 DMG ROMs with a sprite at X 167, 124 pulses) render's mode 3 latch (XYMU) stays up through every pulse and falls 13, 35 or 109 edges later. hdl/check/vram_sweep.asm reads and writes VRAM and OAM across mode 3's end on such lines, SCX 0 to 3 (every alignment of the fall) and ten M-cycles of delay; the lockstep oracle runs it on ceres and NetChip side by side: all 208,693 accesses the same, the writes read back."
+facts = ["sprite-at-167-mode-0-pulse"]
+
+[locks-with-wx-166-glitch]
+title = "On a line where the WX 166 glitch signals mode 3's end early, ceres's accesses to VRAM and OAM come out as the netlist's"
 evidence = "open"
-how = "Ceres's locks fall 2 units before HBlankStart on every line (ppu::display::lock_proofs; 256 of the test's 73,728 lines pulse), and its timing unit takes the pulse as mode 3's end. On NetChip (ceres-netlist's tests/mode0_pulse.rs: Gambatte's 10 DMG ROMs with a sprite at X 167, 124 pulses) render's mode 3 latch (XYMU) stays up through every pulse and falls 13, 35 or 109 edges later: the netlist holds VRAM and OAM to the real end, as ceres does, and the gate tests, which take the first end they see, would place its fall at the pulse. Whether ceres's unlock then stands to XYMU's fall as 2 half dots after timing_mode3_end does elsewhere is not measured: no ROM accesses VRAM or OAM around the end of such a line. A sweep ROM with such lines settles it."
+how = "Ceres's mode 3 loop ends mode 3 for the timing unit early there (wx_166_interrupt_glitch), as for a sprite at X 167, while its locks fall at the real end. No ROM of the gate tallies, nor the sweep, has such a line."
 facts = ["sprite-at-167-mode-0-pulse"]
 
 [dmg-lines-not-cut]

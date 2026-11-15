@@ -161,6 +161,8 @@ fn vram_accesses_follow_mode3_in_their_phases() {
     for (dir, wanted) in [
         ("external/test-roms/gambatte/vram_m3", "dmg08"),
         ("external/test-roms/gbmicrotest", "vram"),
+        // hdl/check/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
+        ("hdl/build", "vram_sweep"),
     ] {
         for entry in fs::read_dir(root.join(dir)).expect("the ROMs' directory") {
             let path = entry.expect("a ROM").path();
@@ -174,6 +176,10 @@ fn vram_accesses_follow_mode3_in_their_phases() {
         }
     }
     roms.sort();
+    assert!(
+        roms.iter().any(|rom| rom.ends_with("vram_sweep.gb")),
+        "no sweep ROM: make -C hdl build/vram_sweep.gb"
+    );
     assert!(!roms.is_empty(), "no ROMs");
 
     let mut tally = Tally::new();

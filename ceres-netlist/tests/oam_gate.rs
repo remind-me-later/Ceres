@@ -211,6 +211,8 @@ fn roms(root: &Path) -> Vec<std::path::PathBuf> {
             "intr_2_oam_ok_timing",
             &[][..],
         ),
+        // hdl/check/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
+        ("hdl/build", "vram_sweep", &[][..]),
     ] {
         for entry in fs::read_dir(root.join(dir)).expect("the ROMs' directory") {
             let path = entry.expect("a ROM").path();
@@ -224,6 +226,10 @@ fn roms(root: &Path) -> Vec<std::path::PathBuf> {
         }
     }
     roms.sort();
+    assert!(
+        roms.iter().any(|rom| rom.ends_with("vram_sweep.gb")),
+        "no sweep ROM: make -C hdl build/vram_sweep.gb"
+    );
     roms
 }
 
