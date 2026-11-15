@@ -258,6 +258,16 @@ evidence = "proved"
 
 # What the proofs leave out
 
+[scan-match-only-in-the-store]
+title = "What the OAM scan matches for a sprite reaches only the object store: neither the CPU's locks nor the display's state and sleeps"
+evidence = "typed"
+how = "add_object_from_index hands the match to ObjectSearch::consider, which takes the store (Pace::objs) alone; the rest of add_object_from_index reads OAM through its latches and the DMA's bus and returns, with no write of the locks (CpuAccess) or of the pace's state and wait."
+
+[dmg-lines-not-cut]
+title = "No DMG line is cut off by the 456-dot abort (Mode3Abort), which skips mode3_done and the next line's scan, so that the CPU's locks would stay on"
+evidence = "open"
+how = "A visible line's mode 3 starts 89 dots in (cycles_for_line at MODE2_LENGTH + 4 and two sleeps), and on the DMG ends within 160 dots, SCX's 7, the window's 6 and ten sprites' 11 each: 372 dots, short of 456. The bound is the mode 3 proofs' for what they cover (mode3-end-background), not yet for objects at X 0 to 7 or the window with objects."
+
 [cpu-does-not-address-oam]
 title = "The CPU does not address OAM (FExx) during the OAM scan"
 evidence = "fact"

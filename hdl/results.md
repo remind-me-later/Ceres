@@ -1170,6 +1170,27 @@ access falls on (a write lock 1 early, a read lock 5 early and 1 late). So
 ceres's VRAM gate is the netlist's, given the mappings and these lock
 positions, which the PPU's state machine sets and the trace measured.
 
+The positions on the lines after the first are now proved from ceres's
+code (`ppu::display::lock_proofs`), counted in units as the trace counts
+them. Kani: from the scan's step for sprite 36, with any number of objects
+found, the read lock comes on 18 units before mode 3's loop starts and the
+write lock 10 before, neither falling in between
+(`vram_locks_at_scan_end`, 5 s); as the loop ends both fall, and the
+timing unit's mode 3 ends 2 units later (`vram_locks_at_mode3_end`, 2 s).
+A test runs the line's start to the loop on every line, every LCDC with the
+LCD on and four kinds of OAM (73,728 lines, 1.2 s): VRAM stays open until
+the step for sprite 37, 160 units in, and the loop starts at 178. With the
+loop at h = 163 (`mapping-mode3-start`), those are the trace's 9 and 1
+before the rise and 2 before the end. Kani could not take the whole line:
+180 units of the display with symbolic registers passed 9 GB, and a
+symbolic line length alone, or a symbolic sprite match (the store's
+insertion), cost 6 GB in a few units. A sprite's match reaches only the
+object store, by the types (`scan-match-only-in-the-store`). The proofs
+take no line cut off at 456 dots (`dmg-lines-not-cut`, open): ceres's abort
+skips `mode3_done` and the next line's scan, so its locks would stay on.
+Left: line 0 after the LCD is turned on (both at h = 159), and OAM's lock
+positions.
+
 OAM's gate goes the same way. `ceres-netlist`'s `tests/oam_gate.rs` runs
 93 ROMs (Gambatte's DMG `oam_access`, gbmicrotest's `oam` ROMs but the
 DMA ones, Mooneye's `mem_oam` and `intr_2_oam_ok_timing`, AGE's DMG
