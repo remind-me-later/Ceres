@@ -40,8 +40,9 @@ ppu::display::background::netlist_proofs::netlist_mode3_start	8e9cf55342997937	p
 ppu::display::background::netlist_proofs::netlist_mode3_window_inside	8e9cf55342997937	pass	68	cadical
 ppu::display::background::netlist_proofs::netlist_mode3_window_reached	8e9cf55342997937	pass	76	cadical
 ppu::display::background::netlist_proofs::netlist_mode3_window_starting	8e9cf55342997937	pass	76	cadical
-ppu::display::lock_proofs::cpu_locks_at_mode3_end	8e9cf55342997937	pass	2	cadical
-ppu::display::lock_proofs::cpu_locks_at_scan_end	8e9cf55342997937	pass	5	cadical
+ppu::display::lock_proofs::cpu_locks_at_mode3_end	d3909be909a2ea5e	pass	2	cadical
+ppu::display::lock_proofs::cpu_locks_at_scan_end	d3909be909a2ea5e	pass	4	cadical
+ppu::display::lock_proofs::cpu_locks_in_first_line	d3909be909a2ea5e	pass	5	cadical
 ppu::display::objects::netlist_proofs::netlist_scan_consider	8e9cf55342997937	pass	41	cadical
 ppu::display::objects::netlist_proofs::netlist_scan_dma	8e9cf55342997937	pass	281	cadical
 ppu::display::objects::netlist_proofs::netlist_scan_selection	8e9cf55342997937	pass	119	cadical

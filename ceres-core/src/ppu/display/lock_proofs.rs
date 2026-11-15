@@ -1,4 +1,4 @@
-//! Where ceres's DMG sets the CPU's VRAM and OAM locks on a visible line,
+//! Where ceres's DMG sets the CPU's VRAM and OAM locks on the visible lines,
 //! proved from its own code (`cargo kani -p ceres-core --harness
 //! cpu_locks`).
 //!
@@ -7,15 +7,17 @@
 //! ceres's trace measured. On a visible line but line 0 after the LCD is
 //! turned on, in half dots of the timing unit's clock:
 //!
-//! | h                  | VRAM       | OAM                   |
-//! | ------------------ | ---------- | --------------------- |
-//! | 903 (line before)  |            | read lock on          |
-//! | 905 (line before)  |            | write lock on too     |
-//! | 145                | read lock on | write lock off       |
-//! | 153                | write lock on | write lock on        |
-//! | mode 3's end - 2   | both off   | both off              |
+//! | h                 | VRAM          | OAM               |
+//! | ----------------- | ------------- | ----------------- |
+//! | 903 (line before) |               | read lock on      |
+//! | 905 (line before) |               | write lock on too |
+//! | 145               | read lock on  | write lock off    |
+//! | 153               | write lock on | write lock on     |
+//! | mode 3's end - 2  | both off      | both off          |
 //!
-//! and nothing else changes; after line 143, VBlank has no scan. Counted in
+//! and nothing else changes; after line 143, VBlank has no scan. In line 0
+//! after the LCD is turned on, which has no scan: OAM's write lock at
+//! h = 155, all four at 159, all off at mode 3's end - 2. Counted in
 //! units (half dots) as the trace counts them (the unit that changed a lock,
 //! the unit that runs mode 3's loop's first dot, the unit that ends mode 3
 //! for the timing unit):
@@ -34,6 +36,12 @@
 //!   included, over every line and LCDC with the LCD on and OAMs of each
 //!   kind, the locks change at units 6 and 8 (OAM's), 160 and 168 (the two
 //!   above), as mode 3 ends, and nowhere else; mode 3's loop starts at 178.
+//! - `cpu_locks_in_first_line` (Kani) and `tests::first_line_locks_as_measured`
+//!   (the line whole, from `write_lcdc` turning the LCD on, every LCDC and
+//!   OAMs of each kind): in line 0 after the LCD is turned on, OAM's write
+//!   lock comes on 14 units before the loop starts, all four 10 before, and
+//!   they fall as on the other lines; with the loop at h = 169 there
+//!   (`mapping-mode3-start`), h = 155 and 159.
 //!
 //! With the loop's first dot at h = 163 (`mapping-mode3-start`), unit 0 is
 //! h = 897 of the line before, so units 6, 8, 160 and 168 are h = 903, 905,
@@ -103,6 +111,13 @@ const ALL: Locks = Locks {
     vram_read: true,
     vram_write: true,
     oam_read: true,
+    oam_write: true,
+};
+/// The first line's first lock: OAM's write lock alone.
+const OAM_WRITE: Locks = Locks {
+    vram_read: false,
+    vram_write: false,
+    oam_read: false,
     oam_write: true,
 };
 const NONE: Locks = Locks {
@@ -196,6 +211,51 @@ fn cpu_locks_at_scan_end() {
     );
 }
 
+/// Line 0 after the LCD is turned on, from the last dot of FirstLine's
+/// sleep (FirstLine unlocked all; the test below runs the sleep): OAM's
+/// write lock comes on, then all, and the loop starts 14 units after the
+/// first change and 10 after the second.
+#[cfg(kani)]
+#[kani::proof]
+#[kani::unwind(26)]
+fn cpu_locks_in_first_line() {
+    let mut ppu = dmg_on_line(0, kani::any::<u8>() & 0x06);
+    ppu.d.line_clock_valid = false;
+    // FirstLine's sleep has a dot left, from the unit before.
+    ppu.pace.sleep(State::FirstLineOamLock, 1);
+    ppu.d.half_dot = true;
+    let mut ints = Interrupts::default();
+
+    let mut locks = NONE;
+    let (mut oam_write_on, mut all_on, mut loop_start) = (None, None, None);
+    for unit in 0..24_u32 {
+        let state = ppu.pace.state();
+        ppu.run_display(&mut ints);
+        let now = Locks::of(&ppu);
+        if !now.same(locks) {
+            if oam_write_on.is_none() {
+                assert!(now.same(OAM_WRITE), "OAM's write lock first");
+                oam_write_on = Some(unit);
+            } else {
+                assert!(all_on.is_none() & now.same(ALL), "then all, once");
+                all_on = Some(unit);
+            }
+            locks = now;
+        }
+        if matches!(state, State::FirstLineVramLock)
+            & !matches!(ppu.pace.state(), State::FirstLineVramLock)
+        {
+            loop_start = Some(unit);
+            break;
+        }
+    }
+    let (Some(oam), Some(all), Some(start)) = (oam_write_on, all_on, loop_start) else {
+        panic!("the first line does not reach mode 3");
+    };
+    assert!(start - oam == 14, "OAM's write lock is not 14 units ahead");
+    assert!(start - all == 10, "the locks are not all on 10 units ahead");
+}
+
 /// As mode 3's loop ends: all the locks fall, and the timing unit's mode 3
 /// ends 2 units later.
 // @assumes dmg-lines-not-cut
@@ -207,6 +267,9 @@ fn cpu_locks_at_mode3_end() {
     let line: u8 = kani::any();
     kani::assume(line < super::LINES);
     let mut ppu = dmg_on_line(line, kani::any::<u8>() & 0x06);
+    // Line 0 after the LCD is turned on does not count its clock from the
+    // line's start.
+    ppu.d.line_clock_valid = kani::any();
     set(&mut ppu, ALL);
     // The loop drew the line. The line's length so far (`cycles_for_line`)
     // is read in these units only by the abort's comparison: here the
@@ -365,5 +428,65 @@ mod tests {
         // (`locks-with-mode-0-pulse`).
         std::eprintln!("{lines} lines, {pulsed} with an early mode 0 pulse");
         assert!(pulsed > 0, "no line with a mode 0 pulse");
+    }
+
+    /// Line 0 after the LCD is turned on (`write_lcdc`), run whole to line
+    /// 1's start: OAM's write lock comes on 14 units before the loop starts,
+    /// all 10 before, all fall 2 before `HBlankStart`, and nothing else.
+    #[test]
+    fn first_line_locks_as_measured() {
+        let mut seen = None;
+        for lcdc in 0x80..=0xFF_u8 {
+            for seed in 0..4_u32 {
+                let mut ppu = Ppu::new(Model::DmgB);
+                if seed > 0 {
+                    bytes(seed * 104_729 + u32::from(lcdc), ppu.oam_mut().bytes_mut());
+                }
+                ppu.scx = lcdc;
+                ppu.wx = lcdc.wrapping_mul(5);
+                let mut ints = Interrupts::default();
+                ppu.write_lcdc(lcdc, &mut ints);
+
+                let mut changes = Vec::new();
+                let (mut loop_start, mut end) = (None, None);
+                let mut locks = Locks::of(&ppu);
+                assert_eq!(locks, NONE);
+                for unit in 0..1000_u32 {
+                    let state = ppu.pace.state();
+                    let next_line =
+                        matches!(state, State::NextLine) && ppu.pace.wait == 1 && !ppu.d.half_dot;
+                    if unit > 0 && next_line {
+                        break;
+                    }
+                    ppu.run_display(&mut ints);
+                    if matches!(state, State::FirstLineVramLock)
+                        && !matches!(ppu.pace.state(), State::FirstLineVramLock)
+                    {
+                        loop_start = Some(unit);
+                    }
+                    if matches!(state, State::HBlankStart)
+                        && !matches!(ppu.pace.state(), State::HBlankStart)
+                    {
+                        end = Some(unit);
+                    }
+                    let now = Locks::of(&ppu);
+                    if now != locks {
+                        changes.push((unit, now));
+                        locks = now;
+                    }
+                }
+                let what = format!("LCDC {lcdc:02X}, OAM {seed}");
+                assert!(loop_start.is_some() && end.is_some(), "{what}: no mode 3");
+                let start = loop_start.unwrap_or_default();
+                let end = end.unwrap_or_default();
+                assert_eq!(
+                    changes,
+                    [(start - 14, OAM_WRITE), (start - 10, ALL), (end - 2, NONE)],
+                    "{what}"
+                );
+                assert!(seen.is_none_or(|s| s == start), "{what}: the loop moves");
+                seen = Some(start);
+            }
+        }
     }
 }

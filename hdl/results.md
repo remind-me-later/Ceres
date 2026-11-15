@@ -1199,8 +1199,17 @@ end early, at a mode 0 pulse (a sprite at X 167, the WX 166 glitch:
 the gate tests place the netlist's fall from the first end they see, the
 pulse. Whether render's mode 3 latch falls in the netlist's 4 ns pulse is
 not known (`locks-with-mode-0-pulse`, open): a tally of such lines on the
-netlist settles it. Left: line 0 after the LCD is turned on (both at
-h = 159).
+netlist settles it.
+
+Line 0 after the LCD is turned on, which has no scan, is proved too
+(`cpu_locks_in_first_line`, 5 s, and a test of the whole line from
+`write_lcdc` turning the LCD on, every LCDC and four kinds of OAM): OAM's
+write lock comes on 14 units before the loop starts and all four 10
+before, h = 155 and 159 with the loop at 169, the first lines' layout the
+gate tests measured; they fall as on the other lines. (15 of the trace's
+first lines also show an unlock at h = 1, most likely the trace's own: it
+looks at the locks only while the display runs, so it still holds those
+of the moment the LCD was turned off, which `lcd_off` unlocked.)
 
 OAM's gate goes the same way. `ceres-netlist`'s `tests/oam_gate.rs` runs
 93 ROMs (Gambatte's DMG `oam_access`, gbmicrotest's `oam` ROMs but the
