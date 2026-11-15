@@ -1197,9 +1197,14 @@ end early, at a mode 0 pulse (a sprite at X 167, the WX 166 glitch:
 `sprite-at-167-mode-0-pulse`). Ceres's locks fall 2 units before
 `HBlankStart` there too, 12 units after the pulse on a sprite fetch, but
 the gate tests place the netlist's fall from the first end they see, the
-pulse. Whether render's mode 3 latch falls in the netlist's 4 ns pulse is
-not known (`locks-with-mode-0-pulse`, open): a tally of such lines on the
-netlist settles it.
+pulse. On the netlist the latch holds through the pulse: `ceres-netlist`'s
+`tests/mode0_pulse.rs` runs Gambatte's 10 DMG ROMs with a sprite at X 167
+(80 s), and on all 124 pulses render's mode 3 latch (XYMU) stays up and
+falls 13, 35 or 109 edges later. So the netlist, as ceres, holds VRAM and
+OAM to the real end, and on those lines the gate tests would place the
+fall at the pulse. Whether ceres's unlock stands to that fall as on the
+other lines is not measured: no ROM accesses VRAM or OAM there
+(`locks-with-mode-0-pulse`, open; a sweep ROM settles it).
 
 Line 0 after the LCD is turned on, which has no scan, is proved too
 (`cpu_locks_in_first_line`, 5 s, and a test of the whole line from
