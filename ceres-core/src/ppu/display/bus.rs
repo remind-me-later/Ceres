@@ -128,6 +128,7 @@ impl PpuCore {
             && self.d.bus.dma_src & 0xE000 == VRAM_START
         {
             // DMAing from VRAM!
+            // @fact dma-from-vram-fetch-address
             let offset = 1 - u16::from(self.d.bus.cpu_idle);
             if self.is_cgb_hardware() {
                 if self.d.bus.dma_ppu_vram_conflict {

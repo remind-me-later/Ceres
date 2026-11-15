@@ -333,6 +333,26 @@ CGB is left to check, since there is no netlist for it.
 - **Needs:** a test ROM; a logic analyser on the cartridge bus to see who
   drives it.
 
+### A fetch while an OAM DMA reads VRAM
+
+- **Measure:** the LCD's pins (or a photograph) through Gambatte's
+  `oamdma/oamdmasrc80_halt_m2irq_read8000` and `_lycirq_read8000` on a
+  DMG-CPU B, and a ROM that starts an OAM DMA from a VRAM page of known
+  bytes at chosen dots of mode 3, over a background whose tiles differ
+  from that page.
+- **The evidence:** none: both ROMs check a byte that is the same either
+  way; only their pictures before it differ.
+- **The netlist:** puts the DMA's address alone on VRAM's lines
+  (`ma <= '0' & dma_addr` in `rtl/vram_bus.vhd`), so a fetch in mode 3
+  reads the DMA's byte.
+- **Ceres today:** ORs the DMA's address into the fetch's, as SameBoy
+  does (`ppu/display/bus.rs`).
+- **Outcomes:** the DMA's byte: ceres should put the DMA's address alone,
+  and then find where it stands as each fetch reads (`_m2irq_read8000`
+  still differs by 49 pixels with it alone). The OR: the lines fight, as
+  SameBoy has them.
+- **Needs:** a flash cart, an LCD logic analyser or a camera, a DMG-CPU B.
+
 ### A CPU read of OAM as mode 3 ends
 
 - **Measure:** Gambatte's `oam_access/postread_scx3_2` on a DMG-CPU B, and

@@ -122,6 +122,19 @@ tests = [
 ]
 note = "The model and dmg-sim copy 83 or 64."
 
+[dma-from-vram-fetch-address]
+title = "A fetch of the PPU's in mode 3 while an OAM DMA reads VRAM reads the DMA's address ORed with its own"
+models = ["dmg"]
+netlist = "differs"
+hardware = "none"
+tests = [
+  "gambatte/oamdma/oamdmasrc80_halt_lycirq_read8000_dmg08_cgb04c_out81.gbc",
+  "gambatte/oamdma/oamdmasrc80_halt_m2irq_read8000_dmg08_cgb04c_out81.gbc",
+]
+open = ["doc/hardware-tests.md#a-fetch-while-an-oam-dma-reads-vram"]
+needs = ["flash-cart", "logic-analyser-lcd", "dmg-b"]
+note = "Ceres, as SameBoy, ORs the DMA's source address into the fetch's (ppu/display/bus.rs). The netlist puts the DMA's address alone on VRAM's lines (ma <= '0' & dma_addr in hdl/rtl/vram_bus.vhd), so the fetch reads the DMA's byte. Both ROMs pass on both sides; their pictures before the result differ where the fetches meet the DMA (hdl/results.md). With the DMA's address alone, ceres's pictures of _lycirq_read8000 are the chip's, and _m2irq_read8000's still differ: where the DMA's address stands as the fetch reads differs too."
+
 # The PPU
 
 [bgp-write-in-mode-3]
