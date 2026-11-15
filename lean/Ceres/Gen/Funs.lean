@@ -661,6 +661,256 @@ def ceres_netlist.lcd_timing.NetLcd.read
   | 65349#uscalar => ok (some self.lyc)
   | _ => ok none
 
+/-- [ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::mode2]:
+    Source: 'ceres-netlist/src/oam.rs', lines 30:4-30:36
+    Name pattern: [ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::mode2]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::mode2"]
+def ceres_netlist.oam.OamInputs.mode2
+  (self : ceres_netlist.oam.OamInputs) : Result Bool := do
+  ok (self.scanning && (¬ self.run))
+
+/-- [ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::latch_open]:
+    Source: 'ceres-netlist/src/oam.rs', lines 38:4-38:41
+    Name pattern: [ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::latch_open]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::latch_open"]
+def ceres_netlist.oam.OamInputs.latch_open
+  (self : ceres_netlist.oam.OamInputs) : Result Bool := do
+  let b ← ceres_netlist.oam.OamInputs.mode2 self
+  ok ((b && (¬ self.wosu)) || self.fetch_read)
+
+/-- [ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::precharge]:
+    Source: 'ceres-netlist/src/oam.rs', lines 47:4-47:40
+    Name pattern: [ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::precharge]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::oam::{ceres_netlist::oam::OamInputs}::precharge"]
+def ceres_netlist.oam.OamInputs.precharge
+  (self : ceres_netlist.oam.OamInputs) : Result Bool := do
+  let b ← ceres_netlist.oam.OamInputs.mode2 self
+  ok ((((¬ self.run) || self.dma_phi) && (¬ self.fetch_hold)) && (¬ (b &&
+    (¬ (self.wosu && self.wuvu)))))
+
+/-- [ceres_netlist::oam::{ceres_netlist::oam::NetOamLatches}::settle]:
+    Source: 'ceres-netlist/src/oam.rs', lines 66:4-66:63
+    Name pattern: [ceres_netlist::oam::{ceres_netlist::oam::NetOamLatches}::settle]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::oam::{ceres_netlist::oam::NetOamLatches}::settle"]
+def ceres_netlist.oam.NetOamLatches.settle
+  (self : ceres_netlist.oam.NetOamLatches)
+  (inputs : ceres_netlist.oam.OamInputs) (data : Std.U8) :
+  Result ceres_netlist.oam.NetOamLatches
+  := do
+  let b ← ceres_netlist.oam.OamInputs.latch_open inputs
+  let self1 ← if b
+                then ok { self with first := data }
+                else ok self
+  let b1 ← ceres_netlist.oam.OamInputs.precharge inputs
+  if b1
+  then ok { self1 with second := self1.first }
+  else ok self1
+
+/-- [ceres_netlist::oam_scan::LAST]
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 18:0-18:14
+    Name pattern: [ceres_netlist::oam_scan::LAST] -/
+@[global_simps, irreducible, rust_const "ceres_netlist::oam_scan::LAST"]
+def ceres_netlist.oam_scan.LAST : Std.U8 := 39#u8
+
+/-- [ceres_netlist::oam_scan::SLOTS]
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 20:0-20:19
+    Name pattern: [ceres_netlist::oam_scan::SLOTS]
+    Visibility: public -/
+@[global_simps, irreducible, rust_const "ceres_netlist::oam_scan::SLOTS"]
+def ceres_netlist.oam_scan.SLOTS : Std.U8 := 10#u8
+
+/-- [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::y_match]:
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 76:4-76:59
+    Name pattern: [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::y_match]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::y_match"]
+def ceres_netlist.oam_scan.NetScan.y_match
+  (y : Std.U8) (ly : Std.U8) (tall : Bool) : Result Bool := do
+  let i ← lift (UScalar.cast .U16 y)
+  let i1 ← lift (~~~ ly)
+  let i2 ← lift (UScalar.cast .U16 i1)
+  let difference ← i + i2
+  let i3 ← lift (difference &&& 256#u16)
+  let i4 ← lift (difference &&& 240#u16)
+  let i5 ← lift (difference &&& 8#u16)
+  ok (((i3 != 0#u16) && (i4 = 0#u16)) && (tall || (i5 != 0#u16)))
+
+/-- [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::line_start]:
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 85:4-85:42
+    Name pattern: [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::line_start]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::line_start"]
+def ceres_netlist.oam_scan.NetScan.line_start
+  (self : ceres_netlist.oam_scan.NetScan) : Result Bool := do
+  ok (self.start_scan && (¬ self.anel))
+
+/-- [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::stop_scan]:
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 92:4-92:41
+    Name pattern: [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::stop_scan]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::stop_scan"]
+def ceres_netlist.oam_scan.NetScan.stop_scan
+  (self : ceres_netlist.oam_scan.NetScan) : Result Bool := do
+  let b ← ceres_netlist.oam_scan.NetScan.line_start self
+  ok ((self.byba && (¬ self.doba)) && (¬ b))
+
+/-- [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::save_enable]:
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 100:4-100:82
+    Name pattern: [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::save_enable]
+    Visibility: public -/
+@[rust_fun
+  "ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::save_enable"]
+def ceres_netlist.oam_scan.NetScan.save_enable
+  (self : ceres_netlist.oam_scan.NetScan) (wosu : Bool) (y : Std.U8)
+  (ly : Std.U8) (tall : Bool) :
+  Result Bool
+  := do
+  let b ← ceres_netlist.oam_scan.NetScan.y_match y ly tall
+  ok (((¬ wosu) && self.ceno) && b)
+
+/-- [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::save]:
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 107:4-107:81
+    Name pattern: [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::save]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::save"]
+def ceres_netlist.oam_scan.NetScan.save
+  (self : ceres_netlist.oam_scan.NetScan) (wosu : Bool) (y : Std.U8)
+  (ly : Std.U8) (tall : Bool) :
+  Result (Option Std.U8)
+  := do
+  let b ← ceres_netlist.oam_scan.NetScan.save_enable self wosu y ly tall
+  if b && (self.count < ceres_netlist.oam_scan.SLOTS)
+  then ok (some self.count)
+  else ok none
+
+/-- [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::edge]:
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 117:4-117:67
+    Name pattern: [ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::edge]
+    Visibility: public -/
+@[rust_fun "ceres_netlist::oam_scan::{ceres_netlist::oam_scan::NetScan}::edge"]
+def ceres_netlist.oam_scan.NetScan.edge
+  (self : ceres_netlist.oam_scan.NetScan)
+  (clocks : ceres_netlist.oam_scan.Clocks) (y : Std.U8) (tall : Bool) :
+  Result ceres_netlist.oam_scan.NetScan
+  := do
+  let (b, b1, b2, i, b3, b4, b5, i1) ←
+    if clocks.rising
+    then
+      ok (self.start_scan, self.anel, self.ceno, self.index, self.byba,
+        self.byba, self.not_saving, self.count)
+    else
+      do
+      let saving ←
+        ceres_netlist.oam_scan.NetScan.save_enable self clocks.wosu_before y
+          clocks.ly tall
+      let not_saving ← if saving
+                         then ok false
+                         else ok true
+      let i2 ← lift (self.count &&& 10#u8)
+      let i3 ←
+        if ((¬ saving) && (¬ self.not_saving)) && (¬ (i2 = 10#u8))
+        then self.count + 1#u8
+        else ok self.count
+      let (b6, b7, i4, b8) ←
+        if (¬ clocks.wuvu_before) && clocks.wuvu_after
+        then
+          do
+          let i5 ← lift (clocks.ly &&& 144#u8)
+          let i6 ←
+            if self.index = ceres_netlist.oam_scan.LAST
+            then ok self.index
+            else self.index + 1#u8
+          ok (clocks.vclk && (i5 != 144#u8), self.scanning, i6, self.index =
+            ceres_netlist.oam_scan.LAST)
+        else ok (self.start_scan, self.ceno, self.index, self.byba)
+      let b9 ←
+        if clocks.wuvu_before && (¬ clocks.wuvu_after)
+        then ok b6
+        else ok self.anel
+      ok (b6, b9, b7, i4, b8, self.doba, not_saving, i3)
+  let b6 ←
+    ceres_netlist.oam_scan.NetScan.line_start
+      {
+        self
+          with
+          start_scan := b,
+          anel := b1,
+          ceno := b2,
+          index := i,
+          byba := b3,
+          doba := b4,
+          not_saving := b5,
+          count := i1
+      }
+  let (i2, b7, b8, i3) ←
+    if b6
+    then ok (0#u8, false, false, 0#u8)
+    else ok (i, b3, b4, i1)
+  let b9 ←
+    ceres_netlist.oam_scan.NetScan.stop_scan
+      {
+        self
+          with
+          start_scan := b,
+          anel := b1,
+          ceno := b2,
+          index := i2,
+          byba := b7,
+          doba := b8,
+          not_saving := b5,
+          count := i3
+      }
+  if b9
+  then
+    ok
+      {
+        start_scan := b,
+        anel := b1,
+        scanning := false,
+        ceno := b2,
+        index := i2,
+        byba := b7,
+        doba := b8,
+        not_saving := b5,
+        count := i3
+      }
+  else
+    if b
+    then
+      ok
+        {
+          start_scan := b,
+          anel := b1,
+          scanning := true,
+          ceno := b2,
+          index := i2,
+          byba := b7,
+          doba := b8,
+          not_saving := b5,
+          count := i3
+        }
+    else
+      ok
+        {
+          self
+            with
+            start_scan := b,
+            anel := b1,
+            ceno := b2,
+            index := i2,
+            byba := b7,
+            doba := b8,
+            not_saving := b5,
+            count := i3
+        }
+
 /-- [ceres_netlist::timer::TAC_ENABLE_B]
     Source: 'ceres-netlist/src/timer.rs', lines 16:0-16:22
     Name pattern: [ceres_netlist::timer::TAC_ENABLE_B] -/
@@ -2588,7 +2838,7 @@ def memory.dma.check.step_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::LINE_LENGTH]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 57:0-57:40 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 59:0-59:40 -/
 @[global_simps, irreducible] def ppu.display.LINE_LENGTH : Std.I32 := 456#i32
 
 /-- [ceres_core::ppu::PX_HEIGHT]
@@ -2597,12 +2847,515 @@ def memory.dma.check.step_agrees
 @[global_simps, irreducible] def ppu.PX_HEIGHT : Std.U8 := 144#u8
 
 /-- [ceres_core::ppu::display::LINES]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 59:0-59:39 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 61:0-61:39 -/
 @[global_simps, irreducible] def ppu.display.LINES : Std.U8 := ppu.PX_HEIGHT
 
 /-- [ceres_core::ppu::display::LAST_LINE]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 61:0-61:37 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 63:0-63:37 -/
 @[global_simps, irreducible] def ppu.display.LAST_LINE : Std.U8 := 153#u8
+
+/-- [ceres_core::ppu::display::objects::check::wuvu]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 80:0-82:1 -/
+def ppu.display.objects.check.wuvu (h : Std.I32) : Result Bool := do
+  let i ← h + 912#i32
+  let i1 ← lift (i &&& 2#i32)
+  ok (i1 != 0#i32)
+
+/-- [ceres_core::ppu::display::objects::check::wosu]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 84:0-86:1 -/
+def ppu.display.objects.check.wosu (h : Std.I32) : Result Bool := do
+  let i ← h + 913#i32
+  let i1 ← lift (i &&& 2#i32)
+  ok (i1 != 0#i32)
+
+/-- [ceres_core::ppu::display::objects::check::net_edge]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 90:0-121:1 -/
+def ppu.display.objects.check.net_edge
+  (net : ppu.display.objects.check.NetSide) (h : Std.I32)
+  (line : ppu.display.objects.check.Line) (y : Std.U8) :
+  Result ppu.display.objects.check.NetSide
+  := do
+  let i ← lift (h &&& 1#i32)
+  let i1 ← h - 1#i32
+  let b ← ppu.display.objects.check.wuvu i1
+  let b1 ← ppu.display.objects.check.wuvu h
+  let b2 ← ppu.display.objects.check.wosu i1
+  let ns ←
+    ceres_netlist.oam_scan.NetScan.edge net.scan
+      {
+        rising := (i != 0#i32),
+        wuvu_before := b,
+        wuvu_after := b1,
+        wosu_before := b2,
+        vclk := ((h >= (-7)#i32) && (h <= 0#i32)),
+        ly := line.ly
+      } net.latches.second line.tall
+  let i2 ← if (¬ b) && b1
+             then ok net.scan.index
+             else ok net.scanned
+  let b3 ← ppu.display.objects.check.wosu h
+  let nol ←
+    ceres_netlist.oam.NetOamLatches.settle net.latches
+      {
+        scanning := ns.scanning,
+        run := false,
+        dma_phi := false,
+        wuvu := b1,
+        wosu := b3,
+        fetch_read := false,
+        fetch_hold := false
+      } y
+  let o ←
+    ceres_netlist.oam_scan.NetScan.save ns b3 nol.second line.ly line.tall
+  match o with
+  | none => ok { net with scan := ns, latches := nol, scanned := i2 }
+  | some slot =>
+    let i3 ← lift (UScalar.cast .Usize slot)
+    let a ← Array.update net.slots i3 (some i2)
+    ok { scan := ns, latches := nol, scanned := i2, slots := a }
+
+/-- [ceres_core::ppu::display::objects::on_line]:
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 95:0-99:1 -/
+def ppu.display.objects.on_line
+  (y : Std.U8) (line : Std.U8) (height_16 : Bool) : Result Bool := do
+  let i ← lift (UScalar.hcast .I32 y)
+  let top ← i - 16#i32
+  let line1 ← lift (UScalar.hcast .I32 line)
+  if top <= line1
+  then
+    let i1 ← if height_16
+               then ok 16#i32
+               else ok 8#i32
+    let i2 ← top + i1
+    ok (i2 > line1)
+  else ok false
+
+/-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::OamLatches}::latch]:
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 67:4-73:5 -/
+def ppu.display.objects.OamLatches.latch
+  (self : ppu.display.objects.OamLatches) (read : Option (Std.U8 × Std.U8)) :
+  Result ((Std.U8 × Std.U8) × ppu.display.objects.OamLatches)
+  := do
+  match read with
+  | none => ok ((self.y, self.x), self)
+  | some p => let (y, x) := p
+              ok (p, { y, x })
+
+/-- [ceres_core::ppu::display::objects::MAX_OBJECTS_PER_LINE]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 22:0-22:39 -/
+@[global_simps, irreducible]
+def ppu.display.objects.MAX_OBJECTS_PER_LINE : Std.Usize := 10#usize
+
+/-- [ceres_core::ppu::display::objects::check::ceres_read]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 124:0-131:1 -/
+def ppu.display.objects.check.ceres_read
+  (ceres : ppu.display.objects.check.CeresSide)
+  (line : ppu.display.objects.check.Line) (y : Std.U8) :
+  Result ppu.display.objects.check.CeresSide
+  := do
+  let ((seen, _), ol) ←
+    ppu.display.objects.OamLatches.latch ceres.latches (some (y, 0#u8))
+  let b ← ppu.display.objects.on_line seen line.ly line.tall
+  let (a, i) ←
+    if b && (ceres.found < ppu.display.objects.MAX_OBJECTS_PER_LINE)
+    then
+      do
+      let a1 ← Array.update ceres.first ceres.found (some ceres.read)
+      let i1 ← ceres.found + 1#usize
+      ok (a1, i1)
+    else ok (ceres.first, ceres.found)
+  let i1 ← ceres.read + 1#u8
+  ok { latches := ol, read := i1, first := a, found := i }
+
+/-- [ceres_core::ppu::display::objects::check::step]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 135:0-142:1 -/
+def ppu.display.objects.check.step
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide)
+  (line : ppu.display.objects.check.Line) (j : Std.U8) (y : Std.U8) :
+  Result (ppu.display.objects.check.NetSide ×
+    ppu.display.objects.check.CeresSide)
+  := do
+  let i ← lift (UScalar.hcast .I32 j)
+  let i1 ← 4#i32 * i
+  let h ← i1 - 2#i32
+  let net1 ← ppu.display.objects.check.net_edge net h line y
+  let i2 ← h + 1#i32
+  let net2 ← ppu.display.objects.check.net_edge net1 i2 line y
+  let i3 ← h + 2#i32
+  let net3 ← ppu.display.objects.check.net_edge net2 i3 line y
+  let i4 ← h + 3#i32
+  let net4 ← ppu.display.objects.check.net_edge net3 i4 line y
+  let ceres1 ← ppu.display.objects.check.ceres_read ceres line y
+  ok (net4, ceres1)
+
+/-- [ceres_core::ppu::display::objects::check::same_slot]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 146:0-152:1 -/
+def ppu.display.objects.check.same_slot
+  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some x => match b with
+              | none => ok false
+              | some y => ok (x = y)
+
+/-- [ceres_core::ppu::display::objects::check::slots_are]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 159:4-163:5 -/
+@[rust_loop_body]
+def ppu.display.objects.check.slots_are_loop.body
+  (net : ppu.display.objects.check.NetSide) (n : Std.Usize)
+  (ceres : ppu.display.objects.check.CeresSide) (ok1 : Bool) (i : Std.Usize) :
+  Result (ControlFlow (ppu.display.objects.check.CeresSide × Bool ×
+    Std.Usize) Bool)
+  := do
+  if i < 10#usize
+  then
+    let (ceres1, want) ←
+      if i < n
+      then do
+           let want1 ← Array.index_usize ceres.first i
+           ok (ceres, want1)
+      else ok (ceres, none)
+    let o ← Array.index_usize net.slots i
+    let b ← ppu.display.objects.check.same_slot o want
+    let i1 ← i + 1#usize
+    ok (cont (ceres1, ok1 && b, i1))
+  else ok (done ok1)
+
+/-- [ceres_core::ppu::display::objects::check::slots_are]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 159:4-163:5 -/
+@[rust_loop]
+def ppu.display.objects.check.slots_are_loop
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide) (n : Std.Usize) (ok1 : Bool)
+  (i : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (ceres1, ok2, i1) => ppu.display.objects.check.slots_are_loop.body net
+      n ceres1 ok2 i1)
+    (ceres, ok1, i)
+
+/-- [ceres_core::ppu::display::objects::check::slots_are]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 156:0-165:1 -/
+@[reducible]
+def ppu.display.objects.check.slots_are
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide) (n : Std.Usize) :
+  Result Bool
+  := do
+  ppu.display.objects.check.slots_are_loop net ceres n true 0#usize
+
+/-- [ceres_core::ppu::display::objects::check::unpack]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 190:0-195:1 -/
+def ppu.display.objects.check.unpack
+  (slot : Option Std.U8) : Result (Bool × Std.U8) := do
+  match slot with
+  | none => ok (false, 0#u8)
+  | some index => ok (true, index)
+
+/-- [ceres_core::ppu::display::objects::check::list_is_sound]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 173:4-184:5 -/
+@[rust_loop_body]
+def ppu.display.objects.check.list_is_sound_loop.body
+  (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
+  (ok1 : Bool) (last : Std.I32) (i2 : Std.Usize) :
+  Result (ControlFlow (Bool × Std.I32 × Std.Usize) Bool)
+  := do
+  if i2 < 10#usize
+  then
+    let o ← Array.index_usize a i2
+    let (present, index) ← ppu.display.objects.check.unpack o
+    let i3 ← lift (UScalar.hcast .I32 index)
+    let last1 ← if present
+                  then ok (UScalar.hcast .I32 index)
+                  else ok last
+    let i4 ← i2 + 1#usize
+    ok (cont (ok1 && ((((present && (i2 < i1)) && (i3 > last)) && (index < i))
+      || ((¬ present) && (i2 >= i1))), last1, i4))
+  else ok (done ok1)
+
+/-- [ceres_core::ppu::display::objects::check::list_is_sound]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 173:4-184:5 -/
+@[rust_loop]
+def ppu.display.objects.check.list_is_sound_loop
+  (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
+  (ok1 : Bool) (last : Std.I32) (i2 : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (ok2, last1, i3) => ppu.display.objects.check.list_is_sound_loop.body
+      i a i1 ok2 last1 i3)
+    (ok1, last, i2)
+
+/-- [ceres_core::ppu::display::objects::check::list_is_sound]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 169:0-186:1 -/
+@[reducible]
+def ppu.display.objects.check.list_is_sound
+  (ceres : ppu.display.objects.check.CeresSide) : Result Bool := do
+  ppu.display.objects.check.list_is_sound_loop ceres.read ceres.first
+    ceres.found (ceres.found <= ppu.display.objects.MAX_OBJECTS_PER_LINE)
+    (-1)#i32 0#usize
+
+/-- [ceres_core::ppu::display::objects::check::related]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 204:0-235:1 -/
+def ppu.display.objects.check.related
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide)
+  (line : ppu.display.objects.check.Line) (j : Std.U8) :
+  Result Bool
+  := do
+  let i ← lift (core.num.U8.wrapping_sub j 1#u8)
+  let i1 ← lift (core.num.U8.wrapping_add j 1#u8)
+  let i2 ← lift (UScalar.cast .Usize net.scan.count)
+  let i3 ←
+    lift (UScalar.cast_fromBool .Usize ((¬ net.scan.not_saving) &&
+      (net.scan.count < ceres_netlist.oam_scan.SLOTS)))
+  let saved ← i2 + i3
+  let i4 ← saved + 1#usize
+  let i5 ← saved % 10#usize
+  let o ← Array.index_usize ceres.first i5
+  let b ← ppu.display.objects.check.same_slot o (some j)
+  let b1 ← ppu.display.objects.check.slots_are net ceres saved
+  let b2 ← ppu.display.objects.check.list_is_sound ceres
+  let b3 ← ppu.display.objects.on_line net.latches.second line.ly line.tall
+  let i6 ← lift (UScalar.cast .Usize net.scan.count)
+  let b4 ← ppu.display.objects.on_line ceres.latches.y line.ly line.tall
+  ok (((((((((((((net.scan.scanning && net.scan.ceno) && (¬
+    net.scan.start_scan)) && (¬ net.scan.anel)) && (¬ net.scan.byba)) && (¬
+    net.scan.doba)) && (net.scan.index = j)) && (net.scanned = i)) &&
+    (ceres.read = i1)) && (net.latches.first = ceres.latches.y)) && (
+    line.ly < 144#u8)) && (((((ceres.found = saved) || ((ceres.found = i4) &&
+    b)) && (net.scan.count <= ceres_netlist.oam_scan.SLOTS)) && b1) && b2)) &&
+    (((¬ net.scan.not_saving) && (net.scan.count <
+    ceres_netlist.oam_scan.SLOTS)) = (b3 && (i6 <
+    ppu.display.objects.MAX_OBJECTS_PER_LINE)))) && ((b4 && (saved <
+    ppu.display.objects.MAX_OBJECTS_PER_LINE)) = ((ceres.found = i4) && b)))
+
+/-- [ceres_core::ppu::display::objects::check::step_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 239:0-246:1 -/
+def ppu.display.objects.check.step_agrees
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide)
+  (line : ppu.display.objects.check.Line) (j : Std.U8) (y : Std.U8) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.check.related net ceres line j
+  if ((j >= 2#u8) && (j <= 38#u8)) && b
+  then
+    let (net1, ceres1) ← ppu.display.objects.check.step net ceres line j y
+    let i ← j + 1#u8
+    ppu.display.objects.check.related net1 ceres1 line i
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::check::NO_SPRITES]
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 250:0-250:98 -/
+@[global_simps, irreducible]
+def ppu.display.objects.check.NO_SPRITES : Array (Option Std.U8) 10#usize :=
+  Array.make 10#usize [
+    none, none, none, none, none, none, none, none, none, none
+    ]
+
+/-- [ceres_core::ppu::display::objects::check::net_at_line_end]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 255:0-275:1 -/
+def ppu.display.objects.check.net_at_line_end
+  (count : Std.U8) (not_saving : Bool) (held : Std.U8) :
+  Result ppu.display.objects.check.NetSide
+  := do
+  ok
+    {
+      scan :=
+        {
+          start_scan := false,
+          anel := false,
+          scanning := false,
+          ceno := false,
+          index := 39#u8,
+          byba := true,
+          doba := true,
+          not_saving,
+          count
+        },
+      latches := { first := held, second := held },
+      scanned := 39#u8,
+      slots := ppu.display.objects.check.NO_SPRITES
+    }
+
+/-- [ceres_core::ppu::display::objects::check::ceres_at_line_end]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 278:0-285:1 -/
+def ppu.display.objects.check.ceres_at_line_end
+  (held : Std.U8) : Result ppu.display.objects.check.CeresSide := do
+  ok
+    {
+      latches := { y := held, x := 0#u8 },
+      read := 0#u8,
+      first := ppu.display.objects.check.NO_SPRITES,
+      found := 0#usize
+    }
+
+/-- [ceres_core::ppu::display::objects::check::lead_in]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 291:0-309:1 -/
+def ppu.display.objects.check.lead_in
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide)
+  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 4#usize) :
+  Result (ppu.display.objects.check.NetSide ×
+    ppu.display.objects.check.CeresSide)
+  := do
+  let y39 ← Array.index_usize ys 0#usize
+  let y0 ← Array.index_usize ys 1#usize
+  let y1 ← Array.index_usize ys 2#usize
+  let y2 ← Array.index_usize ys 3#usize
+  let net1 ← ppu.display.objects.check.net_edge net (-7)#i32 line y39
+  let net2 ← ppu.display.objects.check.net_edge net1 (-6)#i32 line y0
+  let net3 ← ppu.display.objects.check.net_edge net2 (-5)#i32 line y0
+  let net4 ← ppu.display.objects.check.net_edge net3 (-4)#i32 line y0
+  let net5 ← ppu.display.objects.check.net_edge net4 (-3)#i32 line y0
+  let ceres1 ← ppu.display.objects.check.ceres_read ceres line y0
+  let net6 ← ppu.display.objects.check.net_edge net5 (-2)#i32 line y1
+  let net7 ← ppu.display.objects.check.net_edge net6 (-1)#i32 line y1
+  let net8 ← ppu.display.objects.check.net_edge net7 0#i32 line y1
+  let net9 ← ppu.display.objects.check.net_edge net8 1#i32 line y1
+  let ceres2 ← ppu.display.objects.check.ceres_read ceres1 line y1
+  let net10 ← ppu.display.objects.check.net_edge net9 2#i32 line y2
+  let net11 ← ppu.display.objects.check.net_edge net10 3#i32 line y2
+  let net12 ← ppu.display.objects.check.net_edge net11 4#i32 line y2
+  let net13 ← ppu.display.objects.check.net_edge net12 5#i32 line y2
+  let ceres3 ← ppu.display.objects.check.ceres_read ceres2 line y2
+  ok (net13, ceres3)
+
+/-- [ceres_core::ppu::display::objects::check::lead_in_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 313:0-327:1 -/
+def ppu.display.objects.check.lead_in_agrees
+  (count : Std.U8) (not_saving : Bool) (held : Std.U8)
+  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 4#usize) :
+  Result Bool
+  := do
+  if (count <= ceres_netlist.oam_scan.SLOTS) && (line.ly < 144#u8)
+  then
+    let net ← ppu.display.objects.check.net_at_line_end count not_saving held
+    let ceres ← ppu.display.objects.check.ceres_at_line_end held
+    let (net1, ceres1) ← ppu.display.objects.check.lead_in net ceres line ys
+    ppu.display.objects.check.related net1 ceres1 line 2#u8
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::check::tail]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 333:4-336:5 -/
+@[rust_loop_body]
+def ppu.display.objects.check.tail_loop.body
+  (line : ppu.display.objects.check.Line) (y39 : Std.U8)
+  (net : ppu.display.objects.check.NetSide) (h : Std.I32) :
+  Result (ControlFlow (ppu.display.objects.check.NetSide × Std.I32)
+    ppu.display.objects.check.NetSide)
+  := do
+  if h <= 161#i32
+  then
+    let net1 ← ppu.display.objects.check.net_edge net h line y39
+    let h1 ← h + 1#i32
+    ok (cont (net1, h1))
+  else ok (done net)
+
+/-- [ceres_core::ppu::display::objects::check::tail]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 333:4-336:5 -/
+@[rust_loop]
+def ppu.display.objects.check.tail_loop
+  (net : ppu.display.objects.check.NetSide)
+  (line : ppu.display.objects.check.Line) (y39 : Std.U8) (h : Std.I32) :
+  Result ppu.display.objects.check.NetSide
+  := do
+  loop
+    (fun (net1, h1) => ppu.display.objects.check.tail_loop.body line y39 net1
+      h1)
+    (net, h)
+
+/-- [ceres_core::ppu::display::objects::check::tail]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 331:0-337:1 -/
+@[reducible]
+def ppu.display.objects.check.tail
+  (net : ppu.display.objects.check.NetSide)
+  (line : ppu.display.objects.check.Line) (y39 : Std.U8) :
+  Result ppu.display.objects.check.NetSide
+  := do
+  ppu.display.objects.check.tail_loop net line y39 154#i32
+
+/-- [ceres_core::ppu::display::objects::check::tail_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 342:0-360:1 -/
+def ppu.display.objects.check.tail_agrees
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide)
+  (line : ppu.display.objects.check.Line) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.check.related net ceres line 39#u8
+  if b
+  then
+    let net1 ← ppu.display.objects.check.tail net line ceres.latches.y
+    let b1 ← ppu.display.objects.check.slots_are net1 ceres ceres.found
+    ok ((((((((((¬ net1.scan.scanning) && (net1.scan.index = 39#u8)) &&
+      (net1.scanned = 39#u8)) && net1.scan.byba) && net1.scan.doba) && (¬
+      net1.scan.start_scan)) && (¬ net1.scan.anel)) && (¬ net1.scan.ceno)) &&
+      (net1.scan.count <= ceres_netlist.oam_scan.SLOTS)) && b1)
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::check::scan]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 376:4-379:5 -/
+@[rust_loop_body]
+def ppu.display.objects.check.scan_loop.body
+  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize)
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide) (j : Std.U8) :
+  Result (ControlFlow (ppu.display.objects.check.NetSide ×
+    ppu.display.objects.check.CeresSide × Std.U8)
+    (ppu.display.objects.check.NetSide × ppu.display.objects.check.CeresSide))
+  := do
+  if j <= 38#u8
+  then
+    let i ← lift (UScalar.cast .Usize j)
+    let i1 ← i + 1#usize
+    let i2 ← Array.index_usize ys i1
+    let (net1, ceres1) ← ppu.display.objects.check.step net ceres line j i2
+    let j1 ← j + 1#u8
+    ok (cont (net1, ceres1, j1))
+  else ok (done (net, ceres))
+
+/-- [ceres_core::ppu::display::objects::check::scan]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 376:4-379:5 -/
+@[rust_loop]
+def ppu.display.objects.check.scan_loop
+  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize)
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide) (j : Std.U8) :
+  Result (ppu.display.objects.check.NetSide ×
+    ppu.display.objects.check.CeresSide)
+  := do
+  loop
+    (fun (net1, ceres1, j1) => ppu.display.objects.check.scan_loop.body line ys
+      net1 ceres1 j1)
+    (net, ceres, j)
+
+/-- [ceres_core::ppu::display::objects::check::scan]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 365:0-384:1 -/
+def ppu.display.objects.check.scan
+  (count : Std.U8) (not_saving : Bool) (held : Std.U8)
+  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize) :
+  Result (ppu.display.objects.check.NetSide ×
+    ppu.display.objects.check.CeresSide)
+  := do
+  let net ← ppu.display.objects.check.net_at_line_end count not_saving held
+  let ceres ← ppu.display.objects.check.ceres_at_line_end held
+  let i ← Array.index_usize ys 39#usize
+  let i1 ← Array.index_usize ys 0#usize
+  let i2 ← Array.index_usize ys 1#usize
+  let i3 ← Array.index_usize ys 2#usize
+  let (net1, ceres1) ←
+    ppu.display.objects.check.lead_in net ceres line
+      (Array.make 4#usize [ i, i1, i2, i3 ])
+  let (net2, ceres2) ←
+    ppu.display.objects.check.scan_loop line ys net1 ceres1 2#u8
+  let net3 ← ppu.display.objects.check.tail net2 line ceres2.latches.y
+  ok (net3, ceres2)
 
 /-- [ceres_core::ppu::display::timing::check::LCDC_EARLY]
     Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 82:0-82:25 -/
@@ -3069,7 +3822,7 @@ def ppu.display.timing.LcdTiming.update_line
   else ok (false, { self with stat_line := line })
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_off]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 545:4-553:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 546:4-554:5 -/
 def ppu.display.timing.LcdTiming.turn_off
   (self : ppu.display.timing.LcdTiming) :
   Result ppu.display.timing.LcdTiming
@@ -3089,7 +3842,7 @@ def ppu.display.timing.LcdTiming.turn_off
   ok self1
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_on]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 516:4-529:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 517:4-530:5 -/
 def ppu.display.timing.LcdTiming.turn_on
   (self : ppu.display.timing.LcdTiming) (phases : ppu.display.timing.Phases) :
   Result (Bool × ppu.display.timing.LcdTiming)
@@ -3412,7 +4165,7 @@ def ppu.display.timing.RESYNC_H : Result Std.I32 := do
   i - 19#i32
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::resync]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 538:4-541:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 539:4-542:5 -/
 def ppu.display.timing.LcdTiming.resync
   (self : ppu.display.timing.LcdTiming) (line : Std.U8) :
   Result ppu.display.timing.LcdTiming
@@ -3435,7 +4188,7 @@ def ppu.display.timing.check.ceres_unit
   else ok (rose, t1, ahead)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::mode3_end]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 532:4-534:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 533:4-535:5 -/
 def ppu.display.timing.LcdTiming.mode3_end
   (self : ppu.display.timing.LcdTiming) :
   Result ppu.display.timing.LcdTiming
@@ -3464,7 +4217,7 @@ def ppu.display.timing.check.ceres_half_dot
   ppu.display.timing.check.ceres_unit t1 ahead
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_lyc]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 641:4-651:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 642:4-652:5 -/
 def ppu.display.timing.LcdTiming.write_lyc
   (self : ppu.display.timing.LcdTiming) (val : Std.U8)
   (delays : ppu.display.timing.Delays) :
@@ -3482,7 +4235,7 @@ def ppu.display.timing.LcdTiming.write_lyc
   else ok { self with lyc := val, lyc_pending := none }
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 617:4-636:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 618:4-637:5 -/
 def ppu.display.timing.LcdTiming.write_stat
   (self : ppu.display.timing.LcdTiming) (val : Std.U8)
   (delays : ppu.display.timing.Delays) :
@@ -3590,7 +4343,7 @@ def ppu.display.timing.LcdTiming.read_mode
       else ok 0#u8
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 598:8-609:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 599:8-610:9 -/
 @[rust_loop_body]
 def ppu.display.timing.LcdTiming.read_stat_loop.body
   (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
@@ -3631,7 +4384,7 @@ def ppu.display.timing.LcdTiming.read_stat_loop.body
   else ok (done (lyc_flag, mode))
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 598:8-609:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 599:8-610:9 -/
 @[rust_loop]
 def ppu.display.timing.LcdTiming.read_stat_loop
   (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
@@ -3646,7 +4399,7 @@ def ppu.display.timing.LcdTiming.read_stat_loop
     (t, lyc_flag, mode, k)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 581:4-611:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 582:4-612:5 -/
 def ppu.display.timing.LcdTiming.read_stat
   (self : ppu.display.timing.LcdTiming) (stat : Std.U8)
   (delays : ppu.display.timing.Delays) (double_speed : Bool) :
@@ -3682,7 +4435,7 @@ def ppu.display.timing.LcdTiming.read_stat
     ok (enables ||| i2)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 564:8-568:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 565:8-569:9 -/
 @[rust_loop_body]
 def ppu.display.timing.LcdTiming.read_ly_loop.body
   (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
@@ -3698,7 +4451,7 @@ def ppu.display.timing.LcdTiming.read_ly_loop.body
   else ok (done (t, before))
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 564:8-568:9 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 565:8-569:9 -/
 @[rust_loop]
 def ppu.display.timing.LcdTiming.read_ly_loop
   (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
@@ -3711,7 +4464,7 @@ def ppu.display.timing.LcdTiming.read_ly_loop
     (t, before, k)
 
 /-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 558:4-575:5 -/
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 559:4-576:5 -/
 def ppu.display.timing.LcdTiming.read_ly
   (self : ppu.display.timing.LcdTiming) (delays : ppu.display.timing.Delays) :
   Result Std.U8

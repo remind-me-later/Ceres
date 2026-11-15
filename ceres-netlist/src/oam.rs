@@ -53,7 +53,7 @@ impl OamInputs {
 ///
 /// The first take the data lines while they are open, the second the first
 /// while the RAM is precharged; the scan's comparator sees the second.
-#[derive(PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct NetOamLatches {
     pub first: u8,
     pub second: u8,

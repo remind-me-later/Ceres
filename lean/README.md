@@ -50,6 +50,16 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   pipeline's, the same on both sides); it leaves out turning the LCD on
   with LYC 0, its enable on and the flag clear (Kani's `netlist_lcd_on`
   pins that case down).
+- `Ceres/Bisim/Scan.lean`: the OAM scan, cut into one sprite's window
+  (`ceres-core/src/ppu/display/objects/check.rs`): Kani proves the window
+  from every related pair (`netlist_scan_step`, `KaniScanStep`), the
+  scan's start from the line's end (`netlist_scan_lead_in`) and its end
+  (`netlist_scan_tail`), each in seconds; Lean carries the window over
+  windows 2 to 38 (`scan_loop_related`, by induction, with Aeneas's `step`
+  tactic) and puts the three together: a whole scan of a visible line,
+  with any Ys, leaves ceres's first ten sprites in the netlist's slots, and
+  the scan stopped (`scan_agrees`). It is not wired into the chip's outline
+  yet, where the sprite store is part of mode 3's hypothesis.
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).

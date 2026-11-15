@@ -1,8 +1,9 @@
 #!/bin/sh
 # Translates what ceres-core's Kani proofs prove for every argument,
 # timing::check::step_agrees, interrupts::check::step_agrees,
-# memory::dma::check::step_agrees, ppu::display::timing::check::step_agrees
-# and check::in_sequence, with what they
+# memory::dma::check::step_agrees, ppu::display::timing::check::step_agrees,
+# ppu::display::objects::check's step_agrees, lead_in_agrees, tail_agrees
+# and scan, and check::in_sequence, with what they
 # call (ceres-netlist's transcriptions included), to Lean: Ceres/Gen.
 #
 #   translate.sh         write Ceres/Gen
@@ -37,6 +38,10 @@ CARGO_TARGET_DIR=$ROOT/target/charon "$CHARON" cargo --preset=aeneas \
 	--start-from crate::check::in_sequence \
 	--start-from crate::memory::dma::check::step_agrees \
 	--start-from crate::ppu::display::timing::check::step_agrees \
+	--start-from crate::ppu::display::objects::check::step_agrees \
+	--start-from crate::ppu::display::objects::check::lead_in_agrees \
+	--start-from crate::ppu::display::objects::check::tail_agrees \
+	--start-from crate::ppu::display::objects::check::scan \
 	--include ceres_netlist \
 	--dest-file "$work/ceres.llbc" -- -p ceres-core --features check >"$work/charon.log" 2>&1 || {
 	tail -n 30 "$work/charon.log" >&2

@@ -256,6 +256,18 @@ evidence = "proved"
 title = "Ceres's object search keeps the first ten sprites on the line: a step adds a sprite when it is on the line and the list has room"
 evidence = "proved"
 
+[scan-step-agrees]
+title = "ppu::display::objects::check::step_agrees holds for every argument: from every pair related at a window of the OAM scan (2 to 38), the netlist's four edges and ceres's read of the next sprite leave the pair related at the next window"
+evidence = "proved"
+
+[scan-lead-in-agrees]
+title = "ppu::display::objects::check::lead_in_agrees holds for every argument: from the line's end, the scan's first windows leave the pair related at window 2"
+evidence = "proved"
+
+[scan-tail-agrees]
+title = "ppu::display::objects::check::tail_agrees holds for every argument: from a pair related at window 39, the netlist's scan stops with ceres's first ten sprites in its slots"
+evidence = "proved"
+
 # What the proofs leave out
 
 [scan-match-only-in-the-store]

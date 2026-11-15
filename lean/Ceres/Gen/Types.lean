@@ -102,6 +102,58 @@ structure ceres_netlist.lcd_timing.NetLcd where
   lyc_match : Bool
   stat_enable : Std.U8
 
+/-- [ceres_netlist::oam::OamInputs]
+    Source: 'ceres-netlist/src/oam.rs', lines 13:0-13:20
+    Name pattern: [ceres_netlist::oam::OamInputs]
+    Visibility: public -/
+@[rust_type "ceres_netlist::oam::OamInputs"]
+structure ceres_netlist.oam.OamInputs where
+  scanning : Bool
+  run : Bool
+  dma_phi : Bool
+  wuvu : Bool
+  wosu : Bool
+  fetch_read : Bool
+  fetch_hold : Bool
+
+/-- [ceres_netlist::oam::NetOamLatches]
+    Source: 'ceres-netlist/src/oam.rs', lines 57:0-57:24
+    Name pattern: [ceres_netlist::oam::NetOamLatches]
+    Visibility: public -/
+@[rust_type "ceres_netlist::oam::NetOamLatches"]
+structure ceres_netlist.oam.NetOamLatches where
+  first : Std.U8
+  second : Std.U8
+
+/-- [ceres_netlist::oam_scan::Clocks]
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 26:0-26:17
+    Name pattern: [ceres_netlist::oam_scan::Clocks]
+    Visibility: public -/
+@[rust_type "ceres_netlist::oam_scan::Clocks"]
+structure ceres_netlist.oam_scan.Clocks where
+  rising : Bool
+  wuvu_before : Bool
+  wuvu_after : Bool
+  wosu_before : Bool
+  vclk : Bool
+  ly : Std.U8
+
+/-- [ceres_netlist::oam_scan::NetScan]
+    Source: 'ceres-netlist/src/oam_scan.rs', lines 39:0-39:18
+    Name pattern: [ceres_netlist::oam_scan::NetScan]
+    Visibility: public -/
+@[rust_type "ceres_netlist::oam_scan::NetScan"]
+structure ceres_netlist.oam_scan.NetScan where
+  start_scan : Bool
+  anel : Bool
+  scanning : Bool
+  ceno : Bool
+  index : Std.U8
+  byba : Bool
+  doba : Bool
+  not_saving : Bool
+  count : Std.U8
+
 /-- [ceres_netlist::timer::Reg]
     Source: 'ceres-netlist/src/timer.rs', lines 20:0-20:12
     Name pattern: [ceres_netlist::timer::Reg]
@@ -245,6 +297,34 @@ def memory.dma.Dma.write.closure := Std.U16
 inductive memory.dma.DmaStep where
 | Copy : Std.U16 → Std.U8 → memory.dma.DmaStep
 | Pause : Option (Std.U16 × Std.U8) → memory.dma.DmaStep
+
+/-- [ceres_core::ppu::display::objects::check::Line]
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 51:0-54:1 -/
+structure ppu.display.objects.check.Line where
+  ly : Std.U8
+  tall : Bool
+
+/-- [ceres_core::ppu::display::objects::check::NetSide]
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 60:0-65:1 -/
+structure ppu.display.objects.check.NetSide where
+  scan : ceres_netlist.oam_scan.NetScan
+  latches : ceres_netlist.oam.NetOamLatches
+  scanned : Std.U8
+  slots : Array (Option Std.U8) 10#usize
+
+/-- [ceres_core::ppu::display::objects::OamLatches]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 57:0-60:1 -/
+structure ppu.display.objects.OamLatches where
+  y : Std.U8
+  x : Std.U8
+
+/-- [ceres_core::ppu::display::objects::check::CeresSide]
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 70:0-75:1 -/
+structure ppu.display.objects.check.CeresSide where
+  latches : ppu.display.objects.OamLatches
+  read : Std.U8
+  first : Array (Option Std.U8) 10#usize
+  found : Std.Usize
 
 /-- [ceres_core::ppu::display::timing::check::Access]
     Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 60:0-68:1 -/

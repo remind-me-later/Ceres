@@ -1,6 +1,8 @@
 //! Objects: the mode 2 search for the objects on the line and the state of
 //! the object fetch in mode 3.
 
+#[cfg(any(kani, feature = "check"))]
+pub(crate) mod check;
 #[cfg(kani)]
 mod netlist_proofs;
 

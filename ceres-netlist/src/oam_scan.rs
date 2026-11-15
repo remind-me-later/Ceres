@@ -122,7 +122,11 @@ impl NetScan {
             // @hw die: DEZY (dffr): the save as the clock falls
             let saving = self.save_enable(clocks.wosu_before, y, clocks.ly, tall);
             let not_saving_rose = !saving & !self.not_saving;
-            self.not_saving = !saving;
+            // Not `!saving`: Aeneas prints it as a proposition in the tuple of
+            // the branch's results, where Lean needs a Bool.
+            #[expect(clippy::needless_bool, reason = "the Lean translation (above)")]
+            let not_saving = if saving { false } else { true };
+            self.not_saving = not_saving;
             let full = self.count & 0b1010 == 0b1010;
             if not_saving_rose & !full {
                 // @hw die: BESE..DYBE (dffr)
