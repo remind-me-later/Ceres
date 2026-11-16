@@ -173,6 +173,7 @@ fn roms(root: &Path) -> Vec<String> {
         .collect()
 }
 
+#[expect(clippy::too_many_lines, reason = "one run, its checks edge by edge")]
 fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
     let mut run = Run::new(rom, boot);
     let mut found = Found {
