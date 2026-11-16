@@ -87,8 +87,10 @@ impl Ghost {
             self.window
         };
         if window != 0 {
+            // At WX 0 the window can start before SCX's discard, and the
+            // lead-in run on in it, back to its start too.
             return Self {
-                rerun: self.rerun,
+                rerun: self.rerun | ((position == pos(-9)) & (pace.bg.position == pos(-16))),
                 window,
                 window_fine: if fired {
                     (fine_of(before.len) + 1) & 7
@@ -150,8 +152,13 @@ pub(super) const fn fetching(pace: &Pace) -> bool {
 /// the netlist's latch holds), and the ghost.
 pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     match window_phase(l, g) {
-        WindowPhase::Starting { dot, fine } => return window_starting_ok(l, g, dot, fine),
-        WindowPhase::Inside => return window_inside_ok(l, g),
+        WindowPhase::Starting { dot, fine } => {
+            return window_starting_ok(l, latched, g, dot, fine);
+        }
+        WindowPhase::Inside => return window_inside_ok(l, latched, g),
+        WindowPhase::Armed if matches!(l.pace.state, State::Mode3WindowDelay) => {
+            return window_delay_ok(l, g);
+        }
         WindowPhase::Off | WindowPhase::Armed => {}
     }
     let bg = &l.pace.bg;
@@ -166,16 +173,6 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         & (g.since_push <= 2)
         & (g.extra <= 2)
         & (g.age <= 7);
-    let round = if p <= LAST_UNMATCHED {
-        // Unmatched: the position has gained a pixel for each one the FIFO
-        // lost since the round began, at -16 with the FIFO full.
-        first_round(bg)
-            & ((p > LEAD_IN) | g.rerun)
-            & (p + i16::from(len) == LEAD_IN + i16::from(FULL))
-    } else {
-        // Matched: the position jumped to -8 and gained a pixel.
-        !first_round(bg) | (p > -8)
-    };
     // No object before the first pixel: the ghost rests in the lead-in.
     let lead_in = (p >= 0)
         | (g == Ghost {
@@ -196,13 +193,55 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
             g.age >= fine_of(net_len)
         };
     shapes
-        & round
+        & lead_in_ok(p, len, latched, l.mixer_scx, g.rerun)
         & lead_in
         & fetcher_ahead
         & ghost_ok(&l.pace, g)
         & fetch_age_ok(&l.pace, g)
         & objects_ok(l, g)
-        & pending_compares(bg, latched, l.mixer_scx, g.rerun)
+        // Armed at WX 0, ceres's check fires in the line's first dot, or
+        // matched SCX and reaches WX in its second (`window_delay_ok`).
+        & (!l.window_enabled | (l.wx != 0) | (p == LAST_DISCARDED - 1))
+}
+
+/// The lead-in from its start (at -16, the FIFO full) at position `p` with
+/// `len` pixels of the tile left: unmatched, the position has gained a pixel
+/// for each one the FIFO lost since the round began (at its start again only
+/// on a `rerun`); matched, the position jumped to -8 and gained a pixel. The
+/// netlist's compares still to come go as ceres's went (`pending_compares`).
+pub(super) const fn lead_in_ok(p: i16, len: u8, latched: u8, mixer_scx: u8, rerun: bool) -> bool {
+    let first_round = p + len as i16 <= 0;
+    let round = if p <= LAST_UNMATCHED {
+        first_round & ((p > LEAD_IN) | rerun) & (p + len as i16 == LEAD_IN + FULL as i16)
+    } else {
+        !first_round | (p > -8)
+    };
+    round & pending_compares(p, len, latched, mixer_scx, rerun)
+}
+
+/// Ceres's line at WX 0 after its first dot, with SCX's low bits not 0: its
+/// check fired at the lead-in's start, cleared the FIFO, and waits a dot to
+/// start the window (`Mode3WindowDelay`). The netlist drew a pixel of its
+/// first round (the ghost's `extra`), and its fetcher is the first fetch's.
+pub(super) fn window_delay_ok(l: &Mode3Loop, g: Ghost) -> bool {
+    let bg = &l.pace.bg;
+    (l.wx == 0)
+        & (l.pace.wait == 1)
+        & (signed(bg.position) == LEAD_IN)
+        & bg.fifo.is_empty()
+        & matches_step(bg.step, FetcherStep::GetTileT1)
+        & !bg.insert_blank
+        & !l.pace.window.being_fetched
+        & (l.mixer_scx & 7 != 0)
+        & (g == Ghost {
+            since_push: 2,
+            extra: 1,
+            frozen: false,
+            age: 7,
+            ..Ghost::at_rest(bg)
+        })
+        // Nothing drawn: the objects as the line started.
+        & objects_ok(l, Ghost::at_rest(bg))
 }
 
 /// The ghost with nothing fetched, as the window's phases keep it.
@@ -382,17 +421,17 @@ pub(super) const fn fetcher_ok(pace: &Pace, g: Ghost) -> bool {
 /// last two dots compared, the one before with `latched` (its count is then
 /// 6 minus the FIFO's length), the last with `mixer_scx`: each matches if
 /// and only if ceres's did. Its first fetch not done (the FIFO's first pixel
-/// popped, `first_round`), its next dot does not compare.
+/// popped, `first_round`), its next dot does not compare. Ceres at position
+/// `p`, `len` pixels of its tile left.
 pub(super) const fn pending_compares(
-    bg: &Background,
+    p: i16,
+    len: u8,
     latched: u8,
     mixer_scx: u8,
     rerun: bool,
 ) -> bool {
-    let p = signed(bg.position);
-    let len = bg.fifo.len();
     let count = FINE_AHEAD.wrapping_sub(len) & 7;
-    let compares = !(first_round(bg) & !rerun & (len == FULL - 1));
+    let compares = !((p + len as i16 <= 0) & !rerun & (len == FULL - 1));
     let next = compares & (count == latched & 7);
     let after = (count + 1) & 7 == mixer_scx & 7;
     if p > LAST_DISCARDED {

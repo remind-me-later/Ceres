@@ -565,7 +565,12 @@ fn netlist_mode3_armed_high() {
 /// the loop sleeps after a pixel, or has drawn the line.
 fn window_dot(window: Option<u8>) {
     let mut l = any_loop();
-    l.pace.state = if kani::any() {
+    // At WX 0 with SCX's low bits not 0, the check fired in the line's
+    // first dot and the loop waits a dot (`relation::window_delay_ok`).
+    let delay = (window == Some(0)) & kani::any::<bool>();
+    l.pace.state = if delay {
+        State::Mode3WindowDelay
+    } else if kani::any() {
         State::Mode3Pixel
     } else {
         State::HBlankStart
@@ -586,12 +591,18 @@ fn window_dot(window: Option<u8>) {
     let p = super::relation::signed(l.pace.bg.position);
     if g.window == 0 {
         g.window_fine = 0;
-        kani::assume(p + 7 == i16::from(l.wx));
+        kani::assume((p + 7 == i16::from(l.wx)) | delay);
     }
     let mut net = expected(&l, &any_carried(&l), g);
     let related = related_but_pipeline(&l, &net, g);
     let drawn = matches!(l.pace.state, State::HBlankStart);
-    kani::cover!(related & (g.window == 0), "the check reaches WX");
+    kani::cover!(related & (g.window == 0) & !delay, "the check reaches WX");
+    kani::cover!(related & delay, "the window waits for SCX's discard");
+    kani::cover!(
+        related & (l.wx == 0) & (g.window != 0) & (p < -7),
+        "the lead-in in the window"
+    );
+    kani::cover!(related & l.pace.bg.insert_blank, "a blank pixel inserted");
     kani::cover!(related & (g.window == 1), "the window's first dot");
     kani::cover!(related & (g.window == 6), "the window's row pushed");
     kani::cover!(related & (g.window == 9), "the start's last dot");
@@ -645,6 +656,7 @@ fn netlist_mode3_window_starting() {
 /// A dot from every related pair in the window, past its start.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
+// @assumes wx0-lead-in-matches
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-window-start
 #[kani::proof]

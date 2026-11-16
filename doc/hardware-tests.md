@@ -277,6 +277,23 @@ CGB is left to check, since there is no netlist for it.
   against the pixel clock; likely the same cause.
 - **Needs:** a logic analyser on the LCD connector.
 
+### The window at WX 0 when SCX's discard does not match
+
+- **Measure:** with the window at WX 0 and SCX's low bits not 0, write SCX
+  as the line's lead-in runs in the window so that its low bits miss the
+  eight pixels' (from 7 to 3 four dots in, say), and photograph the line;
+  then the same write a cycle at a time.
+- **The evidence:** none; no test ROM writes SCX there.
+- **The netlist:** its fine scroll counts to 7 and waits there, comparing
+  each dot, until SCX's low bits are 7; then the window's pixels follow.
+- **Ceres today:** follows SameBoy: the lead-in goes back to its start and
+  discards up to eight pixels more, so the window's pixels come later. The
+  proofs leave the case out (`wx0-lead-in-matches`).
+- **Outcomes:** if the screen shows the netlist's line, ceres's lead-in must
+  wait at its end in the window too; if ceres's, the netlist's fine scroll is
+  not the die's.
+- **Needs:** a flash cartridge and a camera.
+
 ### Enabling the timer with TAC
 
 - **Measure:** write TAC to enable the timer, with the old and the new selected

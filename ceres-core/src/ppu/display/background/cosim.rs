@@ -318,7 +318,9 @@ fn idle_lines_stay_related() {
 #[test]
 fn armed_lines_stay_related_up_to_wx() {
     for scx in 0..8 {
-        for wx in [1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16, 17, 50, 100, 159, 165] {
+        for wx in [
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16, 17, 50, 100, 159, 165,
+        ] {
             let mut w = Walk::start(&Line {
                 scx,
                 wx: Some(wx),
@@ -339,7 +341,7 @@ fn armed_lines_stay_related_up_to_wx() {
 #[test]
 fn window_lines_stay_related() {
     for scx in 0..8 {
-        for wx in 1..=165 {
+        for wx in 0..=165 {
             let mut w = Walk::start(&Line {
                 scx,
                 wx: Some(wx),
@@ -446,8 +448,9 @@ impl Walk {
         self.net.win_y = free.byte();
         self.l.pace.bg.fractional = free.flag();
         // The window's first dot takes the rerun (its pixel in the first
-        // round or not); from the second on, nothing does.
-        if self.g.window > 1 {
+        // round or not); from the second on, nothing does but WX 0's
+        // lead-in.
+        if self.g.window > 1 && self.l.wx != 0 {
             self.g.rerun = free.flag();
         }
         let quiet = inputs(&self.l, false);
@@ -484,10 +487,17 @@ impl Walk {
         let mut rising = free.inputs(&self.l, true, scx);
         let mut falling = free.inputs(&self.l, false, scx);
         if self.g.window != 0 && free.flag() {
+            // At WX 0 the lead-in may run in the window, and compares with
+            // the mixer's SCX: one the pair is related with.
+            let last = self.l.mixer_scx;
             self.l.mixer_scx = free.byte();
-            rising.cpu_wr_sync = true;
-            rising.addr = SCX;
-            rising.data = self.l.mixer_scx;
+            if self.l.wx == 0 && !self.related() {
+                self.l.mixer_scx = last;
+            } else {
+                rising.cpu_wr_sync = true;
+                rising.addr = SCX;
+                rising.data = self.l.mixer_scx;
+            }
         }
         if rising.cpu_wr_sync && rising.addr == SCX {
             // The bus holds what the strobe carries.
@@ -528,9 +538,15 @@ impl Walk {
 fn window_dots_with_free_inputs() {
     let mut free = Free(0x9E37_79B9_7F4A_7C15);
     for wx in [
-        1, 2, 3, 4, 5, 6, 7, 20, 21, 22, 23, 24, 25, 26, 27, 164, 165,
+        0, 1, 2, 3, 4, 5, 6, 7, 20, 21, 22, 23, 24, 25, 26, 27, 164, 165,
     ] {
-        for scx in [0, 3, 5] {
+        // At WX 0 SCX decides where the window starts: every one.
+        let scxs: &[u8] = if wx == 0 {
+            &[0, 1, 2, 3, 4, 5, 6, 7]
+        } else {
+            &[0, 3, 5]
+        };
+        for &scx in scxs {
             let line = Line {
                 scx,
                 wx: Some(wx),
@@ -597,7 +613,7 @@ fn lines_start_as_start_agrees_takes_them() {
                 objects,
             });
         }
-        for wx in 1..=165 {
+        for wx in 0..=165 {
             lines.push(Line {
                 scx,
                 wx: Some(wx),
@@ -620,5 +636,63 @@ fn lines_start_as_start_agrees_takes_them() {
             start_agrees(&mut w.l, &mut w.net, line.scx, rising, falling),
             "{what}"
         );
+    }
+}
+
+/// WX 0's lines with SCX written at random dots (its low bits a dot later on
+/// the netlist's latch, as `mapping-scx-write` has it): the lead-in may run
+/// in the window, match late or go back to its start, and the two sides
+/// stay related at every dot.
+#[test]
+fn wx0_lines_with_scx_written() {
+    let mut free = Free(0x2545_F491_4F6C_DD1D);
+    for trial in 0..4000 {
+        let scx = free.byte() & 7;
+        let mut w = Walk::start(&Line {
+            scx,
+            wx: Some(0),
+            objects: &[],
+        });
+        w.first_dot();
+        let mut strobe = None;
+        loop {
+            assert!(w.related(), "trial {trial}, SCX {scx}\n{}", w.table);
+            let mut mixer = free.byte().is_multiple_of(4).then(|| free.byte());
+            if matches!(w.l.pace.state, State::HBlankStart) {
+                break;
+            }
+            // The lead-in in the window matches at -9 at the latest
+            // (`relation::lead_in_matches`).
+            if w.l.pace.window.wx_triggered && signed(w.l.pace.bg.position) == -9 {
+                mixer = Some(mixer.unwrap_or(w.l.mixer_scx) | 7);
+            }
+            w.dot_writing(mixer, strobe);
+            strobe = mixer;
+        }
+    }
+}
+
+impl Walk {
+    /// A dot in which the mixer takes `mixer`, if given, and the bus's
+    /// strobe writes `strobe`, if given.
+    fn dot_writing(&mut self, mixer: Option<u8>, strobe: Option<u8>) {
+        let before = Before::of(&self.l.pace);
+        if let Some(m) = mixer {
+            self.l.mixer_scx = m;
+        }
+        ceres_dot(&mut self.l);
+        let mut rising = inputs(&self.l, true);
+        let mut falling = inputs(&self.l, false);
+        if let Some(s) = strobe {
+            rising.cpu_wr_sync = true;
+            rising.addr = SCX;
+            rising.data = s;
+            falling.addr = SCX;
+            falling.data = s;
+        }
+        self.net.edge(rising);
+        self.net.edge(falling);
+        self.g = self.g.after(before, &self.l.pace);
+        self.row();
     }
 }

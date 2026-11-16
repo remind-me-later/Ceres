@@ -166,6 +166,16 @@ open = ["doc/hardware-tests.md#where-the-window-starts-when-wx-is-written-every-
 needs = ["flash-cart", "logic-analyser-lcd", "dmg-b", "dmg-c"]
 note = "The netlist starts the window a pixel later."
 
+[window-wx-0-lead-in-unmatched]
+title = "At WX 0, a lead-in in the window whose SCX never matches: ceres's starts again, the netlist's fine scroll waits at 7"
+models = ["dmg"]
+netlist = "differs"
+hardware = "none"
+emulators = "agree"
+open = ["doc/hardware-tests.md#the-window-at-wx-0-when-scxs-discard-does-not-match"]
+needs = ["flash-cart", "camera"]
+note = "Only when SCX is written as the lead-in runs, so that its low bits miss all eight pixels'. Found by the mode 3 relation's co-simulation (cosim.rs, wx0_lines_with_scx_written)."
+
 [window-start-tile-register-pulse]
 title = "At a window start the tile register takes the precharged bus (FF)"
 models = ["dmg"]

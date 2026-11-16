@@ -213,6 +213,7 @@ const fn between_dots(pace: &Pace) -> bool {
         | State::Mode3ObjectWait
         | State::Mode3ObjectFetch
         | State::Mode3ObjectHigh
+        | State::Mode3WindowDelay
         | State::HBlankStart => pace.wait == 1,
         State::Mode3ObjectAttributes | State::Mode3ObjectLow => (pace.wait == 1) | (pace.wait == 2),
         _ => false,
@@ -324,12 +325,11 @@ pub(crate) fn start_before(l: &Mode3Loop, net: &NetPipeline) -> bool {
         & starting_objects(l, net)
 }
 
-/// The WX the armed window takes. At 1 the window starts in the lead-in a
-/// pixel before the netlist's fine scroll matches (`window_starting`); at 0
-/// the two sides part in its start (task 1.3); at 166 the WX 166 glitch
-/// ends mode 3 early (`locks-with-wx-166-glitch`).
-const FIRST_WX: u8 = 1;
-
+/// The last WX the armed window takes, from 0. At 0 ceres's check fires at
+/// the lead-in's start unless SCX's low bits are 0, and the lead-in runs in
+/// the window (`in_lead`); at 1 the window starts in the lead-in a pixel
+/// before the netlist's fine scroll matches (`window_starting`); at 166 the
+/// WX 166 glitch ends mode 3 early (`locks-with-wx-166-glitch`).
 const LAST_WX: u8 = 165;
 
 /// Ceres's window check compares WX with its position plus this.
@@ -378,7 +378,8 @@ pub(crate) fn step_agrees(
         & quiet(&rising, l)
         & quiet(&falling, l)
         & writes(net, &rising, &falling, l.mixer_scx)
-        & (!l.window_enabled | holds_wx(&net.inputs, &rising) & holds_wx(&rising, &falling)))
+        & (!l.window_enabled | holds_wx(&net.inputs, &rising) & holds_wx(&rising, &falling))
+        & lead_in_matches(l, mixer_scx))
     {
         return true;
     }
