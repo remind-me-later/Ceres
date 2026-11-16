@@ -105,6 +105,34 @@ impl EdgeInputs {
     }
 }
 
+/// The background's fetcher: its count, LYZU, and the first fetch's NYKA,
+/// PORY, PYGO and POKY (`started`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
+pub struct NetFetcher {
+    pub count: u8,
+    pub lyzu: bool,
+    pub nyka: bool,
+    pub pory: bool,
+    pub pygo: bool,
+    pub started: bool,
+}
+
+/// The sprite fetch: requested (SOBU, SUDA), its steps, TAKA (`busy`), and
+/// the steps' flip-flops TOBU, VONU, SEBA, TYFO.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[expect(clippy::struct_excessive_bools, reason = "the netlist's flip-flops")]
+pub struct NetSpriteFetch {
+    pub sobu: bool,
+    pub suda: bool,
+    pub step: u8,
+    pub busy: bool,
+    pub tobu: bool,
+    pub vonu: bool,
+    pub seba: bool,
+    pub tyfo: bool,
+}
+
 /// Render's background pipeline and sprite fetch: its flip-flops and
 /// latches, and its inputs, as the last edge left them.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -115,14 +143,8 @@ pub struct NetPipeline {
     pub voga: bool,
     /// The pixel counter.
     pub px: u8,
-    /// The fetcher's count, LYZU, and the first fetch's NYKA, PORY, PYGO
-    /// and POKY (`started`).
-    pub fetch_count: u8,
-    pub lyzu: bool,
-    pub nyka: bool,
-    pub pory: bool,
-    pub pygo: bool,
-    pub started: bool,
+    /// The background's fetcher.
+    pub fetcher: NetFetcher,
     /// The fine scroll: its count, PUXA, NYZE, ROXY (`discard`), RYFA, RENE.
     pub fine: u8,
     pub puxa: bool,
@@ -151,16 +173,8 @@ pub struct NetPipeline {
     /// fetched (bit `i` for slot `i`).
     pub xs: [u8; SLOTS],
     pub fetched: u16,
-    /// The sprite fetch: requested (SOBU, SUDA), its steps, TAKA (`busy`),
-    /// and the steps' flip-flops TOBU, VONU, SEBA, TYFO.
-    pub sobu: bool,
-    pub suda: bool,
-    pub sprite_step: u8,
-    pub busy: bool,
-    pub tobu: bool,
-    pub vonu: bool,
-    pub seba: bool,
-    pub tyfo: bool,
+    /// The sprite fetch.
+    pub sprite: NetSpriteFetch,
     pub inputs: EdgeInputs,
 }
 
@@ -294,12 +308,14 @@ impl NetPipeline {
             mode3: r.mode3,
             voga: r.voga,
             px: r.px,
-            fetch_count: r.fetch_count,
-            lyzu: r.lyzu,
-            nyka: r.nyka,
-            pory: r.pory,
-            pygo: r.pygo,
-            started: r.started,
+            fetcher: NetFetcher {
+                count: r.fetch_count,
+                lyzu: r.lyzu,
+                nyka: r.nyka,
+                pory: r.pory,
+                pygo: r.pygo,
+                started: r.started,
+            },
             fine: r.fine,
             puxa: r.puxa,
             nyze: r.nyze,
@@ -321,14 +337,16 @@ impl NetPipeline {
             sovy: r.sovy,
             xs: r.store.xs,
             fetched: r.store.fetched,
-            sobu: r.sobu,
-            suda: r.suda,
-            sprite_step: r.sprite_step,
-            busy: r.busy,
-            tobu: r.tobu,
-            vonu: r.vonu,
-            seba: r.seba,
-            tyfo: r.tyfo,
+            sprite: NetSpriteFetch {
+                sobu: r.sobu,
+                suda: r.suda,
+                step: r.sprite_step,
+                busy: r.busy,
+                tobu: r.tobu,
+                vonu: r.vonu,
+                seba: r.seba,
+                tyfo: r.tyfo,
+            },
             inputs: EdgeInputs::of(&r.inputs),
         }
     }
@@ -367,7 +385,7 @@ impl NetPipeline {
 
     /// The first fetch of the line is done (NYKA and PORY, not POKY yet).
     const fn first_fetch_done(&self) -> bool {
-        self.mode3 & !self.started & self.nyka & self.pory
+        self.mode3 & !self.fetcher.started & self.fetcher.nyka & self.fetcher.pory
     }
 
     /// The wires, with the inputs as they are and the delayed X match.
@@ -377,12 +395,12 @@ impl NetPipeline {
         let matches = self.matches(i);
         let x_match = matches != 0;
         let stop_mode3 = (self.px == STOP_PX) & !held;
-        let dot = !self.rydy & self.started & !x_match & !stop_mode3 & i.clk;
+        let dot = !self.rydy & self.fetcher.started & !x_match & !stop_mode3 & i.clk;
         let segu = !dot;
         let win_start = self.in_window & !self.nopa;
         let fetch_reset = i.stop_scan | win_start | self.restart();
-        let fetch_done = (self.fetch_count & FETCH_DONE == FETCH_DONE) & !fetch_reset;
-        let odd_step = self.sprite_step & 1 != 0;
+        let fetch_done = (self.fetcher.count & FETCH_DONE == FETCH_DONE) & !fetch_reset;
+        let odd_step = self.sprite.step & 1 != 0;
         Wires {
             stop_mode3,
             dot,
@@ -392,8 +410,8 @@ impl NetPipeline {
             fetch_clock: !i.clk | fetch_done,
             selected: matches & (!matches).wrapping_add(1),
             x_match,
-            step_reset: (self.sobu & !self.suda) | i.ppu_reset | i.line_start,
-            loaded: self.tyfo & odd_step & self.seba & self.vonu,
+            step_reset: (self.sprite.sobu & !self.sprite.suda) | i.ppu_reset | i.line_start,
+            loaded: self.sprite.tyfo & odd_step & self.sprite.seba & self.sprite.vonu,
             wy_match: (i.lcdc & LCDC_WIN_EN != 0) & (self.wy == i.ly),
             wxy_match: self.wy_latch & (self.wx == self.px),
             win_reset: (i.lcdc & LCDC_WIN_EN == 0) | i.line_start,
@@ -414,21 +432,21 @@ impl NetPipeline {
         }
         if !self.mode3 | (self.in_window & !self.nopa) {
             // The window's start restarts the first fetch's NYKA and PORY.
-            self.nyka = false;
-            self.pory = false;
+            self.fetcher.nyka = false;
+            self.fetcher.pory = false;
         }
         if !self.mode3 {
-            self.lyzu = false;
-            self.pygo = false;
-            self.started = false;
+            self.fetcher.lyzu = false;
+            self.fetcher.pygo = false;
+            self.fetcher.started = false;
             self.puxa = false;
             self.nyze = false;
             self.ryfa = false;
             self.rene = false;
-            self.tobu = false;
-            self.vonu = false;
-        } else if self.pygo {
-            self.started = true;
+            self.sprite.tobu = false;
+            self.sprite.vonu = false;
+        } else if self.fetcher.pygo {
+            self.fetcher.started = true;
         } else {
             // POKY holds.
         }
@@ -438,7 +456,7 @@ impl NetPipeline {
         // (through its reset's wire): the start glitches up between them.
         let starts = self.in_window & !(self.nopa & !i.ppu_reset);
         if i.stop_scan | starts | restart {
-            self.fetch_count = 0;
+            self.fetcher.count = 0;
         }
         if !self.mode3 | restart {
             self.fine = 0;
@@ -480,7 +498,7 @@ impl NetPipeline {
         } else {
             // PYNU holds.
         }
-        if self.pory | i.ppu_reset {
+        if self.fetcher.pory | i.ppu_reset {
             self.rydy = false;
         } else if self.in_window & !self.nopa {
             self.rydy = true;
@@ -500,10 +518,10 @@ impl NetPipeline {
         // step, or the first fetch done, clears TAKA.
         let w = self.wires(i, false);
         if w.step_reset {
-            self.sprite_step = 0;
-            self.busy = true;
+            self.sprite.step = 0;
+            self.sprite.busy = true;
         } else if w.loaded | self.first_fetch_done() {
-            self.busy = false;
+            self.sprite.busy = false;
         } else {
             // TAKA holds.
         }
@@ -557,16 +575,16 @@ impl NetPipeline {
         // @hw die: LAXU MESU NYVA (dffr); LYZU (dffr)
         let win_start = self.in_window & !self.nopa;
         if !(i.stop_scan | win_start | restart) & rose(before.fetch_clock, now.fetch_clock) {
-            c.fetch_count = Some(self.fetch_count.wrapping_add(1) & 7);
+            c.fetch_count = Some(self.fetcher.count.wrapping_add(1) & 7);
         }
         if self.mode3 & clk_rose {
-            c.lyzu = Some(self.fetch_count & 1 != 0);
+            c.lyzu = Some(self.fetcher.count & 1 != 0);
             c.nyka = Some(before.fetch_done);
-            c.pygo = Some(self.pory);
+            c.pygo = Some(self.fetcher.pory);
             c.rene = Some(self.ryfa);
         }
         if self.mode3 & clk_fell {
-            c.pory = Some(self.nyka);
+            c.pory = Some(self.fetcher.nyka);
             c.nyze = Some(self.puxa);
         }
         // @hw die: RYKU ROGA RUBU (dffr); PUXA NYZE (dffr); RYFA RENE (dffr)
@@ -582,21 +600,21 @@ impl NetPipeline {
         // @hw die: SOBU SUDA (dffr); TOXE TULY TESE (dffr); TOBU VONU SEBA
         // TYFO (dffr); EBOJ..FONO (dffr)
         if clk_rose {
-            c.sobu = Some(before.x_match & !self.rydy & before.fetch_done & !self.busy);
+            c.sobu = Some(before.x_match & !self.rydy & before.fetch_done & !self.sprite.busy);
         }
         if clk_fell {
-            c.suda = Some(self.sobu);
+            c.suda = Some(self.sprite.sobu);
         }
-        if !now.step_reset & clk_rose & (self.sprite_step != SPRITE_DONE) {
-            c.sprite_step = Some(self.sprite_step + 1);
+        if !now.step_reset & clk_rose & (self.sprite.step != SPRITE_DONE) {
+            c.sprite_step = Some(self.sprite.step + 1);
         }
         if self.mode3 & clk_rose {
-            c.tobu = Some(self.sprite_step & 2 != 0);
-            c.vonu = Some(self.tobu);
+            c.tobu = Some(self.sprite.step & 2 != 0);
+            c.vonu = Some(self.sprite.tobu);
         }
         if clk_fell {
-            c.tyfo = Some(self.sprite_step & 1 != 0);
-            c.seba = Some(self.mode3 & self.vonu);
+            c.tyfo = Some(self.sprite.step & 1 != 0);
+            c.seba = Some(self.mode3 & self.sprite.vonu);
         }
         if !i.line_start & rose(before.loaded, now.loaded) {
             c.fetched = Some(now.selected);
@@ -656,19 +674,19 @@ impl NetPipeline {
             self.px = self.px & 0x0F | v << 4;
         }
         if let Some(v) = c.fetch_count {
-            self.fetch_count = v;
+            self.fetcher.count = v;
         }
         if let Some(v) = c.lyzu {
-            self.lyzu = v;
+            self.fetcher.lyzu = v;
         }
         if let Some(v) = c.nyka {
-            self.nyka = v;
+            self.fetcher.nyka = v;
         }
         if let Some(v) = c.pory {
-            self.pory = v;
+            self.fetcher.pory = v;
         }
         if let Some(v) = c.pygo {
-            self.pygo = v;
+            self.fetcher.pygo = v;
         }
         if let Some(v) = c.fine {
             self.fine = v;
@@ -689,25 +707,25 @@ impl NetPipeline {
             self.fetched = v;
         }
         if let Some(v) = c.sobu {
-            self.sobu = v;
+            self.sprite.sobu = v;
         }
         if let Some(v) = c.suda {
-            self.suda = v;
+            self.sprite.suda = v;
         }
         if let Some(v) = c.sprite_step {
-            self.sprite_step = v;
+            self.sprite.step = v;
         }
         if let Some(v) = c.tobu {
-            self.tobu = v;
+            self.sprite.tobu = v;
         }
         if let Some(v) = c.vonu {
-            self.vonu = v;
+            self.sprite.vonu = v;
         }
         if let Some(v) = c.seba {
-            self.seba = v;
+            self.sprite.seba = v;
         }
         if let Some(v) = c.tyfo {
-            self.tyfo = v;
+            self.sprite.tyfo = v;
         }
         if let Some(v) = c.sary {
             self.sary = v;

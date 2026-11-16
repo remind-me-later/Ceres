@@ -17,7 +17,9 @@ use {
         fetcher::{Fetcher, FetcherStep},
         state::State,
     },
-    ceres_netlist::render_edge::{EdgeInputs, NO_X, NetPipeline, SLOTS},
+    ceres_netlist::render_edge::{
+        EdgeInputs, NO_X, NetFetcher, NetPipeline, NetSpriteFetch, SLOTS,
+    },
     core::fmt::Write as _,
 };
 
@@ -74,11 +76,17 @@ const fn inputs(l: &Mode3Loop, clk: bool) -> EdgeInputs {
 
 /// What the netlist's fields are named by, where they differ.
 macro_rules! differing {
-    ($a:expr, $b:expr; $($field:ident)*) => {{
+    ($a:expr, $b:expr; $($field:ident $(. $sub:ident)?)*) => {{
         let mut out = String::new();
         $(
-            if $a.$field != $b.$field {
-                _ = write!(out, " {}={:?}/{:?}", stringify!($field), $a.$field, $b.$field);
+            if $a.$field$(.$sub)? != $b.$field$(.$sub)? {
+                _ = write!(
+                    out,
+                    " {}={:?}/{:?}",
+                    stringify!($field$(.$sub)?),
+                    $a.$field$(.$sub)?,
+                    $b.$field$(.$sub)?
+                );
             }
         )*
         out
@@ -124,12 +132,14 @@ impl Walk {
             mode3: false,
             voga: false,
             px: 0,
-            fetch_count: 0,
-            lyzu: false,
-            nyka: false,
-            pory: false,
-            pygo: false,
-            started: false,
+            fetcher: NetFetcher {
+                count: 0,
+                lyzu: false,
+                nyka: false,
+                pory: false,
+                pygo: false,
+                started: false,
+            },
             fine: 0,
             puxa: false,
             nyze: false,
@@ -151,14 +161,16 @@ impl Walk {
             sovy: false,
             xs,
             fetched: 0,
-            sobu: false,
-            suda: false,
-            sprite_step: 0,
-            busy: false,
-            tobu: false,
-            vonu: false,
-            seba: false,
-            tyfo: false,
+            sprite: NetSpriteFetch {
+                sobu: false,
+                suda: false,
+                step: 0,
+                busy: false,
+                tobu: false,
+                vonu: false,
+                seba: false,
+                tyfo: false,
+            },
             inputs: inputs(&l, false),
         };
         let g = Ghost::at_rest(&l.pace.bg);
@@ -225,9 +237,10 @@ impl Walk {
         let (pace, net, g) = (&self.l.pace, &self.net, self.g);
         let e = expected(&self.l, net, g);
         let differs = differing!(net, e;
-            mode3 voga px fetch_count lyzu nyka pory pygo started fine puxa nyze discard ryfa
-            rene sary wy_latch pyco nunu nopa in_window win_x win_y rydy sovy fetched sobu suda
-            sprite_step busy tobu vonu seba tyfo
+            mode3 voga px fetcher.count fetcher.lyzu fetcher.nyka fetcher.pory fetcher.pygo
+            fetcher.started fine puxa nyze discard ryfa rene sary wy_latch pyco nunu nopa
+            in_window win_x win_y rydy sovy fetched sprite.sobu sprite.suda sprite.step
+            sprite.busy sprite.tobu sprite.vonu sprite.seba sprite.tyfo
         );
         _ = writeln!(
             self.table,
@@ -242,13 +255,13 @@ impl Walk {
             u8::from(pace.window.being_fetched),
             pace.window.tile_x,
             net.px,
-            net.fetch_count,
+            net.fetcher.count,
             net.fine,
-            u8::from(net.lyzu),
-            u8::from(net.nyka),
-            u8::from(net.pory),
-            u8::from(net.pygo),
-            u8::from(net.started),
+            u8::from(net.fetcher.lyzu),
+            u8::from(net.fetcher.nyka),
+            u8::from(net.fetcher.pory),
+            u8::from(net.fetcher.pygo),
+            u8::from(net.fetcher.started),
             u8::from(net.ryfa),
             u8::from(net.rene),
             u8::from(net.pyco),

@@ -79,7 +79,9 @@ use {
             state::State,
         },
     },
-    ceres_netlist::render_edge::{EdgeInputs, NO_X, NetPipeline, SLOTS},
+    ceres_netlist::render_edge::{
+        EdgeInputs, NO_X, NetFetcher, NetPipeline, NetSpriteFetch, SLOTS,
+    },
 };
 
 /// Ceres's mode 3 loop on the display's pace alone: the loop runs all of
@@ -322,41 +324,101 @@ pub(crate) const fn pipeline_at(p: i16, len: u8, first: bool, net: &NetPipeline)
         } else {
             0
         },
-        fetch_count,
-        lyzu,
-        nyka,
-        pory,
-        pygo,
-        started,
+        fetcher: NetFetcher {
+            count: fetch_count,
+            lyzu,
+            nyka,
+            pory,
+            pygo,
+            started,
+        },
         fine,
         puxa: p == NET_MATCH,
         nyze: p == NET_MATCH,
         discard: p <= LAST_DISCARDED,
         ryfa,
         rene,
-        busy,
+        sprite: NetSpriteFetch {
+            busy,
+            ..at_rest(net).sprite
+        },
         ..at_rest(net)
     }
 }
 
-/// The netlist's fetcher (its count, LYZU, NYKA, PORY, PYGO) `age` dots
-/// after it restarted for a tile (7: seven or more): it counts to 5, and
-/// NYKA, PORY and PYGO follow it a clock apart.
-const fn fetcher_for(age: u8) -> (u8, bool, bool, bool, bool) {
+/// The netlist's fetcher `age` dots after it restarted for a tile (7: seven
+/// or more), its first fetch done (`started`): it counts to 5, and NYKA,
+/// PORY and PYGO follow it a clock apart.
+const fn fetcher_for(age: u8) -> NetFetcher {
     let before = (age + 7) & 7;
     let waits = (age >= 6) | (age == 0);
-    (
-        if age < FETCH_DONE { age } else { FETCH_DONE },
-        (if before < FETCH_DONE {
+    NetFetcher {
+        count: if age < FETCH_DONE { age } else { FETCH_DONE },
+        lyzu: (if before < FETCH_DONE {
             before
         } else {
             FETCH_DONE
         }) & 1
             != 0,
-        waits,
-        waits,
-        (age == 7) | (age <= 1),
-    )
+        nyka: waits,
+        pory: waits,
+        pygo: (age == 7) | (age <= 1),
+        started: true,
+    }
+}
+
+/// Where the netlist's sprite fetch is, locked to ceres's object fetch: the
+/// dot of ceres's push and the one after, then, two or more dots after a
+/// push, as ceres's reads go (the attributes' read, the low byte's two dots,
+/// the high byte's).
+#[derive(Clone, Copy)]
+enum SpritePhase {
+    Pushed,
+    AfterPush,
+    Attributes,
+    LowFirst,
+    Low,
+    High,
+}
+
+impl SpritePhase {
+    /// The phase after ceres's dot, from the dots since its last push and
+    /// its loop's sleep; `None` between fetches.
+    const fn of(since_push: u8, state: State, wait: i32) -> Option<Self> {
+        match since_push {
+            0 => Some(Self::Pushed),
+            1 => Some(Self::AfterPush),
+            _ => match (state, wait) {
+                (State::Mode3ObjectAttributes, 1) => Some(Self::Attributes),
+                (State::Mode3ObjectLow, 2) => Some(Self::LowFirst),
+                (State::Mode3ObjectLow, _) => Some(Self::Low),
+                (State::Mode3ObjectHigh, _) => Some(Self::High),
+                _ => None,
+            },
+        }
+    }
+
+    /// The netlist's sprite fetch in the phase.
+    const fn net(self) -> NetSpriteFetch {
+        let (sobu, suda, step, busy, tobu, vonu, seba, tyfo) = match self {
+            Self::Pushed => (false, false, 4, true, true, true, true, false),
+            Self::AfterPush => (false, false, SPRITE_DONE, false, false, true, true, true),
+            Self::Attributes => (true, true, 0, true, false, false, false, false),
+            Self::LowFirst => (false, false, 1, true, false, false, false, true),
+            Self::Low => (false, false, 2, true, false, false, false, false),
+            Self::High => (false, false, 3, true, true, false, false, true),
+        };
+        NetSpriteFetch {
+            sobu,
+            suda,
+            step,
+            busy,
+            tobu,
+            vonu,
+            seba,
+            tyfo,
+        }
+    }
 }
 
 /// What the relation keeps besides the two pipelines: the history neither
@@ -566,37 +628,17 @@ pub(crate) const fn expected(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetP
     let first = (p + len as i16 <= 0) & !g.rerun;
     let mut e = pipeline_at(p, len, first, net);
     if !first {
-        (e.fetch_count, e.lyzu, e.nyka, e.pory, e.pygo) = fetcher_for(g.age);
+        e.fetcher = NetFetcher {
+            started: e.fetcher.started,
+            ..fetcher_for(g.age)
+        };
     }
     if g.frozen {
         // RENE takes RYFA at each clock, and RYFA holds.
         e.rene = e.ryfa;
     }
-    let (state, wait) = (l.pace.state, l.pace.wait);
-    let sprite = match g.since_push {
-        0 => Some((false, false, 4, true, true, true, true, false)),
-        1 => Some((false, false, SPRITE_DONE, false, false, true, true, true)),
-        _ => match (state, wait) {
-            (State::Mode3ObjectAttributes, 1) => {
-                Some((true, true, 0, true, false, false, false, false))
-            }
-            (State::Mode3ObjectLow, 2) => Some((false, false, 1, true, false, false, false, true)),
-            (State::Mode3ObjectLow, _) => Some((false, false, 2, true, false, false, false, false)),
-            (State::Mode3ObjectHigh, _) => Some((false, false, 3, true, true, false, false, true)),
-            _ => None,
-        },
-    };
-    if let Some(s) = sprite {
-        (
-            e.sobu,
-            e.suda,
-            e.sprite_step,
-            e.busy,
-            e.tobu,
-            e.vonu,
-            e.seba,
-            e.tyfo,
-        ) = s;
+    if let Some(phase) = SpritePhase::of(g.since_push, l.pace.state, l.pace.wait) {
+        e.sprite = phase.net();
     }
     e
 }
@@ -636,40 +678,52 @@ const fn window_starting(l: &Mode3Loop, net: &NetPipeline, dot: u8, fine: u8) ->
     if dot == 1 {
         pipeline_at(position + 1, len_at(fine), false, net)
     } else if dot == 2 {
+        let base = pipeline_at(position + 1, len_at(fine), false, &started);
         NetPipeline {
             px: l.wx.wrapping_add(1),
-            fetch_count: 0,
-            lyzu: (if fine < FETCH_DONE { fine } else { FETCH_DONE }) & 1 != 0,
-            nyka: false,
-            pory: false,
-            pygo: (fine >= 6) | (fine == 0),
+            fetcher: NetFetcher {
+                count: 0,
+                lyzu: (if fine < FETCH_DONE { fine } else { FETCH_DONE }) & 1 != 0,
+                nyka: false,
+                pory: false,
+                pygo: (fine >= 6) | (fine == 0),
+                ..base.fetcher
+            },
             fine: held,
             ryfa: false,
             rene: fine == 0,
             nopa: false,
             sovy: false,
-            ..pipeline_at(position + 1, len_at(fine), false, &started)
+            ..base
         }
     } else if dot <= 7 {
+        let base = pipeline_at(position + 1, len_at(fine), false, &started);
         NetPipeline {
             px: l.wx.wrapping_add(1),
-            fetch_count: dot - 2,
-            lyzu: dot & 1 == 0,
-            nyka: false,
-            pory: false,
-            pygo: false,
+            fetcher: NetFetcher {
+                count: dot - 2,
+                lyzu: dot & 1 == 0,
+                nyka: false,
+                pory: false,
+                pygo: false,
+                ..base.fetcher
+            },
             fine: held,
             ryfa: false,
             rene: false,
-            ..pipeline_at(position + 1, len_at(fine), false, &started)
+            ..base
         }
     } else if dot == 8 {
+        let base = pipeline_at(position, pace.bg.fifo.len(), false, &started);
         NetPipeline {
-            pygo: false,
+            fetcher: NetFetcher {
+                pygo: false,
+                ..base.fetcher
+            },
             ryfa: false,
             rydy: false,
             win_x: 1,
-            ..pipeline_at(position, pace.bg.fifo.len(), false, &started)
+            ..base
         }
     } else {
         NetPipeline {
@@ -707,14 +761,16 @@ const fn window_inside(l: &Mode3Loop, net: &NetPipeline) -> NetPipeline {
 /// their last, its SCX, sprite store and inputs as `net` has them.
 const fn at_rest(net: &NetPipeline) -> NetPipeline {
     NetPipeline {
-        sobu: false,
-        suda: false,
-        sprite_step: SPRITE_DONE,
-        busy: true,
-        tobu: false,
-        vonu: false,
-        seba: false,
-        tyfo: true,
+        sprite: NetSpriteFetch {
+            sobu: false,
+            suda: false,
+            step: SPRITE_DONE,
+            busy: true,
+            tobu: false,
+            vonu: false,
+            seba: false,
+            tyfo: true,
+        },
         ..*net
     }
 }
@@ -728,12 +784,14 @@ pub(crate) const fn before_start(net: &NetPipeline) -> NetPipeline {
         mode3: true,
         voga: false,
         px: 0,
-        fetch_count: 4,
-        lyzu: true,
-        nyka: false,
-        pory: false,
-        pygo: false,
-        started: false,
+        fetcher: NetFetcher {
+            count: 4,
+            lyzu: true,
+            nyka: false,
+            pory: false,
+            pygo: false,
+            started: false,
+        },
         fine: 0,
         puxa: false,
         nyze: false,
@@ -1322,7 +1380,11 @@ const fn keeps_address(before: &EdgeInputs, now: &EdgeInputs) -> bool {
 /// netlist's dot clock starts (POKY rises with PYGO, in ceres's third dot of
 /// the line, at h = 167): the strobes rise at h = 1 (mod 8).
 const fn strobe_misses_start(net: &NetPipeline, rising: &EdgeInputs) -> bool {
-    !(net.mode3 & net.pory & !net.started & rising.cpu_wr_sync & !net.inputs.cpu_wr_sync)
+    !(net.mode3
+        & net.fetcher.pory
+        & !net.fetcher.started
+        & rising.cpu_wr_sync
+        & !net.inputs.cpu_wr_sync)
 }
 
 /// The CPU writes SCX's low bits with `scx`'s in a dot's edges, if at all:
