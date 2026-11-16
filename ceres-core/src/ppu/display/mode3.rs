@@ -48,7 +48,7 @@ enum Step {
 /// the loop changes: the registers it reads, the fetchers' reads, the
 /// object's row and the pixels. The hooks read the pace and cannot change
 /// it: `PpuCore` does them, and the pace is not the core's (`Ppu::pace`).
-/// The proofs against the netlist (`background::check`) run the loop with
+/// The proofs against the netlist (`background::relation`) run the loop with
 /// hooks that only change what the fetcher read, to anything.
 pub(super) trait Mode3Ppu {
     /// The objects are drawn (LCDC's bit 1, always on the CGB).

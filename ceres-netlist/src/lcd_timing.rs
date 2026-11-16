@@ -2,7 +2,7 @@
 //!
 //! Transcribed from the DMG's part of `hdl/rtl/lcd_timing.vhd`, for
 //! ceres-core's proofs against ceres (its
-//! `ppu/display/timing/netlist_proofs.rs`).
+//! `ppu/display/timing/bisim.rs`).
 //!
 //! The PPU's clock is the chip's, a dot a period: an edge is a half dot. Its
 //! falling edges clock `wuvu` and `vena`, which halve it twice into hclk (an

@@ -16,7 +16,7 @@ ends, or `none`.
 `endOf` turns the dots' flags into that field. It reads the first flag set
 among the first four dots (the M-cycle has four), and gives the odd half dot
 `2d + 1` of that dot, the only half dot `mode3_may_end` lets the pipeline
-end mode 3 at (`ceres-core/src/ppu/display/timing/check.rs`, `mode3_may_end`).
+end mode 3 at (`ceres-core/src/ppu/display/timing/relation.rs`, `mode3_may_end`).
 An end at the even half dot `2d` is not expressible with a flag; on the real
 side it is a known difference (`outside`, which `LcdK` carries), so the
 instance cannot state it. Several flags set in one M-cycle: only the first
@@ -49,7 +49,7 @@ def withEndC (y : CeresIn × List Bool) : CeresIn := { y.1 with mode3End := endO
 `mode3End` clause, which the flags supply on both sides. -/
 def RAccReal (i : NetIn) (j : CeresIn) : Prop :=
   i.timer = j.timer ∧ i.ifAccess = j.ifAccess ∧ i.dma = j.dma ∧ i.rises = j.rises ∧
-    i.lcd = j.lcd ∧ interrupts.check.same_stat i.stat j.stat = ok true
+    i.lcd = j.lcd ∧ interrupts.relation.same_stat i.stat j.stat = ok true
 
 /-- The M-cycle's state and outputs, the real types. -/
 abbrev Pn := (NetLcd × (NetTimer × NetIf)) × NetDma
@@ -58,7 +58,7 @@ abbrev SeenN := ((Option Std.U8 × Array Bool 8#usize) ×
     ((Option Std.U8 × Bool) × (Option Std.U8 × Option Std.U8))) ×
   (Option Std.U8 × Option (Std.U16 × Std.U8) × Bool × Bool)
 abbrev SeenC := ((Option Std.U8 × Array Bool 4#usize) ×
-    (Option Std.U8 × Option Std.U8 × Option Std.U8)) × memory.dma.check.CeresOut
+    (Option Std.U8 × Option Std.U8 × Option Std.U8)) × memory.dma.relation.CeresOut
 
 /-- The netlist's M-cycle, with the flags' mode-3 end. -/
 def perNetReal (s : Pn) (x : NetIn × List Bool) : Result (SeenN × Pn) :=

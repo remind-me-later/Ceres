@@ -383,12 +383,12 @@ fn netlist_scan_consider() {
 }
 
 /// Any netlist side of a scan.
-fn any_net_side() -> super::check::NetSide {
+fn any_net_side() -> super::relation::NetSide {
     let mut slots = [None; 10];
     for slot in &mut slots {
         *slot = kani::any::<bool>().then(kani::any);
     }
-    super::check::NetSide {
+    super::relation::NetSide {
         scan: NetScan {
             start_scan: kani::any(),
             anel: kani::any(),
@@ -410,12 +410,12 @@ fn any_net_side() -> super::check::NetSide {
 }
 
 /// Any ceres side of a scan.
-fn any_ceres_side() -> super::check::CeresSide {
+fn any_ceres_side() -> super::relation::CeresSide {
     let mut first = [None; 10];
     for entry in &mut first {
         *entry = kani::any::<bool>().then(kani::any);
     }
-    super::check::CeresSide {
+    super::relation::CeresSide {
         latches: OamLatches {
             y: kani::any(),
             x: kani::any(),
@@ -426,14 +426,14 @@ fn any_ceres_side() -> super::check::CeresSide {
     }
 }
 
-fn any_line() -> super::check::Line {
-    super::check::Line {
+fn any_line() -> super::relation::Line {
+    super::relation::Line {
         ly: kani::any(),
         tall: kani::any(),
     }
 }
 
-/// A window of the scan, from every related pair (`check::step_agrees`):
+/// A window of the scan, from every related pair (`relation::step_agrees`):
 /// the netlist's four edges and ceres's read of the next sprite leave the
 /// pair related. Lean (`lean/`) carries it over the windows.
 // @assumes transcription-scan
@@ -445,7 +445,7 @@ fn any_line() -> super::check::Line {
 #[kani::proof]
 #[kani::unwind(11)]
 fn netlist_scan_step() {
-    assert!(super::check::step_agrees(
+    assert!(super::relation::step_agrees(
         any_net_side(),
         any_ceres_side(),
         any_line(),
@@ -454,7 +454,7 @@ fn netlist_scan_step() {
     ));
 }
 
-/// The scan's start (`check::lead_in_agrees`): from the line's end, the
+/// The scan's start (`relation::lead_in_agrees`): from the line's end, the
 /// line before's scan ended with any count, any Ys for the first sprites
 /// and the same Y in both sides' latches, the pair is related at window 2.
 // @assumes transcription-scan
@@ -467,7 +467,7 @@ fn netlist_scan_step() {
 #[kani::proof]
 #[kani::unwind(11)]
 fn netlist_scan_lead_in() {
-    assert!(super::check::lead_in_agrees(
+    assert!(super::relation::lead_in_agrees(
         kani::any(),
         kani::any(),
         kani::any(),
@@ -476,7 +476,7 @@ fn netlist_scan_lead_in() {
     ));
 }
 
-/// The scan's end (`check::tail_agrees`): from a pair related at window 39,
+/// The scan's end (`relation::tail_agrees`): from a pair related at window 39,
 /// the netlist's scan stops, and its slots hold ceres's first ten sprites.
 // @assumes transcription-scan
 // @assumes transcription-oam-latches
@@ -485,7 +485,7 @@ fn netlist_scan_lead_in() {
 #[kani::proof]
 #[kani::unwind(11)]
 fn netlist_scan_tail() {
-    assert!(super::check::tail_agrees(
+    assert!(super::relation::tail_agrees(
         any_net_side(),
         &any_ceres_side(),
         any_line()

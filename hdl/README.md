@@ -420,7 +420,7 @@ better oracle, and the translation had to follow every change to dmg-sim.
 ceres-core's proofs against the netlist (`cargo kani -p ceres-core`) rest
 on Rust transcriptions of some of the model's blocks, in the crate
 `ceres-netlist` (which ceres-core uses under Kani, and under its feature
-`check` for the Lean proofs, `lean/`; it takes nothing from ceres):
+`verify` for the Lean proofs, `lean/`; it takes nothing from ceres):
 `NetTimer` (`timer`, of `divider.vhd` and `timer.vhd`), `NetIf`
 (`interrupts`, of `interrupts.vhd` and the request latch of
 `sm83_interrupts.vhd`), `NetDma` (`dma`, of `dma.vhd`, clocked by
@@ -836,7 +836,7 @@ transcription, each naming the harness that must fail with it. They show
 that a harness would notice the kind of bug it is there for; `faults`
 records each as caught or missed.
 
-Before Kani, `cargo test -p ceres-core --features check cosim` runs the two
+Before Kani, `cargo test -p ceres-core --features verify cosim` runs the two
 sides concretely and checks the proofs' relations, in seconds: ceres's
 mode 3 loop and `NetPipeline` on whole lines, at every dot, and ceres's CPU
 and the core (`NetCore`) on every opcode from random states, where each

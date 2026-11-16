@@ -21,7 +21,7 @@ not do yet is route a line's dots between the two blocks inside
 -/
 
 namespace ceres_core.scan
-open ceres_core.bisim ceres_core.ppu.display.objects.check
+open ceres_core.bisim ceres_core.ppu.display.objects.relation
 
 /-- A line's start: from the line before's end, the scan, and mode 3's
 states, made from the store the scan left (`startN`, `startC`), related. -/

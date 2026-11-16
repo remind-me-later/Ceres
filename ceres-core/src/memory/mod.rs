@@ -1,9 +1,9 @@
+#[cfg(kani)]
+mod bisim;
 mod dma;
 mod hdma;
 mod hram;
 mod key1;
-#[cfg(kani)]
-mod netlist_proofs;
 mod svbk;
 #[cfg(test)]
 mod tests;

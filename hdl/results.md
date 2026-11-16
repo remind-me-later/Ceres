@@ -692,7 +692,7 @@ VONU, SEBA and TYFO, and the match's 4 ns to mode 3's stop. It matches
 window-idle line start (868,141) is `before_start` with the fetch at rest
 (its steps at 5, TAKA and TYFO set). On ceres's side the proofs now run
 its mode 3 loop itself: `mode3::mode3` is generic over what it asks of the
-PPU (`Mode3Ppu`), and `background::check::Mode3Loop` runs it on a
+PPU (`Mode3Ppu`), and `background::relation::Mode3Loop` runs it on a
 `Display` alone, with nothing read and the window idle (the A/V hash and
 the suites unchanged). The background proof passes on it (the dot in 27 s,
 the start in 22 s), and catches a loop that steps the fetcher before the
@@ -755,8 +755,8 @@ rises while the bus still carries WX's address from the edge before writes
 WX, which the scope excludes (`holds_wx`).
 
 The dot harnesses now build the netlist's side instead of assuming it.
-`check::related` is `related_but_pipeline` and the netlist being
-`check::expected` of what it carries over (its latches, its sprite store,
+`relation::related` is `related_but_pipeline` and the netlist being
+`relation::expected` of what it carries over (its latches, its sprite store,
 the window's flip-flops, its inputs), so a harness takes the netlist as
 `expected` gives it, with the inputs built quiet, and
 `netlist_mode3_expected_carries` proves that every related pair's netlist
@@ -796,7 +796,7 @@ firing:
 Each side stalls six dots. What the netlist holds in dots 2 to 7 follows
 from the dot and from its fine scroll's count in dot 1, which ceres's
 cleared FIFO no longer gives: the ghost counts the dots and keeps that count
-(`Ghost::window`, `window_fine`), and `check::window_starting` and
+(`Ghost::window`, `window_fine`), and `relation::window_starting` and
 `window_inside` are the netlist's pipeline from them. The netlist's column
 is ceres's, a tile behind from ceres's read of a tile's last byte to the
 netlist's restart for it. With WX at 164 or 165 the line is drawn inside the
@@ -880,7 +880,7 @@ Two spikes before the next phase of mode 3, to see what the CPU's side of
 the proof takes.
 
 The first compares ceres's instructions with the core's
-(`ceres-core/src/sm83/check.rs`). The core does an instruction's last work
+(`ceres-core/src/sm83/relation.rs`). The core does an instruction's last work
 while it fetches the next opcode, so an instruction ends, for the
 comparison, with the M-cycle that fetches the next one: ceres executes the
 opcode it holds and reads the next, and the core runs as many M-cycles from
@@ -952,7 +952,7 @@ CALL's did not fit at first: Kani was killed at 9 GB. What made it fit is
 that the core's clocks change only in phases A, B, E and G. C and D give
 it B's clocks again, F gives E's and H gives G's, and with the same clocks
 and the same bus a settled core has nothing to move. The instruction
-harness therefore passes over C, D, F and H (`check::repeats_clocks`): it
+harness therefore passes over C, D, F and H (`relation::repeats_clocks`): it
 keeps the phase before's outputs and asserts that the bus is the same
 too. The co-simulation still settles them, and the four lemma harnesses
 `netlist_sm83_settles_repeating_*` prove that nothing moves in them. With
@@ -1004,7 +1004,7 @@ dispatch's first read did not). Where ceres fetches, it is not, and its
 request latches can hold a request when IME is off, or set but not yet
 shown (EI's delay). So the relation between instructions leaves the
 latches free, but for a request with IME set and shown, which is an entry
-(`check::takes_interrupt`), and a second relation, `check::entry_begins`,
+(`relation::takes_interrupt`), and a second relation, `relation::entry_begins`,
 holds where an entry begins. Both hold after every step of every run.
 
 Kani then takes interrupts from every state. Every instruction harness
@@ -1069,12 +1069,12 @@ harnesses' memory keeps ceres's time as the co-simulation's does.
 
 - `netlist_sm83_halt`: from HALT fetched, ceres executes it and the next
   step up to its instruction, which share HALT's M-cycle; the core runs
-  one. Both halt (`check::in_halt`), or with a request pending (the HALT
+  one. Both halt (`relation::in_halt`), or with a request pending (the HALT
   bug) the next instruction or an entry begins, PC not moved on.
 - `netlist_sm83_halted_from_halt` and `netlist_sm83_halted`: a halted
   M-cycle, from the core halting or halted. With no request both stay
   halted; with one, ceres has sampled it and the core latched it
-  (`check::waking`).
+  (`relation::waking`).
 - `netlist_sm83_wake`: from there, ceres's choice and the core's next
   M-cycle: the next instruction or an entry begins.
 
@@ -1183,7 +1183,7 @@ ceres's VRAM gate is the netlist's, given the mappings and these lock
 positions, which the PPU's state machine sets and the trace measured.
 
 The positions of both gates' locks on the lines after the first are now
-proved from ceres's code (`ppu::display::lock_proofs`), counted in units as
+proved from ceres's code (`ppu::display::proofs`), counted in units as
 the trace counts them. Kani: from the scan's step for sprite 36, with any
 number of objects found, the locks change twice and nowhere else, 18 units
 before mode 3's loop starts (VRAM's read lock on, OAM's write lock off)
@@ -1265,7 +1265,7 @@ cannot show: `cpu-does-not-address-oam` now rests on `oam-corruption-bug`.
 
 ## Ceres's bus side
 
-Kani (`memory::netlist_proofs::netlist_bus_side`, 5 s) holds ceres's HRAM
+Kani (`memory::bisim::netlist_bus_side`, 5 s) holds ceres's HRAM
 and boot ROM to `NetBus` for the accesses the DMG decodes itself, which
 never reach the cartridge's pins: from any HRAM, any boot ROM image and
 either mapping, an M-cycle that reads or writes HRAM, FF50, the boot ROM's

@@ -228,7 +228,7 @@ impl NetCore {
     /// `kept`. For the proofs: from a core settled in the phase before (or
     /// in this one, with another data bus), and with the NMI's latches at
     /// rest, one pass settles it, and a second changes neither the core
-    /// nor what it gives out (ceres-core's `sm83::netlist_proofs`, the
+    /// nor what it gives out (ceres-core's `sm83::bisim`, the
     /// `netlist_sm83_settles_*` harnesses), so the result is
     /// `settle_from`'s.
     pub fn settle_once(&mut self, i: &CoreInputs, kept: u8) -> CoreOutputs {

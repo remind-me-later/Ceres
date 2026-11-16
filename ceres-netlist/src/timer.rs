@@ -1,7 +1,7 @@
 //! The netlist's divider and timer, phase by phase.
 //!
 //! Transcribed from `hdl/rtl/divider.vhd` and `hdl/rtl/timer.vhd`, for
-//! ceres-core's proofs against ceres (its `timing/netlist_proofs.rs`) and
+//! ceres-core's proofs against ceres (its `timing/bisim.rs`) and
 //! for the replay of the model's traces (`tests/replay.rs`), which checks
 //! the transcription.
 //!

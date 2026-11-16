@@ -5,7 +5,7 @@
 //! matches, an M-cycle with any access to FF04-FF07 gives the same read and
 //! the same interrupt on both sides, and leaves the pair related, unless it
 //! is a `known_difference`. Kani proves it with every field of both states
-//! free (`netlist_proofs.rs`); Lean takes that as a hypothesis and proves by
+//! free (`bisim.rs`); Lean takes that as a hypothesis and proves by
 //! coinduction that related states agree on every M-cycle from then on.
 //!
 //! The netlist's timer, `NetTimer` (`ceres_netlist::timer`), transcribes
@@ -153,7 +153,7 @@ fn ceres_t_cycle(
 }
 
 /// The netlist's interrupt, at the A edge, and ceres's, which must come in
-/// its third T-cycle (2), where IF's mapping puts A (`interrupts::check`).
+/// its third T-cycle (2), where IF's mapping puts A (`interrupts::relation`).
 pub(crate) const fn same_interrupt(net: bool, ceres: Option<u8>) -> bool {
     match ceres {
         Some(t) => net & (t == 2),

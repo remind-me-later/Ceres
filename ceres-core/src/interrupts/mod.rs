@@ -1,7 +1,7 @@
-#[cfg(any(kani, feature = "check"))]
-pub(crate) mod check;
 #[cfg(kani)]
-pub(crate) mod netlist_proofs;
+pub(crate) mod bisim;
+#[cfg(any(kani, feature = "verify"))]
+pub(crate) mod relation;
 
 // IF and IE bits, by priority: the vector of bit n is 0x40 + 8 * n.
 const INT_VBLANK_B: u8 = 0x01;

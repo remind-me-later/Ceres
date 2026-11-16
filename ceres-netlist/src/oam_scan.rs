@@ -1,7 +1,7 @@
 //! The netlist's OAM scan, edge by edge.
 //!
 //! Transcribed from `hdl/rtl/oam_scan.vhd`, for ceres-core's proofs against
-//! ceres's object search (its `ppu/display/objects/netlist_proofs.rs`) and
+//! ceres's object search (its `ppu/display/objects/bisim.rs`) and
 //! for the replay of the model's traces (`tests/replay.rs`), which checks
 //! the transcription. The latches of the Y it reads are OAM's
 //! (`crate::oam`).

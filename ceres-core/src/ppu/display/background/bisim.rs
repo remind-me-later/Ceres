@@ -9,9 +9,9 @@
 //! `NetRender`, at every edge where the window is idle. Ceres's mode 3 loop
 //! runs a dot's work in its first half dot, the netlist's pipeline takes
 //! the dot's two edges; after both, the netlist's pipeline is a function of
-//! ceres's loop and of a ghost (`check::expected`, `check::Ghost`): the
+//! ceres's loop and of a ghost (`relation::expected`, `relation::Ghost`): the
 //! background's fetcher, first fetch and fine scroll follow from the FIFO's
-//! length and the position (`check::pipeline_at`), SCX does not enter them
+//! length and the position (`relation::pipeline_at`), SCX does not enter them
 //! (ceres's lead-in compares SCX two dots before the netlist's fine scroll,
 //! with the SCX the netlist's latch then holds: `mapping-scx-write`), and
 //! an object shifts them: ceres stops for it as its position plus 8 reaches
@@ -20,20 +20,20 @@
 //! alone: the pixels the netlist drew past ceres's, whether they stood
 //! still, its fetcher's age in its tile, and the dots since ceres's push;
 //! the netlist's sprite fetch is locked to ceres's reads, and its store
-//! holds, X by X, the objects ceres has left (`check::objects_agree`).
+//! holds, X by X, the objects ceres has left (`relation::objects_agree`).
 //!
 //! `netlist_mode3_start` proves ceres's first dot of the loop (`Mode3Start`,
 //! `h = 163`) from the netlist's pipeline as it is at the end of the dot
-//! before (`check::before_start`, `mapping-mode3-start`), with any SCX and
+//! before (`relation::before_start`, `mapping-mode3-start`), with any SCX and
 //! any objects the scan found (the scan's proofs: the store holds them).
 //! The `netlist_mode3_dot_*` harnesses prove a dot from every related pair,
 //! one per sleep of ceres's loop (and the fetch's start by the dots since
 //! the last push), as one did not fit in 9 GB. They build the netlist's
-//! side, `check::expected` of what it carries over, rather than assume it
+//! side, `relation::expected` of what it carries over, rather than assume it
 //! (`netlist_mode3_expected_carries`: every related pair's netlist is that),
 //! and its inputs quiet, so that Kani folds what the relation pins. With any
 //! SCX in the mixer
-//! and any write the CPU's bus can carry (`check::writes`), both stay
+//! and any write the CPU's bus can carry (`relation::writes`), both stay
 //! related and mode 3 goes on, until ceres has drawn the line (its position
 //! at 160); then ceres's `HBlankStart` runs in the next dot's first half
 //! dot, and the netlist's mode 3 stops at the dot's second edge, a half dot
@@ -51,12 +51,12 @@
 //! window after it, with the objects off (`mode3-window-start`): from the
 //! armed window with ceres's check at WX, through the nine dots in which
 //! ceres fetches the window's first tile and the netlist holds its pixels
-//! and restarts its fetcher and fine scroll (`check::window_starting`), and
+//! and restarts its fetcher and fine scroll (`relation::window_starting`), and
 //! inside the window to the line's end, both stay related, and the
 //! netlist's mode 3 stops a dot after ceres has drawn the line.
 //!
 //! Ceres's side is its mode 3 loop (`mode3::mode3`), run on the display's
-//! pace (`check::Mode3Loop`): the window's check runs (`Pace::mode3_window`),
+//! pace (`relation::Mode3Loop`): the window's check runs (`Pace::mode3_window`),
 //! and the loop itself steps the window's column and ends its first tile's
 //! fetch; it runs the window's pixel insertion and the fetcher's window
 //! glitches too, which a held WX and LCDC's bit never set off. The hooks
@@ -66,7 +66,7 @@
 //! the tile the fetcher holds, which it pushes onto the FIFO: here the
 //! fetcher's read and the object's push leave any tile in it, so the proofs
 //! hold for whatever ceres's reads find; the object's reads and the pixels'
-//! mixing do nothing. `check::ceres_dot` wakes the loop as
+//! mixing do nothing. `relation::ceres_dot` wakes the loop as
 //! `step_state_machine` does, and takes `mode3_done`'s sleep into
 //! `HBlankStart`.
 //!
@@ -82,12 +82,12 @@
 //! reaches ceres's mixer (`cpu_bus::write`'s hold of SCX's low bits,
 //! measured); and the dispatch around the loop
 //! (`ceres_dot`'s, copied from `step_state_machine` and `mode3_done`, as
-//! `timing::check` copies the timing's).
+//! `timing::relation` copies the timing's).
 
 use {
     super::{
         Background,
-        check::{
+        relation::{
             Ghost, INSIDE, Mode3Loop, expected, related_but_pipeline, start_agrees, step_agrees,
         },
     },
@@ -117,7 +117,7 @@ fn any_inputs() -> EdgeInputs {
 const LCDC_OBJ_EN: u8 = 2;
 const LCDC_WIN_EN: u8 = 0x20;
 
-/// Inputs as `check::quiet` takes them in mode 3 for `l`, with the clock at
+/// Inputs as `relation::quiet` takes them in mode 3 for `l`, with the clock at
 /// `clk`: built rather than assumed, so that Kani folds what they pin. LCDC's
 /// other bits, LY, hclk, VBlank (with the window off) and the CPU's bus are
 /// free.
@@ -147,9 +147,9 @@ fn quiet_inputs(l: &Mode3Loop, clk: bool) -> EdgeInputs {
     }
 }
 
-/// What `check::expected` carries over from the netlist, for `l`: the
+/// What `relation::expected` carries over from the netlist, for `l`: the
 /// latches, the sprite store, and the inputs after a dot (the clock low);
-/// the window's flip-flops as `check::window_agrees` has them (WY's match
+/// the window's flip-flops as `relation::window_agrees` has them (WY's match
 /// and the window's line free where it allows).
 fn any_carried(l: &Mode3Loop) -> NetPipeline {
     let armed = l.window_enabled;
@@ -287,7 +287,7 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     l.window_enabled = armed;
     l.pace.window.wy_triggered = armed;
     if armed {
-        kani::assume(super::check::signed(l.pace.bg.position) + 7 < i16::from(l.wx));
+        kani::assume(super::relation::signed(l.pace.bg.position) + 7 < i16::from(l.wx));
     }
     // The sleep's dots left as `between_dots` has them.
     l.pace.wait = if matches!(state, State::Mode3ObjectAttributes | State::Mode3ObjectLow) {
@@ -307,7 +307,7 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     let mut net = expected(&l, &any_carried(&l), g);
     let last_scx = l.mixer_scx;
     let bg = &l.pace.bg;
-    let p = super::check::signed(bg.position);
+    let p = super::relation::signed(bg.position);
     let related = related_but_pipeline(&l, &net, g);
     kani::cover!(
         related & l.objects_enabled & matches!(l.pace.state, State::Mode3ObjectWait),
@@ -583,7 +583,7 @@ fn window_dot(window: Option<u8>) {
     } else {
         kani::assume((g.window >= 1) & (g.window < INSIDE));
     }
-    let p = super::check::signed(l.pace.bg.position);
+    let p = super::relation::signed(l.pace.bg.position);
     if g.window == 0 {
         g.window_fine = 0;
         kani::assume(p + 7 == i16::from(l.wx));

@@ -75,7 +75,7 @@ const DMG_MODELS: [Model; 5] = [
 ];
 
 /// Ceres's DMG routes the addresses as the netlist's chip decodes them
-/// (`memory::netlist_proofs` proves what HRAM and the boot ROM then do):
+/// (`memory::bisim` proves what HRAM and the boot ROM then do):
 /// FF00 to FF7F's undecoded addresses read FF and ignore writes, FF50 reads
 /// the mapping in bit 0, and while the boot ROM is mapped a write to its
 /// addresses does not reach the cartridge.

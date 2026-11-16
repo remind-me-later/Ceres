@@ -6,8 +6,6 @@ mod bootrom;
 mod cartridge;
 #[cfg(feature = "game_genie")]
 mod cheats;
-#[cfg(any(kani, feature = "check"))]
-mod check;
 mod cpu_bus;
 #[cfg(feature = "debug")]
 mod debug;
@@ -15,11 +13,11 @@ mod error;
 mod interrupts;
 mod joypad;
 mod memory;
-#[cfg(kani)]
-mod netlist_proofs;
 mod ppu;
 mod serial;
 mod sm83;
+#[cfg(any(kani, feature = "verify"))]
+mod timer_if;
 mod timing;
 
 use crate::{

@@ -1,10 +1,10 @@
 //! Objects: the mode 2 search for the objects on the line and the state of
 //! the object fetch in mode 3.
 
-#[cfg(any(kani, feature = "check"))]
-pub(crate) mod check;
 #[cfg(kani)]
-mod netlist_proofs;
+mod bisim;
+#[cfg(any(kani, feature = "verify"))]
+pub(crate) mod relation;
 
 use {
     super::{State, TILE_BYTES, VRAM_BANK1},

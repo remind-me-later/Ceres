@@ -1,4 +1,4 @@
-//! Mode 3's pipeline against the netlist's (`netlist_proofs.rs`).
+//! Mode 3's pipeline against the netlist's (`bisim.rs`).
 //!
 //! Ceres's mode 3 loop runs a dot's work in the dot's first half dot (odd
 //! `h`); the netlist's pipeline (`ceres_netlist::render_edge`) takes its two
@@ -58,7 +58,7 @@
 )]
 #![expect(
     clippy::needless_bitwise_bool,
-    reason = "written for Aeneas (Lean), as `timing::check` is: a lazy && or || is a branch, and its symbolic execution forks on every one"
+    reason = "written for Aeneas (Lean), as `timing::relation` is: a lazy && or || is a branch, and its symbolic execution forks on every one"
 )]
 #![expect(
     clippy::option_if_let_else,

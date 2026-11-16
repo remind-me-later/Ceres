@@ -3,7 +3,7 @@
 //!
 //! `NetDma` (`ceres_netlist::dma`) transcribes `hdl/rtl/dma.vhd` phase by
 //! phase. Ceres's M-cycle boundary is the start of the netlist's E, as for
-//! IF (`interrupts/netlist_proofs.rs`): the CPU writes or reads FF46 there,
+//! IF (`interrupts/bisim.rs`): the CPU writes or reads FF46 there,
 //! and the DMA then runs the M-cycle's four T-cycles, in one run (as when
 //! the CPU accesses memory in every M-cycle). Its steps come in the third
 //! T-cycle, at the netlist's A edge, so the byte ceres copies in an M-cycle
@@ -18,7 +18,7 @@
 
 use super::{
     Dma, DmaPhase,
-    check::{Access, CeresDma, step_agrees},
+    relation::{Access, CeresDma, step_agrees},
 };
 use ceres_netlist::dma::NetDma;
 

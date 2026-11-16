@@ -23,10 +23,10 @@
 //! one falling is. The rises at ceres's access and in its first half dot are
 //! the netlist's in E. `netlist_lcd_access` proves an M-cycle with any access
 //! to STAT, LY, LYC or LCDC alike on both sides, from every related pair, every
-//! field of both states free (`check::step_agrees`, which Lean wires into
+//! field of both states free (`relation::step_agrees`, which Lean wires into
 //! IF, `lean/`): the byte a read gives (STAT's flag and enables; its mode
 //! bits are the scan's and the pixels', not this block's), and the T-cycle
-//! of each rise, as IF sees it (`interrupts/netlist_proofs.rs`'s mapping).
+//! of each rise, as IF sees it (`interrupts/bisim.rs`'s mapping).
 //! By the half dot, an LYC write
 //! raises ceres's line one early, within the same T-cycle: ceres compares the
 //! new LYC as it lands, the netlist at its next sample. Where the trace replay
@@ -62,7 +62,7 @@
 
 use super::{
     DMG_PHASES, LAST_LINE, LINE_END_H, LINE_H, LcdTiming, PendingWrite, Phases,
-    check::{Access, Net, ly_at, off_related, related_at, step_agrees, vblank_at},
+    relation::{Access, Net, ly_at, off_related, related_at, step_agrees, vblank_at},
 };
 use crate::ppu::STAT_IF_LYC_B;
 use ceres_netlist::{lcd_control::NetLcdControl, lcd_timing::NetLcd};
@@ -179,7 +179,7 @@ fn any_net_lcd() -> NetLcd {
 }
 
 /// An M-cycle with any access to STAT, LY, LYC or LCDC, from every related
-/// pair (`check::step_agrees`): the LCD on, off, or in line 0 after it was
+/// pair (`relation::step_agrees`): the LCD on, off, or in line 0 after it was
 /// turned on, with ceres's clock ahead until the resync; and mode 3 ending
 /// at any half dot, render's mode 0 the HBlank source. The same byte read,
 /// the same rises of the interrupt's line in the T-cycles IF tells apart,

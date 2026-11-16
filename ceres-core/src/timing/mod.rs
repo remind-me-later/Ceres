@@ -1,9 +1,9 @@
-#[cfg(any(kani, feature = "check"))]
-pub(crate) mod check;
 #[cfg(kani)]
-pub(crate) mod netlist_proofs;
+pub(crate) mod bisim;
 #[cfg(kani)]
 mod proofs;
+#[cfg(any(kani, feature = "verify"))]
+pub(crate) mod relation;
 mod timer;
 
 pub(crate) use timer::Clock;

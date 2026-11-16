@@ -7,7 +7,7 @@
 //! The transcriptions take nothing from ceres: they are what ceres is held
 //! to. `tests/replay.rs` replays the model's traces (`hdl/trace-blocks.sh`)
 //! through them, phase by phase, and finds where one parts from the model;
-//! ceres-core's Kani proofs (its `netlist_proofs.rs` files, which use this
+//! ceres-core's Kani proofs (its `bisim.rs` files, which use this
 //! crate under `cfg(kani)` only) prove ceres's blocks alike to them. What the
 //! proofs take as given is in `verify/knowledge/assumptions.toml`.
 //!

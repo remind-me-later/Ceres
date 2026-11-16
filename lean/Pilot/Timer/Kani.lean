@@ -21,8 +21,8 @@ def pinned (c : Clock) : Bool :=
     c.apu_late_bit.isNone
 
 theorem related_link (net : NetTimer) (clock : Clock) :
-    timing.check.related net clock = ok (related (ofA net) (ofC clock) && pinned clock) := by
-  unfold timing.check.related
+    timing.relation.related net clock = ok (related (ofA net) (ofC clock) && pinned clock) := by
+  unfold timing.relation.related
   simp only [clock_of, lift, bind_ok, ite_ok, ok.injEq]
   dsimp only [related, pinned, ofA, ofC, clockOf, core.option.Option.is_none]
   by_cases hd : clock.div_cycles = 0#i32 <;>
@@ -31,9 +31,9 @@ theorem related_link (net : NetTimer) (clock : Clock) :
   bv_decide
 
 theorem known_difference_link (net : NetTimer) (access : ceres_netlist.timer.Access) :
-    timing.check.known_difference net access = ok (knownDifference (ofA net) (accOf access)) := by
+    timing.relation.known_difference net access = ok (knownDifference (ofA net) (accOf access)) := by
   rcases access with _ | r | ⟨r, v⟩ <;> (try cases r) <;>
-    simp only [timing.check.known_difference, clock_of, lift, bind_ok, uncurry_apply_pair,
+    simp only [timing.relation.known_difference, clock_of, lift, bind_ok, uncurry_apply_pair,
       ok.injEq] <;>
     dsimp only [knownDifference, accOf, ofA, clockOf] <;>
     simp only [eq8, and8, lit8, lit16, core.num.U16.wrapping_add_bv_eq, decide_not,
@@ -41,16 +41,16 @@ theorem known_difference_link (net : NetTimer) (access : ceres_netlist.timer.Acc
     bv_decide
 
 theorem same_read_link (a b : Bool × BitVec 8) :
-    timing.check.same_read (readOf a) (readOf' b) = ok (a.1 == b.1 && (!a.1 || a.2 == b.2)) := by
+    timing.relation.same_read (readOf a) (readOf' b) = ok (a.1 == b.1 && (!a.1 || a.2 == b.2)) := by
   obtain ⟨fa, va⟩ := a
   obtain ⟨fb, vb⟩ := b
-  cases fa <;> cases fb <;> simp [timing.check.same_read, readOf, readOf']
+  cases fa <;> cases fb <;> simp [timing.relation.same_read, readOf, readOf']
   rfl
 
 theorem same_interrupt_link (n : Bool) (f : Bool × BitVec 8) :
-    timing.check.same_interrupt n (optOf f) = ok (bif f.1 then n && f.2 == 2#8 else !n) := by
+    timing.relation.same_interrupt n (optOf f) = ok (bif f.1 then n && f.2 == 2#8 else !n) := by
   obtain ⟨b, v⟩ := f
-  cases b <;> simp [timing.check.same_interrupt, optOf, eq8]
+  cases b <;> simp [timing.relation.same_interrupt, optOf, eq8]
   rfl
 
 theorem related_reload (n : Net) (c : Cer) (h : related n c = true) : c.reload ≤ 8#8 := by
@@ -59,11 +59,11 @@ theorem related_reload (n : Net) (c : Cer) (h : related n c = true) : c.reload �
   bv_decide
 
 /-- Kani's hypothesis for the timer, proved: every related pair steps to a
-related pair, with the same read and interrupt, as `timing::check` asks. -/
+related pair, with the same read and interrupt, as `timing::relation` asks. -/
 theorem kani_timer : timer_if.KaniTimer := by
   intro net clock access mask
   have hstep := step (ofA net) (ofC clock) (accOf access)
-  unfold timing.check.step_agrees
+  unfold timing.relation.step_agrees
   rw [related_link, known_difference_link]
   simp only [bind_ok]
   cases hrel : related (ofA net) (ofC clock) <;> cases hpin : pinned clock <;>
@@ -76,7 +76,7 @@ theorem kani_timer : timer_if.KaniTimer := by
   obtain ⟨⟨⟨hd, hs⟩, ha⟩, -⟩ := hpin
   have hr : clock.tima_reload_pending.bv ≤ 8#8 := related_reload _ _ hrel
   obtain ⟨c', h', hm, hofc, hs', hd', ha', hl'⟩ := cer_m_cycle clock mask access hs hd ha hr
-  simp only [timing.check.CheckHost.new, bind_ok, m_cycle, hm, uncurry_apply_pair,
+  simp only [timing.relation.CheckHost.new, bind_ok, m_cycle, hm, uncurry_apply_pair,
     same_read_link, same_interrupt_link, related_link, ofA_toA, hofc]
   simp only [decide_not, decide_true, Bool.not_true, Bool.false_eq_true, ↓reduceIte, pinned, hs',
     hd', ha', hl', Bool.not_false, Option.isNone_none, Bool.and_true, ok.injEq]

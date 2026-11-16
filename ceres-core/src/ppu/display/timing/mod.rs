@@ -24,10 +24,10 @@
 //! pixel pipeline resyncs at every line end; `h = 0` is where LY changes for
 //! a CPU read (gambatte's clock, which its tests are written against).
 
-#[cfg(any(kani, feature = "check"))]
-pub(crate) mod check;
 #[cfg(kani)]
-mod netlist_proofs;
+mod bisim;
+#[cfg(any(kani, feature = "verify"))]
+pub(crate) mod relation;
 
 use {
     super::{LAST_LINE, LINE_LENGTH, LINES},
@@ -389,7 +389,7 @@ impl LcdTiming {
     /// pipeline is in, which tells mode 3 from mode 0.
     #[expect(
         clippy::needless_bitwise_bool,
-        reason = "Aeneas (Lean) takes this (`check`): a lazy || ending in a comparison comes out as a proposition, which Lean does not take as a bool"
+        reason = "Aeneas (Lean) takes this (`relation`): a lazy || ending in a comparison comes out as a proposition, which Lean does not take as a bool"
     )]
     const fn read_mode(&self, pipeline: u8) -> u8 {
         let p = &self.phases;
@@ -560,7 +560,7 @@ impl LcdTiming {
         let delay = delays.ly_read;
         let mut t = *self;
         let mut before = t.ly;
-        // A `while` over a count, as Aeneas takes it (`check`).
+        // A `while` over a count, as Aeneas takes it (`relation`).
         let mut k = 0;
         while k < delay {
             before = t.ly;

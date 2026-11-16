@@ -199,9 +199,160 @@ structure interrupts.Interrupts where
   ie : Std.U8
   ifr : Std.U8
 
-/-- [ceres_core::check::JointHost]
-    Source: 'ceres-core/src/check.rs', lines 36:0-39:1 -/
-structure check.JointHost where
+/-- [ceres_core::memory::dma::DmaPhase]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 22:0-31:1 -/
+@[discriminant isize]
+inductive memory.dma.DmaPhase where
+| Idle : memory.dma.DmaPhase
+| StartUp : memory.dma.DmaPhase
+| Copy : Std.U8 → memory.dma.DmaPhase
+| Last : memory.dma.DmaPhase
+
+/-- [ceres_core::memory::dma::DmaStep]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 57:0-65:1 -/
+@[discriminant isize]
+inductive memory.dma.DmaStep where
+| Copy : Std.U16 → Std.U8 → memory.dma.DmaStep
+| Pause : Option (Std.U16 × Std.U8) → memory.dma.DmaStep
+
+/-- [ceres_core::memory::dma::Dma]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 67:0-83:1 -/
+structure memory.dma.Dma where
+  cycles : Std.I32
+  cycles_modulo : Std.I32
+  phase : memory.dma.DmaPhase
+  current_src : Std.U16
+  reg : Std.U8
+  restarting : Bool
+  ran_when_written : Bool
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
+@[reducible]
+def memory.dma.Dma.write.closure := Std.U16
+
+/-- [ceres_core::memory::dma::relation::Access]
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 34:0-38:1 -/
+@[discriminant isize]
+inductive memory.dma.relation.Access where
+| None : memory.dma.relation.Access
+| Read : memory.dma.relation.Access
+| Write : Std.U8 → memory.dma.relation.Access
+
+/-- [ceres_core::memory::dma::relation::CeresDma]
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 41:0-44:1 -/
+structure memory.dma.relation.CeresDma where
+  dma : memory.dma.Dma
+  last_copy : Option (Std.U16 × Std.U8)
+
+/-- [ceres_core::memory::dma::relation::CeresOut]
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 87:0-94:1 -/
+structure memory.dma.relation.CeresOut where
+  read : Option Std.U8
+  written : Option (Std.U16 × Std.U8)
+  runs_after_access : Bool
+  runs : Bool
+  blocks_oam : Bool
+  twice : Bool
+
+/-- [ceres_core::ppu::display::objects::OamLatches]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 57:0-60:1 -/
+structure ppu.display.objects.OamLatches where
+  y : Std.U8
+  x : Std.U8
+
+/-- [ceres_core::ppu::display::objects::relation::Line]
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 51:0-54:1 -/
+structure ppu.display.objects.relation.Line where
+  ly : Std.U8
+  tall : Bool
+
+/-- [ceres_core::ppu::display::objects::relation::NetSide]
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 60:0-65:1 -/
+structure ppu.display.objects.relation.NetSide where
+  scan : ceres_netlist.oam_scan.NetScan
+  latches : ceres_netlist.oam.NetOamLatches
+  scanned : Std.U8
+  slots : Array (Option Std.U8) 10#usize
+
+/-- [ceres_core::ppu::display::objects::relation::CeresSide]
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 70:0-75:1 -/
+structure ppu.display.objects.relation.CeresSide where
+  latches : ppu.display.objects.OamLatches
+  read : Std.U8
+  first : Array (Option Std.U8) 10#usize
+  found : Std.Usize
+
+/-- [ceres_core::ppu::display::timing::PendingWrite]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 48:0-51:1 -/
+structure ppu.display.timing.PendingWrite where
+  value : Std.U8
+  half_dots_left : Std.U8
+
+/-- [ceres_core::ppu::display::timing::Phases]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 100:0-120:1 -/
+structure ppu.display.timing.Phases where
+  cgb : Bool
+  hblank_clear : Std.I32
+  line153_ly_reset : Std.I32
+  scan_start : Std.I32
+  scan_end : Std.I32
+  mode1_start : Std.I32
+  mode1_end : Std.I32
+  flag_holds : Bool
+
+/-- [ceres_core::ppu::display::timing::LcdTiming]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 159:0-193:1 -/
+structure ppu.display.timing.LcdTiming where
+  phases : ppu.display.timing.Phases
+  on : Bool
+  first_line : Bool
+  line : Std.U8
+  h : Std.I32
+  ly : Std.U8
+  line_end : Bool
+  vblank : Bool
+  hblank : Bool
+  hblank_pending : Bool
+  ly_match : Bool
+  enables : Std.U8
+  lyc : Std.U8
+  stat_line : Bool
+  lyc_pending : Option ppu.display.timing.PendingWrite
+  stat_pending : Option ppu.display.timing.PendingWrite
+  dirty : Bool
+
+/-- [ceres_core::ppu::display::timing::Delays]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 355:0-362:1 -/
+structure ppu.display.timing.Delays where
+  stat_write : Std.U8
+  lyc_write : Std.U8
+  ly_read : Std.U8
+  flag_read : Std.U8
+  mode_read : Std.U8
+
+/-- [ceres_core::ppu::display::timing::relation::Access]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 60:0-68:1 -/
+@[discriminant isize]
+inductive ppu.display.timing.relation.Access where
+| None : ppu.display.timing.relation.Access
+| ReadStat : ppu.display.timing.relation.Access
+| ReadLy : ppu.display.timing.relation.Access
+| ReadLyc : ppu.display.timing.relation.Access
+| WriteStat : Std.U8 → ppu.display.timing.relation.Access
+| WriteLyc : Std.U8 → ppu.display.timing.relation.Access
+| WriteLcdc : Std.U8 → ppu.display.timing.relation.Access
+
+/-- [ceres_core::ppu::display::timing::relation::Net]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 74:0-78:1 -/
+structure ppu.display.timing.relation.Net where
+  lcd : ceres_netlist.lcd_timing.NetLcd
+  control : ceres_netlist.lcd_control.NetLcdControl
+  mode0 : Bool
+
+/-- [ceres_core::timer_if::relation::JointHost]
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 36:0-39:1 -/
+structure timer_if.relation.JointHost where
   serial_div_mask : Std.U16
   ints : interrupts.Interrupts
 
@@ -236,161 +387,10 @@ structure timing.timer.TimerHost (Self : Type _) where
   apu_delayed_envelope_tick : Self → timing.timer.Clock → Result Self
   apu_m_cycle : Self → timing.timer.Clock → Result Self
 
-/-- [ceres_core::timing::check::CheckHost]
-    Source: 'ceres-core/src/timing/check.rs', lines 40:0-43:1 -/
-structure timing.check.CheckHost where
+/-- [ceres_core::timing::relation::CheckHost]
+    Source: 'ceres-core/src/timing/relation.rs', lines 40:0-43:1 -/
+structure timing.relation.CheckHost where
   serial_div_mask : Std.U16
   timer_interrupts : Std.U32
-
-/-- [ceres_core::memory::dma::check::Access]
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 34:0-38:1 -/
-@[discriminant isize]
-inductive memory.dma.check.Access where
-| None : memory.dma.check.Access
-| Read : memory.dma.check.Access
-| Write : Std.U8 → memory.dma.check.Access
-
-/-- [ceres_core::memory::dma::DmaPhase]
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 22:0-31:1 -/
-@[discriminant isize]
-inductive memory.dma.DmaPhase where
-| Idle : memory.dma.DmaPhase
-| StartUp : memory.dma.DmaPhase
-| Copy : Std.U8 → memory.dma.DmaPhase
-| Last : memory.dma.DmaPhase
-
-/-- [ceres_core::memory::dma::Dma]
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 67:0-83:1 -/
-structure memory.dma.Dma where
-  cycles : Std.I32
-  cycles_modulo : Std.I32
-  phase : memory.dma.DmaPhase
-  current_src : Std.U16
-  reg : Std.U8
-  restarting : Bool
-  ran_when_written : Bool
-
-/-- [ceres_core::memory::dma::check::CeresDma]
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 41:0-44:1 -/
-structure memory.dma.check.CeresDma where
-  dma : memory.dma.Dma
-  last_copy : Option (Std.U16 × Std.U8)
-
-/-- [ceres_core::memory::dma::check::CeresOut]
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 87:0-94:1 -/
-structure memory.dma.check.CeresOut where
-  read : Option Std.U8
-  written : Option (Std.U16 × Std.U8)
-  runs_after_access : Bool
-  runs : Bool
-  blocks_oam : Bool
-  twice : Bool
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}]
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
-@[reducible]
-def memory.dma.Dma.write.closure := Std.U16
-
-/-- [ceres_core::memory::dma::DmaStep]
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 57:0-65:1 -/
-@[discriminant isize]
-inductive memory.dma.DmaStep where
-| Copy : Std.U16 → Std.U8 → memory.dma.DmaStep
-| Pause : Option (Std.U16 × Std.U8) → memory.dma.DmaStep
-
-/-- [ceres_core::ppu::display::objects::check::Line]
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 51:0-54:1 -/
-structure ppu.display.objects.check.Line where
-  ly : Std.U8
-  tall : Bool
-
-/-- [ceres_core::ppu::display::objects::check::NetSide]
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 60:0-65:1 -/
-structure ppu.display.objects.check.NetSide where
-  scan : ceres_netlist.oam_scan.NetScan
-  latches : ceres_netlist.oam.NetOamLatches
-  scanned : Std.U8
-  slots : Array (Option Std.U8) 10#usize
-
-/-- [ceres_core::ppu::display::objects::OamLatches]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 57:0-60:1 -/
-structure ppu.display.objects.OamLatches where
-  y : Std.U8
-  x : Std.U8
-
-/-- [ceres_core::ppu::display::objects::check::CeresSide]
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 70:0-75:1 -/
-structure ppu.display.objects.check.CeresSide where
-  latches : ppu.display.objects.OamLatches
-  read : Std.U8
-  first : Array (Option Std.U8) 10#usize
-  found : Std.Usize
-
-/-- [ceres_core::ppu::display::timing::check::Access]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 60:0-68:1 -/
-@[discriminant isize]
-inductive ppu.display.timing.check.Access where
-| None : ppu.display.timing.check.Access
-| ReadStat : ppu.display.timing.check.Access
-| ReadLy : ppu.display.timing.check.Access
-| ReadLyc : ppu.display.timing.check.Access
-| WriteStat : Std.U8 → ppu.display.timing.check.Access
-| WriteLyc : Std.U8 → ppu.display.timing.check.Access
-| WriteLcdc : Std.U8 → ppu.display.timing.check.Access
-
-/-- [ceres_core::ppu::display::timing::check::Net]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 74:0-78:1 -/
-structure ppu.display.timing.check.Net where
-  lcd : ceres_netlist.lcd_timing.NetLcd
-  control : ceres_netlist.lcd_control.NetLcdControl
-  mode0 : Bool
-
-/-- [ceres_core::ppu::display::timing::Phases]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 100:0-120:1 -/
-structure ppu.display.timing.Phases where
-  cgb : Bool
-  hblank_clear : Std.I32
-  line153_ly_reset : Std.I32
-  scan_start : Std.I32
-  scan_end : Std.I32
-  mode1_start : Std.I32
-  mode1_end : Std.I32
-  flag_holds : Bool
-
-/-- [ceres_core::ppu::display::timing::PendingWrite]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 48:0-51:1 -/
-structure ppu.display.timing.PendingWrite where
-  value : Std.U8
-  half_dots_left : Std.U8
-
-/-- [ceres_core::ppu::display::timing::LcdTiming]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 159:0-193:1 -/
-structure ppu.display.timing.LcdTiming where
-  phases : ppu.display.timing.Phases
-  on : Bool
-  first_line : Bool
-  line : Std.U8
-  h : Std.I32
-  ly : Std.U8
-  line_end : Bool
-  vblank : Bool
-  hblank : Bool
-  hblank_pending : Bool
-  ly_match : Bool
-  enables : Std.U8
-  lyc : Std.U8
-  stat_line : Bool
-  lyc_pending : Option ppu.display.timing.PendingWrite
-  stat_pending : Option ppu.display.timing.PendingWrite
-  dirty : Bool
-
-/-- [ceres_core::ppu::display::timing::Delays]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 355:0-362:1 -/
-structure ppu.display.timing.Delays where
-  stat_write : Std.U8
-  lyc_write : Std.U8
-  ly_read : Std.U8
-  flag_read : Std.U8
-  mode_read : Std.U8
 
 end ceres_core

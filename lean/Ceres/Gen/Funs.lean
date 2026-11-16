@@ -1220,61 +1220,40 @@ def ceres_netlist.timer.NetTimer.m_cycle
       ceres_netlist.timer.Access.None
   ok ((read, (¬ self4.int_timer) && self5.int_timer), self8)
 
-/-- [ceres_core::check::{ceres_core::check::JointHost}::new]:
-    Source: 'ceres-core/src/check.rs', lines 42:4-47:5 -/
-def check.JointHost.new
-  (serial_div_mask : Std.U16) (ints : interrupts.Interrupts) :
-  Result check.JointHost
-  := do
-  ok { serial_div_mask, ints }
-
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_m_cycle]:
-    Source: 'ceres-core/src/check.rs', lines 83:4-83:43 -/
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
-  (self : check.JointHost) (c : timing.timer.Clock) :
-  Result check.JointHost
-  := do
-  ok self
-
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_delayed_envelope_tick]:
-    Source: 'ceres-core/src/check.rs', lines 81:4-81:57 -/
-def
-  check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
-  (self : check.JointHost) (c : timing.timer.Clock) :
-  Result check.JointHost
-  := do
-  ok self
-
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_envelopes_armed]:
-    Source: 'ceres-core/src/check.rs', lines 79:4-79:40 -/
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
-  (self : check.JointHost) : Result check.JointHost := do
-  ok self
-
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::apu_frame_sequencer_step]:
-    Source: 'ceres-core/src/check.rs', lines 77:4-77:56 -/
-def
-  check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
-  (self : check.JointHost) (c : timing.timer.Clock) :
-  Result check.JointHost
-  := do
-  ok self
-
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::serial_clock_edge]:
-    Source: 'ceres-core/src/check.rs', lines 75:4-75:38 -/
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
-  (self : check.JointHost) : Result check.JointHost := do
-  ok self
-
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::serial_div_mask]:
-    Source: 'ceres-core/src/check.rs', lines 71:4-73:5 -/
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
-  (self : check.JointHost) : Result Std.U16 := do
-  ok self.serial_div_mask
+/-- [ceres_core::interrupts::INT_LCD_B]
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 8:0-8:27 -/
+@[global_simps, irreducible] def interrupts.INT_LCD_B : Std.U8 := 2#u8
 
 /-- [ceres_core::interrupts::INT_TIMER_B]
     Source: 'ceres-core/src/interrupts/mod.rs', lines 9:0-9:29 -/
 @[global_simps, irreducible] def interrupts.INT_TIMER_B : Std.U8 := 4#u8
+
+/-- [ceres_core::interrupts::INT_MASK]
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 13:0-13:37 -/
+@[global_simps, irreducible] def interrupts.INT_MASK : Std.U8 := 31#u8
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::acknowledge_interrupt]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 29:4-31:5 -/
+def interrupts.Interrupts.acknowledge_interrupt
+  (self : interrupts.Interrupts) (int_bit : Std.U8) :
+  Result interrupts.Interrupts
+  := do
+  let i ← lift (~~~ int_bit)
+  let i1 ← lift (self.ifr &&& i)
+  ok { self with ifr := i1 }
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_ie]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 43:4-45:5 -/
+def interrupts.Interrupts.read_ie
+  (self : interrupts.Interrupts) : Result Std.U8 := do
+  ok self.ie
+
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_if]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 48:4-50:5 -/
+def interrupts.Interrupts.read_if
+  (self : interrupts.Interrupts) : Result Std.U8 := do
+  let i ← lift (~~~ interrupts.INT_MASK)
+  ok (self.ifr ||| i)
 
 /-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::request_timer]:
     Source: 'ceres-core/src/interrupts/mod.rs', lines 74:4-76:5 -/
@@ -1283,57 +1262,2901 @@ def interrupts.Interrupts.request_timer
   let i ← lift (self.ifr ||| interrupts.INT_TIMER_B)
   ok { self with ifr := i }
 
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::request_timer_interrupt]:
-    Source: 'ceres-core/src/check.rs', lines 67:4-69:5 -/
+/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::write_if]:
+    Source: 'ceres-core/src/interrupts/mod.rs', lines 86:4-88:5 -/
+def interrupts.Interrupts.write_if
+  (self : interrupts.Interrupts) (val : Std.U8) :
+  Result interrupts.Interrupts
+  := do
+  let i ← lift (val &&& interrupts.INT_MASK)
+  ok { self with ifr := i }
+
+/-- [ceres_core::interrupts::relation::related]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 35:0-37:1 -/
+def interrupts.relation.related
+  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts) :
+  Result Bool
+  := do
+  let i ← lift (~~~ interrupts.INT_MASK)
+  let i1 ← lift (net.flags &&& i)
+  ok (((i1 = 0#u8) && (ints.ifr = net.flags)) && (ints.ie = net.ie))
+
+/-- [ceres_core::interrupts::relation::same_ints]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 40:0-42:1 -/
+def interrupts.relation.same_ints
+  (a : interrupts.Interrupts) (b : interrupts.Interrupts) : Result Bool := do
+  ok ((a.ie = b.ie) && (a.ifr = b.ifr))
+
+/-- [ceres_core::interrupts::relation::same_stat]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 48:0-52:1 -/
+def interrupts.relation.same_stat
+  (net : Array Bool 8#usize) (ceres : Array Bool 4#usize) : Result Bool := do
+  let b ← Array.index_usize net 0#usize
+  let b1 ← Array.index_usize net 1#usize
+  let b2 ← Array.index_usize net 2#usize
+  let b3 ← Array.index_usize ceres 0#usize
+  let b4 ← Array.index_usize net 3#usize
+  let b5 ← Array.index_usize ceres 1#usize
+  let b6 ← Array.index_usize net 4#usize
+  let b7 ← Array.index_usize net 5#usize
+  let b8 ← Array.index_usize net 6#usize
+  let b9 ← Array.index_usize net 7#usize
+  let b10 ← Array.index_usize ceres 2#usize
+  let b11 ← Array.index_usize ceres 3#usize
+  ok (((((b || b1) || b2) = b3) && (b4 = b5)) && ((((b6 || b7) || b8) || b9) =
+    (b10 || b11)))
+
+/-- [ceres_core::interrupts::relation::with_stat]: loop body 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 58:4-63:5 -/
+@[rust_loop_body]
+def interrupts.relation.with_stat_loop.body
+  (stat : Array Bool 4#usize) (requests : Array Std.U8 4#usize) (t : Std.Usize)
+  :
+  Result (ControlFlow ((Array Std.U8 4#usize) × Std.Usize) (Array Std.U8
+    4#usize))
+  := do
+  if t < 4#usize
+  then
+    let b ← Array.index_usize stat t
+    let requests1 ←
+      if b
+      then
+        do
+        let i ← Array.index_usize requests t
+        let i1 ← lift (i ||| interrupts.INT_LCD_B)
+        Array.update requests t i1
+      else ok requests
+    let t1 ← t + 1#usize
+    ok (cont (requests1, t1))
+  else ok (done requests)
+
+/-- [ceres_core::interrupts::relation::with_stat]: loop 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 58:4-63:5 -/
+@[rust_loop]
+def interrupts.relation.with_stat_loop
+  (stat : Array Bool 4#usize) (requests : Array Std.U8 4#usize) (t : Std.Usize)
+  :
+  Result (Array Std.U8 4#usize)
+  := do
+  loop
+    (fun (requests1, t1) => interrupts.relation.with_stat_loop.body stat
+      requests1 t1)
+    (requests, t)
+
+/-- [ceres_core::interrupts::relation::with_stat]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 55:0-65:1 -/
+@[reducible]
+def interrupts.relation.with_stat
+  (requests : Array Std.U8 4#usize) (stat : Array Bool 4#usize) :
+  Result (Array Std.U8 4#usize)
+  := do
+  interrupts.relation.with_stat_loop stat requests 0#usize
+
+/-- [ceres_core::interrupts::relation::requests]: loop body 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 72:4-76:5 -/
+@[rust_loop_body]
+def interrupts.relation.requests_loop.body
+  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
+  (i : Std.Usize) :
+  Result (ControlFlow ((Array Std.U8 4#usize) × Std.Usize) (Array Std.U8
+    4#usize))
+  := do
+  if i < 8#usize
+  then
+    let p ← Array.index_usize ceres_netlist.interrupts.PHASES i
+    let t ← ceres_netlist.interrupts.t_cycle p
+    let i1 ← Array.index_usize rises i
+    let i2 ← lift (i1 &&& interrupts.INT_MASK)
+    let i3 ← Array.index_usize requests t
+    let i4 ← lift (i3 ||| i2)
+    let a ← Array.update requests t i4
+    let i5 ← i + 1#usize
+    ok (cont (a, i5))
+  else ok (done requests)
+
+/-- [ceres_core::interrupts::relation::requests]: loop 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 72:4-76:5 -/
+@[rust_loop]
+def interrupts.relation.requests_loop
+  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
+  (i : Std.Usize) :
+  Result (Array Std.U8 4#usize)
+  := do
+  loop
+    (fun (requests1, i1) => interrupts.relation.requests_loop.body rises
+      requests1 i1)
+    (requests, i)
+
+/-- [ceres_core::interrupts::relation::requests]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 69:0-78:1 -/
+def interrupts.relation.requests
+  (rises : Array Std.U8 8#usize) : Result (Array Std.U8 4#usize) := do
+  let requests := Array.repeat 4#usize 0#u8
+  interrupts.relation.requests_loop rises requests 0#usize
+
+/-- [ceres_core::interrupts::relation::ceres_boundary]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 82:0-89:1 -/
+def interrupts.relation.ceres_boundary
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access) :
+  Result ((Option Std.U8) × Std.U8)
+  := do
+  let read ←
+    match access with
+    | ceres_netlist.interrupts.Access.None => ok none
+    | ceres_netlist.interrupts.Access.ReadIf =>
+      do
+      let i ← interrupts.Interrupts.read_if ints
+      ok (some i)
+    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
+    | ceres_netlist.interrupts.Access.Entry => ok none
+  let i ← interrupts.Interrupts.read_ie ints
+  let i1 ← lift (i &&& interrupts.INT_MASK)
+  let i2 ← interrupts.Interrupts.read_if ints
+  let i3 ← lift (i1 &&& i2)
+  let queue ← lift (i3 &&& interrupts.INT_MASK)
+  ok (read, queue)
+
+/-- [ceres_core::interrupts::relation::ceres_t_cycle]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 93:0-114:1 -/
+def interrupts.relation.ceres_t_cycle
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
+  (t : Std.Usize) (request : Std.U8) (queue : Std.U8) :
+  Result interrupts.Interrupts
+  := do
+  let i ← lift (ints.ifr ||| request)
+  match access with
+  | ceres_netlist.interrupts.Access.None => ok { ints with ifr := i }
+  | ceres_netlist.interrupts.Access.ReadIf => ok { ints with ifr := i }
+  | ceres_netlist.interrupts.Access.WriteIf val =>
+    if t = 0#usize
+    then interrupts.Interrupts.write_if { ints with ifr := i } val
+    else ok { ints with ifr := i }
+  | ceres_netlist.interrupts.Access.Entry =>
+    if (t = 1#usize) && (queue != 0#u8)
+    then
+      let i1 ← ceres_netlist.interrupts.lowest queue
+      interrupts.Interrupts.acknowledge_interrupt { ints with ifr := i } i1
+    else ok { ints with ifr := i }
+
+/-- [ceres_core::interrupts::relation::net_step]: loop body 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 131:4-136:5 -/
+@[rust_loop_body]
+def interrupts.relation.net_step_loop.body
+  (stat : Array Bool 8#usize) (rises : Array Std.U8 8#usize) (i : Std.Usize) :
+  Result (ControlFlow ((Array Std.U8 8#usize) × Std.Usize) (Array Std.U8
+    8#usize))
+  := do
+  if i < 8#usize
+  then
+    let b ← Array.index_usize stat i
+    let rises1 ←
+      if b
+      then
+        do
+        let i1 ← Array.index_usize rises i
+        let i2 ← lift (i1 ||| interrupts.INT_LCD_B)
+        Array.update rises i i2
+      else ok rises
+    let i1 ← i + 1#usize
+    ok (cont (rises1, i1))
+  else ok (done rises)
+
+/-- [ceres_core::interrupts::relation::net_step]: loop 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 131:4-136:5 -/
+@[rust_loop]
+def interrupts.relation.net_step_loop
+  (stat : Array Bool 8#usize) (rises : Array Std.U8 8#usize) (i : Std.Usize) :
+  Result (Array Std.U8 8#usize)
+  := do
+  loop
+    (fun (rises1, i1) => interrupts.relation.net_step_loop.body stat rises1 i1)
+    (rises, i)
+
+/-- [ceres_core::interrupts::relation::net_step]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 119:0-138:1 -/
+def interrupts.relation.net_step
+  (net : ceres_netlist.interrupts.NetIf)
+  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
+  (timer : Bool) (stat : Array Bool 8#usize) :
+  Result (((Option Std.U8) × (Option Std.U8)) ×
+    ceres_netlist.interrupts.NetIf)
+  := do
+  let rises1 ←
+    if timer
+    then
+      do
+      let i ← Array.index_usize rises ceres_netlist.interrupts.A
+      let i1 ← lift (i ||| ceres_netlist.interrupts.TIMER)
+      Array.update rises ceres_netlist.interrupts.A i1
+    else ok rises
+  let rises2 ← interrupts.relation.net_step_loop stat rises1 0#usize
+  ceres_netlist.interrupts.NetIf.m_cycle net access rises2
+
+/-- [ceres_core::interrupts::relation::ceres_step]: loop body 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 159:4-162:5 -/
+@[rust_loop_body]
+def interrupts.relation.ceres_step_loop.body
+  (access : ceres_netlist.interrupts.Access) (requests : Array Std.U8 4#usize)
+  (queue : Std.U8) (ints : interrupts.Interrupts) (t : Std.Usize) :
+  Result (ControlFlow (interrupts.Interrupts × Std.Usize)
+    interrupts.Interrupts)
+  := do
+  if t < 4#usize
+  then
+    let i ← Array.index_usize requests t
+    let ints1 ← interrupts.relation.ceres_t_cycle ints access t i queue
+    let t1 ← t + 1#usize
+    ok (cont (ints1, t1))
+  else ok (done ints)
+
+/-- [ceres_core::interrupts::relation::ceres_step]: loop 0:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 159:4-162:5 -/
+@[rust_loop]
+def interrupts.relation.ceres_step_loop
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
+  (requests : Array Std.U8 4#usize) (queue : Std.U8) (t : Std.Usize) :
+  Result interrupts.Interrupts
+  := do
+  loop
+    (fun (ints1, t1) => interrupts.relation.ceres_step_loop.body access
+      requests queue ints1 t1)
+    (ints, t)
+
+/-- [ceres_core::interrupts::relation::ceres_step]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 142:0-164:1 -/
+def interrupts.relation.ceres_step
+  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
+  (rises : Array Std.U8 8#usize) (timer : Option Std.U8)
+  (stat : Array Bool 4#usize) :
+  Result (((Option Std.U8) × (Option Std.U8)) × interrupts.Interrupts)
+  := do
+  let a ← interrupts.relation.requests rises
+  let requests ← interrupts.relation.with_stat a stat
+  let requests1 ←
+    match timer with
+    | none => ok requests
+    | some t =>
+      do
+      let i ← lift (t &&& 3#u8)
+      let i1 ← lift (core.convert.num.FromUsizeU8.from i)
+      let i2 ← Array.index_usize requests i1
+      let i3 ← lift (i2 ||| ceres_netlist.interrupts.TIMER)
+      Array.update requests i1 i3
+  let (read, queue) ← interrupts.relation.ceres_boundary ints access
+  let taken ←
+    match access with
+    | ceres_netlist.interrupts.Access.None => ok none
+    | ceres_netlist.interrupts.Access.ReadIf => ok none
+    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
+    | ceres_netlist.interrupts.Access.Entry =>
+      do
+      let i ← ceres_netlist.interrupts.lowest queue
+      ok (some i)
+  let ints1 ←
+    interrupts.relation.ceres_step_loop ints access requests1 queue 0#usize
+  ok ((read, taken), ints1)
+
+/-- [ceres_core::timing::relation::same_read]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 187:0-193:1 -/
+def timing.relation.same_read
+  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some x => match b with
+              | none => ok false
+              | some y => ok (x = y)
+
+/-- [ceres_core::timing::relation::same_interrupt]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 157:0-162:1 -/
+def timing.relation.same_interrupt
+  (net : Bool) (ceres : Option Std.U8) : Result Bool := do
+  match ceres with
+  | none => ok (¬ net)
+  | some t => ok (net && (t = 2#u8))
+
+/-- [ceres_core::interrupts::relation::step_agrees]:
+    Source: 'ceres-core/src/interrupts/relation.rs', lines 172:0-215:1 -/
+def interrupts.relation.step_agrees
+  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts)
+  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
+  (net_timer : Bool) (ceres_timer : Option Std.U8)
+  (net_stat : Array Bool 8#usize) (ceres_stat : Array Bool 4#usize) :
+  Result Bool
+  := do
+  let b ← interrupts.relation.related net ints
+  let b1 ← timing.relation.same_interrupt net_timer ceres_timer
+  let b2 ← interrupts.relation.same_stat net_stat ceres_stat
+  if ((¬ b) || (¬ b1)) || (¬ b2)
+  then ok true
+  else
+    let ((net_read, net_taken), net1) ←
+      interrupts.relation.net_step net access rises net_timer net_stat
+    let ((ceres_read, ceres_taken), ints1) ←
+      interrupts.relation.ceres_step ints access rises ceres_timer ceres_stat
+    let b3 ← timing.relation.same_read net_read ceres_read
+    let b4 ← timing.relation.same_read net_taken ceres_taken
+    let b5 ← interrupts.relation.related net1 ints1
+    ok ((b3 && b4) && b5)
+
+/-- [ceres_core::ppu::oam::{ceres_core::ppu::oam::Oam}::SIZE]
+    Source: 'ceres-core/src/ppu/oam.rs', lines 19:4-19:37 -/
+@[global_simps, irreducible] def ppu.oam.Oam.SIZE : Std.U8 := 160#u8
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::DmaPhase}::step]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 35:4-42:5 -/
+def memory.dma.DmaPhase.step
+  (self : memory.dma.DmaPhase) : Result memory.dma.DmaPhase := do
+  match self with
+  | memory.dma.DmaPhase.Idle => ok memory.dma.DmaPhase.Idle
+  | memory.dma.DmaPhase.StartUp => ok (memory.dma.DmaPhase.Copy 0#u8)
+  | memory.dma.DmaPhase.Copy next =>
+    let i ← next + 1#u8
+    if i < ppu.oam.Oam.SIZE
+    then ok (memory.dma.DmaPhase.Copy i)
+    else ok memory.dma.DmaPhase.Last
+  | memory.dma.DmaPhase.Last => ok memory.dma.DmaPhase.Idle
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::DmaPhase}::written]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 46:4-52:5 -/
+def memory.dma.DmaPhase.written
+  (self : memory.dma.DmaPhase) : Result (Option Std.U8) := do
+  match self with
+  | memory.dma.DmaPhase.Idle => ok none
+  | memory.dma.DmaPhase.StartUp => ok none
+  | memory.dma.DmaPhase.Copy next =>
+    if next != 0#u8
+    then ok (some next)
+    else ok none
+  | memory.dma.DmaPhase.Last => ok (some ppu.oam.Oam.SIZE)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::is_active]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 132:4-134:5 -/
+def memory.dma.Dma.is_active (self : memory.dma.Dma) : Result Bool := do
+  let b ←
+    match self.phase with
+    | memory.dma.DmaPhase.Idle => ok true
+    | memory.dma.DmaPhase.StartUp => ok false
+    | memory.dma.DmaPhase.Copy _ => ok false
+    | memory.dma.DmaPhase.Last => ok false
+  ok (¬ b)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::runs_in]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 153:4-160:5 -/
+def memory.dma.Dma.runs_in
+  (self : memory.dma.Dma) (phase : memory.dma.DmaPhase) : Result Bool := do
+  match phase with
+  | memory.dma.DmaPhase.Idle => ok false
+  | memory.dma.DmaPhase.StartUp => ok self.ran_when_written
+  | memory.dma.DmaPhase.Copy i =>
+    match i with
+    | 0#uscalar => ok self.restarting
+    | _ => ok true
+  | memory.dma.DmaPhase.Last => ok true
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::runs]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 164:4-166:5 -/
+def memory.dma.Dma.runs (self : memory.dma.Dma) : Result Bool := do
+  memory.dma.Dma.runs_in self self.phase
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::blocks_oam]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 173:4-175:5 -/
+def memory.dma.Dma.blocks_oam (self : memory.dma.Dma) : Result Bool := do
+  let b ← memory.dma.Dma.is_active self
+  if b
+  then
+    let b1 ←
+      match self.phase with
+      | memory.dma.DmaPhase.Idle => ok false
+      | memory.dma.DmaPhase.StartUp => ok false
+      | memory.dma.DmaPhase.Copy i =>
+        match i with
+        | 0#uscalar => ok true
+        | _ => ok false
+      | memory.dma.DmaPhase.Last => ok false
+    if b1
+    then ok self.restarting
+    else ok true
+  else ok false
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::read]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 178:4-180:5 -/
+def memory.dma.Dma.read (self : memory.dma.Dma) : Result Std.U8 := do
+  ok self.reg
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::is_after_restart]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 195:4-197:5 -/
+def memory.dma.Dma.is_after_restart (self : memory.dma.Dma) : Result Bool := do
+  let b ←
+    match self.phase with
+    | memory.dma.DmaPhase.Idle => ok false
+    | memory.dma.DmaPhase.StartUp => ok false
+    | memory.dma.DmaPhase.Copy i =>
+      match i with
+      | 0#uscalar => ok true
+      | _ => ok false
+    | memory.dma.DmaPhase.Last => ok false
+  if b
+  then ok self.restarting
+  else ok false
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::oam_byte]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 201:4-209:5 -/
+def memory.dma.Dma.oam_byte
+  (self : memory.dma.Dma) : Result (Option Std.U8) := do
+  let b ← memory.dma.Dma.is_after_restart self
+  if b
+  then ok (some 0#u8)
+  else
+    let o ← memory.dma.DmaPhase.written self.phase
+    match o with
+    | none => ok none
+    | some written => let i ← written - 1#u8
+                      ok (some i)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::set_cycles]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 229:4-231:5 -/
+def memory.dma.Dma.set_cycles
+  (self : memory.dma.Dma) (cycles : Std.I32) : Result memory.dma.Dma := do
+  ok { self with cycles }
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::begin_run]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 235:4-238:5 -/
+def memory.dma.Dma.begin_run
+  (self : memory.dma.Dma) : Result memory.dma.Dma := do
+  let i ← self.cycles_modulo + self.cycles
+  ok { self with cycles := 0#i32, cycles_modulo := i }
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::step]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 252:4-265:5 -/
+def memory.dma.Dma.step
+  (self : memory.dma.Dma) : Result (memory.dma.DmaStep × memory.dma.Dma) := do
+  match self.phase with
+  | memory.dma.DmaPhase.Idle => ok (memory.dma.DmaStep.Pause none, self)
+  | memory.dma.DmaPhase.StartUp =>
+    if self.restarting
+    then ok (memory.dma.DmaStep.Pause (some (self.current_src, 0#u8)), self)
+    else ok (memory.dma.DmaStep.Pause none, self)
+  | memory.dma.DmaPhase.Copy dest =>
+    let dp ← memory.dma.DmaPhase.step self.phase
+    let i ← lift (core.num.U16.wrapping_add self.current_src 1#u16)
+    ok (memory.dma.DmaStep.Copy self.current_src dest,
+      { self with phase := dp, current_src := i })
+  | memory.dma.DmaPhase.Last => ok (memory.dma.DmaStep.Pause none, self)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::due_step]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 244:4-250:5 -/
+def memory.dma.Dma.due_step
+  (self : memory.dma.Dma) :
+  Result ((Option memory.dma.DmaStep) × memory.dma.Dma)
+  := do
+  if self.cycles_modulo < 4#i32
+  then ok (none, self)
+  else
+    let i ← self.cycles_modulo - 4#i32
+    let (ds, self1) ← memory.dma.Dma.step { self with cycles_modulo := i }
+    ok (some ds, self1)
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::end_pause]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 268:4-270:5 -/
+def memory.dma.Dma.end_pause
+  (self : memory.dma.Dma) : Result memory.dma.Dma := do
+  let dp ← memory.dma.DmaPhase.step self.phase
+  ok { self with phase := dp }
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{impl core::ops::function::FnOnce<(u8,), (u16, u8)> for ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}<'_0>}::call_once]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
 def
-  check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
-  (self : check.JointHost) : Result check.JointHost := do
+  memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8.call_once
+  (c : memory.dma.Dma.write.closure) (tupled_args : Std.U8) :
+  Result (Std.U16 × Std.U8)
+  := do
+  let i ← lift (core.convert.num.FromU16U8.from tupled_args)
+  let i1 ← lift (c ||| i)
+  ok (i1, tupled_args)
+
+/-- Trait implementation: [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{impl core::ops::function::FnOnce<(u8,), (u16, u8)> for ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}<'_0>}]
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
+@[reducible]
+def memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8 :
+  core.ops.function.FnOnce memory.dma.Dma.write.closure Std.U8 (Std.U16 ×
+  Std.U8) := {
+  call_once :=
+    memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8.call_once
+}
+
+/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write]:
+    Source: 'ceres-core/src/memory/dma/mod.rs', lines 278:4-294:5 -/
+def memory.dma.Dma.write
+  (self : memory.dma.Dma) (val : Std.U8) :
+  Result ((Option (Std.U16 × Std.U8)) × memory.dma.Dma)
+  := do
+  let last ← memory.dma.Dma.oam_byte self
+  let (dp, b) ←
+    match self.phase with
+    | memory.dma.DmaPhase.Idle => ok (memory.dma.DmaPhase.Idle, false)
+    | memory.dma.DmaPhase.StartUp => ok (memory.dma.DmaPhase.StartUp, true)
+    | memory.dma.DmaPhase.Copy i =>
+      do
+      let b1 ← match i with
+                 | 0#uscalar => ok true
+                 | _ => ok false
+      ok (self.phase, b1)
+    | memory.dma.DmaPhase.Last => ok (memory.dma.DmaPhase.Last, false)
+  let (i, i1, dp1, b1, b2) ←
+    if b
+    then
+      ok (self.cycles, self.cycles_modulo, dp, self.restarting,
+        self.ran_when_written)
+    else
+      do
+      let b3 ←
+        match dp with
+        | memory.dma.DmaPhase.Idle => ok false
+        | memory.dma.DmaPhase.StartUp => ok false
+        | memory.dma.DmaPhase.Copy _ => ok true
+        | memory.dma.DmaPhase.Last => ok false
+      let b4 ←
+        match dp with
+        | memory.dma.DmaPhase.Idle => ok false
+        | memory.dma.DmaPhase.StartUp => ok false
+        | memory.dma.DmaPhase.Copy _ => ok true
+        | memory.dma.DmaPhase.Last => ok true
+      ok (0#i32, 2#i32, memory.dma.DmaPhase.StartUp, b3, b4)
+  let i2 ← lift (core.convert.num.FromU16U8.from val)
+  let i3 ← i2 <<< 8#i32
+  let o ←
+    core.option.Option.map
+      memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8
+      last i3
+  ok (o,
+    {
+      cycles := i,
+      cycles_modulo := i1,
+      phase := dp1,
+      current_src := i3,
+      reg := val,
+      restarting := b1,
+      ran_when_written := b2
+    })
+
+/-- [ceres_core::memory::dma::relation::net_m_cycle]:
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 56:0-79:1 -/
+def memory.dma.relation.net_m_cycle
+  (net : ceres_netlist.dma.NetDma) (access : memory.dma.relation.Access) :
+  Result (((Option Std.U8) × (Option (Std.U16 × Std.U8)) × Bool × Bool) ×
+    ceres_netlist.dma.NetDma)
+  := do
+  let write ←
+    match access with
+    | memory.dma.relation.Access.None => ok none
+    | memory.dma.relation.Access.Read => ok none
+    | memory.dma.relation.Access.Write val => ok (some val)
+  let net1 ←
+    ceres_netlist.dma.NetDma.phase net ceres_netlist.clocks.Phase.E write
+  let net2 ←
+    ceres_netlist.dma.NetDma.phase net1 ceres_netlist.clocks.Phase.F write
+  let net3 ←
+    ceres_netlist.dma.NetDma.phase net2 ceres_netlist.clocks.Phase.G write
+  let oam ← ceres_netlist.dma.NetDma.oam_write net3
+  let net4 ←
+    ceres_netlist.dma.NetDma.phase net3 ceres_netlist.clocks.Phase.H none
+  let (net5, read) ←
+    match access with
+    | memory.dma.relation.Access.None => ok (net4, none)
+    | memory.dma.relation.Access.Read => ok (net4, some net4.source)
+    | memory.dma.relation.Access.Write _ => ok (net4, none)
+  let net6 ←
+    ceres_netlist.dma.NetDma.phase net5 ceres_netlist.clocks.Phase.A none
+  let net7 ←
+    ceres_netlist.dma.NetDma.phase net6 ceres_netlist.clocks.Phase.B none
+  let net8 ←
+    ceres_netlist.dma.NetDma.phase net7 ceres_netlist.clocks.Phase.C none
+  let net9 ←
+    ceres_netlist.dma.NetDma.phase net8 ceres_netlist.clocks.Phase.D none
+  ok ((read, oam, net.run, net9.run), net9)
+
+/-- [ceres_core::memory::dma::relation::ceres_m_cycle]:
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 100:0-138:1 -/
+def memory.dma.relation.ceres_m_cycle
+  (ceres : memory.dma.relation.CeresDma) (access : memory.dma.relation.Access)
+  :
+  Result (memory.dma.relation.CeresOut × memory.dma.relation.CeresDma)
+  := do
+  let (ceres1, read) ←
+    match access with
+    | memory.dma.relation.Access.None => ok (ceres, none)
+    | memory.dma.relation.Access.Read =>
+      do
+      let i ← memory.dma.Dma.read ceres.dma
+      ok (ceres, some i)
+    | memory.dma.relation.Access.Write val =>
+      do
+      let (o, d) ← memory.dma.Dma.write ceres.dma val
+      ok (({ dma := d, last_copy := o } : memory.dma.relation.CeresDma), none)
+  let runs_after_access ← memory.dma.Dma.runs ceres1.dma
+  let b ← memory.dma.Dma.is_active ceres1.dma
+  let (d, copy, twice) ←
+    if b
+    then
+      do
+      let d1 ← memory.dma.Dma.set_cycles ceres1.dma 4#i32
+      let d2 ← memory.dma.Dma.begin_run d1
+      let (o, d3) ← memory.dma.Dma.due_step d2
+      match o with
+      | none => ok (d3, none, false)
+      | some ds =>
+        match ds with
+        | memory.dma.DmaStep.Copy src dest =>
+          let (o1, d4) ← memory.dma.Dma.due_step d3
+          let twice1 := core.option.Option.is_some o1
+          ok (d4, some (src, dest), twice1)
+        | memory.dma.DmaStep.Pause rewrite =>
+          let d4 ← memory.dma.Dma.end_pause d3
+          ok (d4, rewrite, false)
+    else ok (ceres1.dma, none, false)
+  let b1 ← memory.dma.Dma.runs d
+  let b2 ← memory.dma.Dma.blocks_oam d
+  ok
+    ({
+       read,
+       written := ceres1.last_copy,
+       runs_after_access,
+       runs := b1,
+       blocks_oam := b2,
+       twice
+     }, { dma := d, last_copy := copy })
+
+/-- [ceres_core::memory::dma::relation::same_write]:
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 141:0-147:1 -/
+def memory.dma.relation.same_write
+  (a : Option (Std.U16 × Std.U8)) (b : Option (Std.U16 × Std.U8)) :
+  Result Bool
+  := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some p =>
+    match b with
+    | none => ok false
+    | some p1 =>
+      let (a_src, a_dest) := p
+      let (b_src, b_dest) := p1
+      ok ((a_src = b_src) && (a_dest = b_dest))
+
+/-- [ceres_core::memory::dma::relation::same_read]:
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 150:0-156:1 -/
+def memory.dma.relation.same_read
+  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some x => match b with
+              | none => ok false
+              | some y => ok (x = y)
+
+/-- [ceres_core::memory::dma::relation::copying]:
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 209:0-223:1 -/
+def memory.dma.relation.copying
+  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.relation.CeresDma)
+  (base : Std.U16) (next_byte : Std.U8) (in_range : Bool) :
+  Result Bool
+  := do
+  let n ← next_byte - 1#u8
+  let i ← lift (core.convert.num.FromU16U8.from n)
+  let i1 ← lift (base ||| i)
+  let b ← memory.dma.relation.same_write ceres.last_copy (some (i1, n))
+  let i2 ← lift (core.convert.num.FromU16U8.from next_byte)
+  let i3 ← base + i2
+  ok ((((((((((in_range && (¬ net.requested)) && (¬ net.start_1)) &&
+    (net.start_2 = (n = 0#u8))) && net.enabled) && net.run) && (¬ net.done))
+    && (net.count = n)) && b) && (ceres.dma.current_src = i3)) &&
+    (ceres.dma.cycles_modulo = 2#i32))
+
+/-- [ceres_core::memory::dma::relation::related]:
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 159:0-206:1 -/
+def memory.dma.relation.related
+  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.relation.CeresDma) :
+  Result Bool
+  := do
+  let i ← lift (core.convert.num.FromU16U8.from ceres.dma.reg)
+  let base ← i <<< 8#i32
+  let state ←
+    match ceres.dma.phase with
+    | memory.dma.DmaPhase.Idle =>
+      do
+      let b ← memory.dma.relation.same_write ceres.last_copy none
+      ok ((((((¬ net.requested) && (¬ net.start_1)) && (¬ net.start_2)) &&
+        (¬ net.enabled)) && (¬ net.run)) && b)
+    | memory.dma.DmaPhase.StartUp => ok false
+    | memory.dma.DmaPhase.Copy next =>
+      match next with
+      | 0#uscalar =>
+        if ceres.dma.restarting
+        then
+          do
+          let b ←
+            memory.dma.relation.same_write ceres.last_copy (some (base, 0#u8))
+          ok (((((((net.requested && net.start_1) && (¬ net.start_2)) &&
+            net.enabled) && net.run) && b) && (ceres.dma.current_src = base))
+            && (ceres.dma.cycles_modulo = 2#i32))
+        else
+          do
+          let b ← memory.dma.relation.same_write ceres.last_copy none
+          ok (((((((net.requested && net.start_1) && (¬ net.start_2)) && (¬
+            net.enabled)) && (¬ net.run)) && b) && (ceres.dma.current_src =
+            base)) && (ceres.dma.cycles_modulo = 2#i32))
+      | _ => memory.dma.relation.copying net ceres base next (next < 160#u8)
+    | memory.dma.DmaPhase.Last =>
+      memory.dma.relation.copying net ceres base 160#u8 true
+  ok (((ceres.dma.reg = net.source) && (ceres.dma.cycles = 0#i32)) && state)
+
+/-- [ceres_core::memory::dma::relation::step_agrees]:
+    Source: 'ceres-core/src/memory/dma/relation.rs', lines 230:0-263:1 -/
+def memory.dma.relation.step_agrees
+  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.relation.CeresDma)
+  (access : memory.dma.relation.Access) :
+  Result Bool
+  := do
+  let b ← memory.dma.relation.related net ceres
+  if b
+  then
+    let ((net_read, net_write, run_before, run_after), net1) ←
+      memory.dma.relation.net_m_cycle net access
+    let (out, ceres1) ← memory.dma.relation.ceres_m_cycle ceres access
+    let b1 ← memory.dma.relation.same_read net_read out.read
+    let b2 ← memory.dma.relation.same_write net_write out.written
+    let b3 ← memory.dma.relation.related net1 ceres1
+    ok ((((((b1 && b2) && (out.runs_after_access = run_before)) && (out.runs =
+      run_after)) && (out.blocks_oam = run_after)) && (¬ out.twice)) && b3)
+  else ok true
+
+/-- [ceres_core::ppu::display::LINE_LENGTH]
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 59:0-59:40 -/
+@[global_simps, irreducible] def ppu.display.LINE_LENGTH : Std.I32 := 456#i32
+
+/-- [ceres_core::ppu::PX_HEIGHT]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 26:0-26:30
+    Visibility: public -/
+@[global_simps, irreducible] def ppu.PX_HEIGHT : Std.U8 := 144#u8
+
+/-- [ceres_core::ppu::display::LINES]
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 61:0-61:39 -/
+@[global_simps, irreducible] def ppu.display.LINES : Std.U8 := ppu.PX_HEIGHT
+
+/-- [ceres_core::ppu::display::LAST_LINE]
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 63:0-63:37 -/
+@[global_simps, irreducible] def ppu.display.LAST_LINE : Std.U8 := 153#u8
+
+/-- [ceres_core::ppu::display::objects::MAX_OBJECTS_PER_LINE]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 22:0-22:39 -/
+@[global_simps, irreducible]
+def ppu.display.objects.MAX_OBJECTS_PER_LINE : Std.Usize := 10#usize
+
+/-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::OamLatches}::latch]:
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 67:4-73:5 -/
+def ppu.display.objects.OamLatches.latch
+  (self : ppu.display.objects.OamLatches) (read : Option (Std.U8 × Std.U8)) :
+  Result ((Std.U8 × Std.U8) × ppu.display.objects.OamLatches)
+  := do
+  match read with
+  | none => ok ((self.y, self.x), self)
+  | some p => let (y, x) := p
+              ok (p, { y, x })
+
+/-- [ceres_core::ppu::display::objects::on_line]:
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 95:0-99:1 -/
+def ppu.display.objects.on_line
+  (y : Std.U8) (line : Std.U8) (height_16 : Bool) : Result Bool := do
+  let i ← lift (UScalar.hcast .I32 y)
+  let top ← i - 16#i32
+  let line1 ← lift (UScalar.hcast .I32 line)
+  if top <= line1
+  then
+    let i1 ← if height_16
+               then ok 16#i32
+               else ok 8#i32
+    let i2 ← top + i1
+    ok (i2 > line1)
+  else ok false
+
+/-- [ceres_core::ppu::display::objects::relation::wuvu]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 80:0-82:1 -/
+def ppu.display.objects.relation.wuvu (h : Std.I32) : Result Bool := do
+  let i ← h + 912#i32
+  let i1 ← lift (i &&& 2#i32)
+  ok (i1 != 0#i32)
+
+/-- [ceres_core::ppu::display::objects::relation::wosu]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 84:0-86:1 -/
+def ppu.display.objects.relation.wosu (h : Std.I32) : Result Bool := do
+  let i ← h + 913#i32
+  let i1 ← lift (i &&& 2#i32)
+  ok (i1 != 0#i32)
+
+/-- [ceres_core::ppu::display::objects::relation::net_edge]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 90:0-121:1 -/
+def ppu.display.objects.relation.net_edge
+  (net : ppu.display.objects.relation.NetSide) (h : Std.I32)
+  (line : ppu.display.objects.relation.Line) (y : Std.U8) :
+  Result ppu.display.objects.relation.NetSide
+  := do
+  let i ← lift (h &&& 1#i32)
+  let i1 ← h - 1#i32
+  let b ← ppu.display.objects.relation.wuvu i1
+  let b1 ← ppu.display.objects.relation.wuvu h
+  let b2 ← ppu.display.objects.relation.wosu i1
+  let ns ←
+    ceres_netlist.oam_scan.NetScan.edge net.scan
+      {
+        rising := (i != 0#i32),
+        wuvu_before := b,
+        wuvu_after := b1,
+        wosu_before := b2,
+        vclk := ((h >= (-7)#i32) && (h <= 0#i32)),
+        ly := line.ly
+      } net.latches.second line.tall
+  let i2 ← if (¬ b) && b1
+             then ok net.scan.index
+             else ok net.scanned
+  let b3 ← ppu.display.objects.relation.wosu h
+  let nol ←
+    ceres_netlist.oam.NetOamLatches.settle net.latches
+      {
+        scanning := ns.scanning,
+        run := false,
+        dma_phi := false,
+        wuvu := b1,
+        wosu := b3,
+        fetch_read := false,
+        fetch_hold := false
+      } y
+  let o ←
+    ceres_netlist.oam_scan.NetScan.save ns b3 nol.second line.ly line.tall
+  match o with
+  | none => ok { net with scan := ns, latches := nol, scanned := i2 }
+  | some slot =>
+    let i3 ← lift (UScalar.cast .Usize slot)
+    let a ← Array.update net.slots i3 (some i2)
+    ok { scan := ns, latches := nol, scanned := i2, slots := a }
+
+/-- [ceres_core::ppu::display::objects::relation::ceres_read]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 124:0-131:1 -/
+def ppu.display.objects.relation.ceres_read
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) (y : Std.U8) :
+  Result ppu.display.objects.relation.CeresSide
+  := do
+  let ((seen, _), ol) ←
+    ppu.display.objects.OamLatches.latch ceres.latches (some (y, 0#u8))
+  let b ← ppu.display.objects.on_line seen line.ly line.tall
+  let (a, i) ←
+    if b && (ceres.found < ppu.display.objects.MAX_OBJECTS_PER_LINE)
+    then
+      do
+      let a1 ← Array.update ceres.first ceres.found (some ceres.read)
+      let i1 ← ceres.found + 1#usize
+      ok (a1, i1)
+    else ok (ceres.first, ceres.found)
+  let i1 ← ceres.read + 1#u8
+  ok { latches := ol, read := i1, first := a, found := i }
+
+/-- [ceres_core::ppu::display::objects::relation::net_window]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 135:0-141:1 -/
+def ppu.display.objects.relation.net_window
+  (net : ppu.display.objects.relation.NetSide)
+  (line : ppu.display.objects.relation.Line) (j : Std.U8) (y : Std.U8) :
+  Result ppu.display.objects.relation.NetSide
+  := do
+  let i ← lift (UScalar.hcast .I32 j)
+  let i1 ← 4#i32 * i
+  let h ← i1 - 2#i32
+  let net1 ← ppu.display.objects.relation.net_edge net h line y
+  let i2 ← h + 1#i32
+  let net2 ← ppu.display.objects.relation.net_edge net1 i2 line y
+  let i3 ← h + 2#i32
+  let net3 ← ppu.display.objects.relation.net_edge net2 i3 line y
+  let i4 ← h + 3#i32
+  ppu.display.objects.relation.net_edge net3 i4 line y
+
+/-- [ceres_core::ppu::display::objects::relation::step]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 145:0-148:1 -/
+def ppu.display.objects.relation.step
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) (j : Std.U8) (y : Std.U8) :
+  Result (ppu.display.objects.relation.NetSide ×
+    ppu.display.objects.relation.CeresSide)
+  := do
+  let net1 ← ppu.display.objects.relation.net_window net line j y
+  let ceres1 ← ppu.display.objects.relation.ceres_read ceres line y
+  ok (net1, ceres1)
+
+/-- [ceres_core::ppu::display::objects::relation::same_slot]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 152:0-158:1 -/
+def ppu.display.objects.relation.same_slot
+  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
+  match a with
+  | none => match b with
+            | none => ok true
+            | some _ => ok false
+  | some x => match b with
+              | none => ok false
+              | some y => ok (x = y)
+
+/-- [ceres_core::ppu::display::objects::relation::slots_are]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 165:4-169:5 -/
+@[rust_loop_body]
+def ppu.display.objects.relation.slots_are_loop.body
+  (net : ppu.display.objects.relation.NetSide) (n : Std.Usize)
+  (ceres : ppu.display.objects.relation.CeresSide) (ok1 : Bool) (i : Std.Usize)
+  :
+  Result (ControlFlow (ppu.display.objects.relation.CeresSide × Bool ×
+    Std.Usize) Bool)
+  := do
+  if i < 10#usize
+  then
+    let (ceres1, want) ←
+      if i < n
+      then do
+           let want1 ← Array.index_usize ceres.first i
+           ok (ceres, want1)
+      else ok (ceres, none)
+    let o ← Array.index_usize net.slots i
+    let b ← ppu.display.objects.relation.same_slot o want
+    let i1 ← i + 1#usize
+    ok (cont (ceres1, ok1 && b, i1))
+  else ok (done ok1)
+
+/-- [ceres_core::ppu::display::objects::relation::slots_are]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 165:4-169:5 -/
+@[rust_loop]
+def ppu.display.objects.relation.slots_are_loop
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide) (n : Std.Usize) (ok1 : Bool)
+  (i : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (ceres1, ok2, i1) => ppu.display.objects.relation.slots_are_loop.body
+      net n ceres1 ok2 i1)
+    (ceres, ok1, i)
+
+/-- [ceres_core::ppu::display::objects::relation::slots_are]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 162:0-171:1 -/
+@[reducible]
+def ppu.display.objects.relation.slots_are
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide) (n : Std.Usize) :
+  Result Bool
+  := do
+  ppu.display.objects.relation.slots_are_loop net ceres n true 0#usize
+
+/-- [ceres_core::ppu::display::objects::relation::unpack]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 196:0-201:1 -/
+def ppu.display.objects.relation.unpack
+  (slot : Option Std.U8) : Result (Bool × Std.U8) := do
+  match slot with
+  | none => ok (false, 0#u8)
+  | some index => ok (true, index)
+
+/-- [ceres_core::ppu::display::objects::relation::list_is_sound]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 179:4-190:5 -/
+@[rust_loop_body]
+def ppu.display.objects.relation.list_is_sound_loop.body
+  (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
+  (ok1 : Bool) (last : Std.I32) (i2 : Std.Usize) :
+  Result (ControlFlow (Bool × Std.I32 × Std.Usize) Bool)
+  := do
+  if i2 < 10#usize
+  then
+    let o ← Array.index_usize a i2
+    let (present, index) ← ppu.display.objects.relation.unpack o
+    let i3 ← lift (UScalar.hcast .I32 index)
+    let last1 ← if present
+                  then ok (UScalar.hcast .I32 index)
+                  else ok last
+    let i4 ← i2 + 1#usize
+    ok (cont (ok1 && ((((present && (i2 < i1)) && (i3 > last)) && (index < i))
+      || ((¬ present) && (i2 >= i1))), last1, i4))
+  else ok (done ok1)
+
+/-- [ceres_core::ppu::display::objects::relation::list_is_sound]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 179:4-190:5 -/
+@[rust_loop]
+def ppu.display.objects.relation.list_is_sound_loop
+  (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
+  (ok1 : Bool) (last : Std.I32) (i2 : Std.Usize) :
+  Result Bool
+  := do
+  loop
+    (fun (ok2, last1, i3) =>
+      ppu.display.objects.relation.list_is_sound_loop.body i a i1 ok2 last1 i3)
+    (ok1, last, i2)
+
+/-- [ceres_core::ppu::display::objects::relation::list_is_sound]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 175:0-192:1 -/
+@[reducible]
+def ppu.display.objects.relation.list_is_sound
+  (ceres : ppu.display.objects.relation.CeresSide) : Result Bool := do
+  ppu.display.objects.relation.list_is_sound_loop ceres.read ceres.first
+    ceres.found (ceres.found <= ppu.display.objects.MAX_OBJECTS_PER_LINE)
+    (-1)#i32 0#usize
+
+/-- [ceres_core::ppu::display::objects::relation::related]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 210:0-241:1 -/
+def ppu.display.objects.relation.related
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) (j : Std.U8) :
+  Result Bool
+  := do
+  let i ← lift (core.num.U8.wrapping_sub j 1#u8)
+  let i1 ← lift (core.num.U8.wrapping_add j 1#u8)
+  let i2 ← lift (UScalar.cast .Usize net.scan.count)
+  let i3 ←
+    lift (UScalar.cast_fromBool .Usize ((¬ net.scan.not_saving) &&
+      (net.scan.count < ceres_netlist.oam_scan.SLOTS)))
+  let saved ← i2 + i3
+  let i4 ← saved + 1#usize
+  let i5 ← saved % 10#usize
+  let o ← Array.index_usize ceres.first i5
+  let b ← ppu.display.objects.relation.same_slot o (some j)
+  let b1 ← ppu.display.objects.relation.slots_are net ceres saved
+  let b2 ← ppu.display.objects.relation.list_is_sound ceres
+  let b3 ← ppu.display.objects.on_line net.latches.second line.ly line.tall
+  let i6 ← lift (UScalar.cast .Usize net.scan.count)
+  let b4 ← ppu.display.objects.on_line ceres.latches.y line.ly line.tall
+  ok (((((((((((((net.scan.scanning && net.scan.ceno) && (¬
+    net.scan.start_scan)) && (¬ net.scan.anel)) && (¬ net.scan.byba)) && (¬
+    net.scan.doba)) && (net.scan.index = j)) && (net.scanned = i)) &&
+    (ceres.read = i1)) && (net.latches.first = ceres.latches.y)) && (
+    line.ly < 144#u8)) && (((((ceres.found = saved) || ((ceres.found = i4) &&
+    b)) && (net.scan.count <= ceres_netlist.oam_scan.SLOTS)) && b1) && b2)) &&
+    (((¬ net.scan.not_saving) && (net.scan.count <
+    ceres_netlist.oam_scan.SLOTS)) = (b3 && (i6 <
+    ppu.display.objects.MAX_OBJECTS_PER_LINE)))) && ((b4 && (saved <
+    ppu.display.objects.MAX_OBJECTS_PER_LINE)) = ((ceres.found = i4) && b)))
+
+/-- [ceres_core::ppu::display::objects::relation::step_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 245:0-252:1 -/
+def ppu.display.objects.relation.step_agrees
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) (j : Std.U8) (y : Std.U8) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.relation.related net ceres line j
+  if ((j >= 2#u8) && (j <= 38#u8)) && b
+  then
+    let (net1, ceres1) ← ppu.display.objects.relation.step net ceres line j y
+    let i ← j + 1#u8
+    ppu.display.objects.relation.related net1 ceres1 line i
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::relation::NO_SPRITES]
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 256:0-256:98 -/
+@[global_simps, irreducible]
+def ppu.display.objects.relation.NO_SPRITES : Array (Option Std.U8) 10#usize :=
+  Array.make 10#usize [
+    none, none, none, none, none, none, none, none, none, none
+    ]
+
+/-- [ceres_core::ppu::display::objects::relation::net_at_line_end]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 261:0-281:1 -/
+def ppu.display.objects.relation.net_at_line_end
+  (count : Std.U8) (not_saving : Bool) (held : Std.U8) :
+  Result ppu.display.objects.relation.NetSide
+  := do
+  ok
+    {
+      scan :=
+        {
+          start_scan := false,
+          anel := false,
+          scanning := false,
+          ceno := false,
+          index := 39#u8,
+          byba := true,
+          doba := true,
+          not_saving,
+          count
+        },
+      latches := { first := held, second := held },
+      scanned := 39#u8,
+      slots := ppu.display.objects.relation.NO_SPRITES
+    }
+
+/-- [ceres_core::ppu::display::objects::relation::ceres_at_line_end]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 284:0-291:1 -/
+def ppu.display.objects.relation.ceres_at_line_end
+  (held : Std.U8) : Result ppu.display.objects.relation.CeresSide := do
+  ok
+    {
+      latches := { y := held, x := 0#u8 },
+      read := 0#u8,
+      first := ppu.display.objects.relation.NO_SPRITES,
+      found := 0#usize
+    }
+
+/-- [ceres_core::ppu::display::objects::relation::lead_in]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 297:0-315:1 -/
+def ppu.display.objects.relation.lead_in
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 4#usize) :
+  Result (ppu.display.objects.relation.NetSide ×
+    ppu.display.objects.relation.CeresSide)
+  := do
+  let y39 ← Array.index_usize ys 0#usize
+  let y0 ← Array.index_usize ys 1#usize
+  let y1 ← Array.index_usize ys 2#usize
+  let y2 ← Array.index_usize ys 3#usize
+  let net1 ← ppu.display.objects.relation.net_edge net (-7)#i32 line y39
+  let net2 ← ppu.display.objects.relation.net_edge net1 (-6)#i32 line y0
+  let net3 ← ppu.display.objects.relation.net_edge net2 (-5)#i32 line y0
+  let net4 ← ppu.display.objects.relation.net_edge net3 (-4)#i32 line y0
+  let net5 ← ppu.display.objects.relation.net_edge net4 (-3)#i32 line y0
+  let ceres1 ← ppu.display.objects.relation.ceres_read ceres line y0
+  let net6 ← ppu.display.objects.relation.net_edge net5 (-2)#i32 line y1
+  let net7 ← ppu.display.objects.relation.net_edge net6 (-1)#i32 line y1
+  let net8 ← ppu.display.objects.relation.net_edge net7 0#i32 line y1
+  let net9 ← ppu.display.objects.relation.net_edge net8 1#i32 line y1
+  let ceres2 ← ppu.display.objects.relation.ceres_read ceres1 line y1
+  let net10 ← ppu.display.objects.relation.net_edge net9 2#i32 line y2
+  let net11 ← ppu.display.objects.relation.net_edge net10 3#i32 line y2
+  let net12 ← ppu.display.objects.relation.net_edge net11 4#i32 line y2
+  let net13 ← ppu.display.objects.relation.net_edge net12 5#i32 line y2
+  let ceres3 ← ppu.display.objects.relation.ceres_read ceres2 line y2
+  ok (net13, ceres3)
+
+/-- [ceres_core::ppu::display::objects::relation::lead_in_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 319:0-333:1 -/
+def ppu.display.objects.relation.lead_in_agrees
+  (count : Std.U8) (not_saving : Bool) (held : Std.U8)
+  (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 4#usize) :
+  Result Bool
+  := do
+  if (count <= ceres_netlist.oam_scan.SLOTS) && (line.ly < 144#u8)
+  then
+    let net ←
+      ppu.display.objects.relation.net_at_line_end count not_saving held
+    let ceres ← ppu.display.objects.relation.ceres_at_line_end held
+    let (net1, ceres1) ←
+      ppu.display.objects.relation.lead_in net ceres line ys
+    ppu.display.objects.relation.related net1 ceres1 line 2#u8
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::relation::tail]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 339:4-342:5 -/
+@[rust_loop_body]
+def ppu.display.objects.relation.tail_loop.body
+  (line : ppu.display.objects.relation.Line) (y39 : Std.U8)
+  (net : ppu.display.objects.relation.NetSide) (h : Std.I32) :
+  Result (ControlFlow (ppu.display.objects.relation.NetSide × Std.I32)
+    ppu.display.objects.relation.NetSide)
+  := do
+  if h <= 161#i32
+  then
+    let net1 ← ppu.display.objects.relation.net_edge net h line y39
+    let h1 ← h + 1#i32
+    ok (cont (net1, h1))
+  else ok (done net)
+
+/-- [ceres_core::ppu::display::objects::relation::tail]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 339:4-342:5 -/
+@[rust_loop]
+def ppu.display.objects.relation.tail_loop
+  (net : ppu.display.objects.relation.NetSide)
+  (line : ppu.display.objects.relation.Line) (y39 : Std.U8) (h : Std.I32) :
+  Result ppu.display.objects.relation.NetSide
+  := do
+  loop
+    (fun (net1, h1) => ppu.display.objects.relation.tail_loop.body line y39
+      net1 h1)
+    (net, h)
+
+/-- [ceres_core::ppu::display::objects::relation::tail]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 337:0-343:1 -/
+@[reducible]
+def ppu.display.objects.relation.tail
+  (net : ppu.display.objects.relation.NetSide)
+  (line : ppu.display.objects.relation.Line) (y39 : Std.U8) :
+  Result ppu.display.objects.relation.NetSide
+  := do
+  ppu.display.objects.relation.tail_loop net line y39 154#i32
+
+/-- [ceres_core::ppu::display::objects::relation::tail_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 348:0-366:1 -/
+def ppu.display.objects.relation.tail_agrees
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.relation.related net ceres line 39#u8
+  if b
+  then
+    let net1 ← ppu.display.objects.relation.tail net line ceres.latches.y
+    let b1 ← ppu.display.objects.relation.slots_are net1 ceres ceres.found
+    ok ((((((((((¬ net1.scan.scanning) && (net1.scan.index = 39#u8)) &&
+      (net1.scanned = 39#u8)) && net1.scan.byba) && net1.scan.doba) && (¬
+      net1.scan.start_scan)) && (¬ net1.scan.anel)) && (¬ net1.scan.ceno)) &&
+      (net1.scan.count <= ceres_netlist.oam_scan.SLOTS)) && b1)
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::relation::scan]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 382:4-385:5 -/
+@[rust_loop_body]
+def ppu.display.objects.relation.scan_loop.body
+  (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 40#usize)
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide) (j : Std.U8) :
+  Result (ControlFlow (ppu.display.objects.relation.NetSide ×
+    ppu.display.objects.relation.CeresSide × Std.U8)
+    (ppu.display.objects.relation.NetSide ×
+    ppu.display.objects.relation.CeresSide))
+  := do
+  if j <= 38#u8
+  then
+    let i ← lift (UScalar.cast .Usize j)
+    let i1 ← i + 1#usize
+    let i2 ← Array.index_usize ys i1
+    let (net1, ceres1) ←
+      ppu.display.objects.relation.step net ceres line j i2
+    let j1 ← j + 1#u8
+    ok (cont (net1, ceres1, j1))
+  else ok (done (net, ceres))
+
+/-- [ceres_core::ppu::display::objects::relation::scan]: loop 0:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 382:4-385:5 -/
+@[rust_loop]
+def ppu.display.objects.relation.scan_loop
+  (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 40#usize)
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide) (j : Std.U8) :
+  Result (ppu.display.objects.relation.NetSide ×
+    ppu.display.objects.relation.CeresSide)
+  := do
+  loop
+    (fun (net1, ceres1, j1) => ppu.display.objects.relation.scan_loop.body line
+      ys net1 ceres1 j1)
+    (net, ceres, j)
+
+/-- [ceres_core::ppu::display::objects::relation::scan]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 371:0-390:1 -/
+def ppu.display.objects.relation.scan
+  (count : Std.U8) (not_saving : Bool) (held : Std.U8)
+  (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 40#usize) :
+  Result (ppu.display.objects.relation.NetSide ×
+    ppu.display.objects.relation.CeresSide)
+  := do
+  let net ←
+    ppu.display.objects.relation.net_at_line_end count not_saving held
+  let ceres ← ppu.display.objects.relation.ceres_at_line_end held
+  let i ← Array.index_usize ys 39#usize
+  let i1 ← Array.index_usize ys 0#usize
+  let i2 ← Array.index_usize ys 1#usize
+  let i3 ← Array.index_usize ys 2#usize
+  let (net1, ceres1) ←
+    ppu.display.objects.relation.lead_in net ceres line
+      (Array.make 4#usize [ i, i1, i2, i3 ])
+  let (net2, ceres2) ←
+    ppu.display.objects.relation.scan_loop line ys net1 ceres1 2#u8
+  let net3 ← ppu.display.objects.relation.tail net2 line ceres2.latches.y
+  ok (net3, ceres2)
+
+/-- [ceres_core::ppu::display::timing::LINE_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 44:0-44:36 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LINE_H : Result Std.I32 :=
+  2#i32 * ppu.display.LINE_LENGTH
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::PendingWrite}::ticked]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 56:4-65:5 -/
+def ppu.display.timing.PendingWrite.ticked
+  (self : ppu.display.timing.PendingWrite) :
+  Result ppu.display.timing.PendingWrite
+  := do
+  if self.half_dots_left > 1#u8
+  then
+    let i ← self.half_dots_left - 1#u8
+    ok { self with half_dots_left := i }
+  else ok { self with half_dots_left := 1#u8 }
+
+/-- [ceres_core::ppu::display::timing::LINE_END_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 77:0-77:46 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LINE_END_H : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_H
+  i - 8#i32
+
+/-- [ceres_core::ppu::display::timing::LINE_RESET_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 79:0-79:52 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LINE_RESET_H : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_END_H
+  i + 2#i32
+
+/-- [ceres_core::ppu::display::timing::VBLANK_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 81:0-81:48 -/
+@[global_simps, irreducible]
+def ppu.display.timing.VBLANK_H : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_END_H
+  i + 4#i32
+
+/-- [ceres_core::ppu::display::timing::LY_MATCH_PHASE]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 83:0-83:30 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LY_MATCH_PHASE : Std.I32 := 4#i32
+
+/-- [ceres_core::ppu::display::timing::RESYNC_H]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 85:0-85:34 -/
+@[global_simps, irreducible]
+def ppu.display.timing.RESYNC_H : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_H
+  i - 19#i32
+
+/-- [ceres_core::ppu::display::timing::LCD_OFF_LATE]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 89:0-89:27 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LCD_OFF_LATE : Std.U8 := 3#u8
+
+/-- [ceres_core::ppu::display::timing::LAST_VISIBLE_LINE]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 91:0-91:40 -/
+@[global_simps, irreducible]
+def ppu.display.timing.LAST_VISIBLE_LINE : Result Std.U8 :=
+  ppu.display.LINES - 1#u8
+
+/-- [ceres_core::ppu::STAT_IF_LYC_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 63:0-63:42 -/
+@[global_simps, irreducible] def ppu.STAT_IF_LYC_B : Std.U8 := 64#u8
+
+/-- [ceres_core::ppu::STAT_IF_OAM_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 62:0-62:42 -/
+@[global_simps, irreducible] def ppu.STAT_IF_OAM_B : Std.U8 := 32#u8
+
+/-- [ceres_core::ppu::STAT_IF_VBLANK_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 61:0-61:45 -/
+@[global_simps, irreducible] def ppu.STAT_IF_VBLANK_B : Std.U8 := 16#u8
+
+/-- [ceres_core::ppu::STAT_IF_HBLANK_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 60:0-60:44 -/
+@[global_simps, irreducible] def ppu.STAT_IF_HBLANK_B : Std.U8 := 8#u8
+
+/-- [ceres_core::ppu::display::timing::STAT_ENABLES]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 94:0-94:93 -/
+@[global_simps, irreducible]
+def ppu.display.timing.STAT_ENABLES : Std.U8 :=
+  let i := ppu.STAT_IF_HBLANK_B ||| ppu.STAT_IF_VBLANK_B
+  let i1 := i ||| ppu.STAT_IF_OAM_B
+  i1 ||| ppu.STAT_IF_LYC_B
+
+/-- [ceres_core::ppu::display::timing::DMG_PHASES]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 122:0-131:2 -/
+@[global_simps, irreducible]
+def ppu.display.timing.DMG_PHASES : Result ppu.display.timing.Phases := do
+  let i ← ppu.display.timing.LINE_RESET_H
+  let i1 ← i + 4#i32
+  let i2 ← 2#i32 * 77#i32
+  let i3 ← i2 + 4#i32
+  let i4 ← ppu.display.timing.LINE_H
+  let i5 ← ppu.display.timing.VBLANK_H
+  ok
+    {
+      cgb := false,
+      hblank_clear := i,
+      line153_ly_reset := 4#i32,
+      scan_start := i1,
+      scan_end := i3,
+      mode1_start := i4,
+      mode1_end := i5,
+      flag_holds := false
+    }
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::line_for]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 234:4-239:5 -/
+def ppu.display.timing.LcdTiming.line_for
+  (self : ppu.display.timing.LcdTiming) (enables : Std.U8) : Result Bool := do
+  let i ← lift (enables &&& ppu.STAT_IF_LYC_B)
+  if i != 0#u8
+  then
+    if self.ly_match
+    then ok true
+    else
+      let i1 ← lift (enables &&& ppu.STAT_IF_OAM_B)
+      if i1 != 0#u8
+      then
+        if self.line_end
+        then
+          if self.vblank
+          then
+            let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+            if i2 != 0#u8
+            then
+              if self.vblank
+              then ok true
+              else
+                let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+                if i3 != 0#u8
+                then if self.hblank
+                     then ok (¬ self.vblank)
+                     else ok false
+                else ok false
+            else
+              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+              if i3 != 0#u8
+              then if self.hblank
+                   then ok (¬ self.vblank)
+                   else ok false
+              else ok false
+          else ok true
+        else
+          let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+          if i2 != 0#u8
+          then
+            if self.vblank
+            then ok true
+            else
+              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+              if i3 != 0#u8
+              then if self.hblank
+                   then ok (¬ self.vblank)
+                   else ok false
+              else ok false
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+      else
+        let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+        if i2 != 0#u8
+        then
+          if self.vblank
+          then ok true
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+        else
+          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+          if i3 != 0#u8
+          then if self.hblank
+               then ok (¬ self.vblank)
+               else ok false
+          else ok false
+  else
+    let i1 ← lift (enables &&& ppu.STAT_IF_OAM_B)
+    if i1 != 0#u8
+    then
+      if self.line_end
+      then
+        if self.vblank
+        then
+          let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+          if i2 != 0#u8
+          then
+            if self.vblank
+            then ok true
+            else
+              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+              if i3 != 0#u8
+              then if self.hblank
+                   then ok (¬ self.vblank)
+                   else ok false
+              else ok false
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+        else ok true
+      else
+        let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+        if i2 != 0#u8
+        then
+          if self.vblank
+          then ok true
+          else
+            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+            if i3 != 0#u8
+            then if self.hblank
+                 then ok (¬ self.vblank)
+                 else ok false
+            else ok false
+        else
+          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+          if i3 != 0#u8
+          then if self.hblank
+               then ok (¬ self.vblank)
+               else ok false
+          else ok false
+    else
+      let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
+      if i2 != 0#u8
+      then
+        if self.vblank
+        then ok true
+        else
+          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+          if i3 != 0#u8
+          then if self.hblank
+               then ok (¬ self.vblank)
+               else ok false
+          else ok false
+      else
+        let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
+        if i3 != 0#u8
+        then if self.hblank
+             then ok (¬ self.vblank)
+             else ok false
+        else ok false
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::update_line]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 242:4-247:5 -/
+def ppu.display.timing.LcdTiming.update_line
+  (self : ppu.display.timing.LcdTiming) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  let line ← ppu.display.timing.LcdTiming.line_for self self.enables
+  if line
+  then ok (¬ self.stat_line, { self with stat_line := line })
+  else ok (false, { self with stat_line := line })
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::unit]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 250:4-348:5 -/
+def ppu.display.timing.LcdTiming.unit
+  (self : ppu.display.timing.LcdTiming) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  let i ← self.h + 1#i32
+  let i1 ← ppu.display.timing.LINE_H
+  let (b, i2, i3) ←
+    if i = i1
+    then
+      do
+      let i4 ←
+        if self.line = ppu.display.LAST_LINE
+        then ok 0#u8
+        else self.line + 1#u8
+      ok (false, i4, 0#i32)
+    else ok (self.first_line, self.line, i)
+  if self.on
+  then
+    let (b1, b2, changed) ←
+      if self.hblank_pending
+      then ok (true, false, true)
+      else ok (self.hblank, self.hblank_pending, self.dirty)
+    let (i4, b3, changed1) ←
+      match i3 with
+      | 0#iscalar => ok (self.ly, false, true)
+      | 904#iscalar =>
+        do
+        let i5 ← if i2 = ppu.display.LAST_LINE
+                   then ok 0#u8
+                   else i2 + 1#u8
+        ok (i5, true, true)
+      | _ => ok (self.ly, self.line_end, changed)
+    let (b4, changed2) ←
+      if i3 = self.phases.hblank_clear
+      then
+        do
+        let i5 ← ppu.display.timing.LAST_VISIBLE_LINE
+        if i2 != i5
+        then if b1
+             then ok (false, true)
+             else ok (b1, changed1)
+        else ok (b1, changed1)
+      else ok (b1, changed1)
+    let i5 ← lift (i3 &&& 7#i32)
+    let (self1, rose) ←
+      match self.lyc_pending with
+      | none =>
+        ok
+          ({
+             self
+               with
+               first_line := b,
+               line := i2,
+               h := i3,
+               ly := i4,
+               line_end := b3,
+               hblank := b4,
+               hblank_pending := b2,
+               dirty := false
+           }, false)
+      | some write =>
+        if write.half_dots_left <= 1#u8
+        then
+          if i5 = ppu.display.timing.LY_MATCH_PHASE
+          then
+            do
+            let (b5, self2) ←
+              ppu.display.timing.LcdTiming.update_line
+                {
+                  self
+                    with
+                    first_line := b,
+                    line := i2,
+                    h := i3,
+                    ly := i4,
+                    line_end := b3,
+                    hblank := b4,
+                    hblank_pending := b2,
+                    ly_match := (i4 = write.value),
+                    lyc := write.value,
+                    lyc_pending := none,
+                    dirty := false
+                }
+            ok (self2, false || b5)
+          else
+            if self.phases.cgb
+            then
+              do
+              let pw ← ppu.display.timing.PendingWrite.ticked write
+              ok
+                ({
+                   self
+                     with
+                     first_line := b,
+                     line := i2,
+                     h := i3,
+                     ly := i4,
+                     line_end := b3,
+                     hblank := b4,
+                     hblank_pending := b2,
+                     lyc_pending := (some pw),
+                     dirty := false
+                 }, false)
+            else
+              do
+              let (b5, self2) ←
+                ppu.display.timing.LcdTiming.update_line
+                  {
+                    self
+                      with
+                      first_line := b,
+                      line := i2,
+                      h := i3,
+                      ly := i4,
+                      line_end := b3,
+                      hblank := b4,
+                      hblank_pending := b2,
+                      ly_match := (i4 = write.value),
+                      lyc := write.value,
+                      lyc_pending := none,
+                      dirty := false
+                  }
+              ok (self2, false || b5)
+        else
+          do
+          let pw ← ppu.display.timing.PendingWrite.ticked write
+          ok
+            ({
+               self
+                 with
+                 first_line := b,
+                 line := i2,
+                 h := i3,
+                 ly := i4,
+                 line_end := b3,
+                 hblank := b4,
+                 hblank_pending := b2,
+                 lyc_pending := (some pw),
+                 dirty := false
+             }, false)
+    let (self2, changed3) ←
+      if i5 = ppu.display.timing.LY_MATCH_PHASE
+      then
+        do
+        let (b5, b6) ←
+          if self1.ly_match != (self1.ly = self1.lyc)
+          then ok (¬ self1.ly_match, true)
+          else ok (self1.ly_match, changed2)
+        ok ({ self1 with ly_match := b5 }, b6)
+      else ok (self1, changed2)
+    let i6 ←
+      if self2.h = self2.phases.line153_ly_reset
+      then if self2.line = ppu.display.LAST_LINE
+           then ok 0#u8
+           else ok self2.ly
+      else ok self2.ly
+    let (self3, rose1) ←
+      if changed3
+      then
+        do
+        let (b5, self4) ←
+          ppu.display.timing.LcdTiming.update_line { self2 with ly := i6 }
+        ok (self4, rose || b5)
+      else ok ({ self2 with ly := i6 }, rose)
+    let (i7, o, changed4) ←
+      match self3.stat_pending with
+      | none => ok (self3.enables, none, false)
+      | some write =>
+        if write.half_dots_left <= 1#u8
+        then ok (write.value, none, true)
+        else
+          do
+          let pw ← ppu.display.timing.PendingWrite.ticked write
+          ok (self3.enables, some pw, false)
+    let i8 ← ppu.display.timing.VBLANK_H
+    let (b5, changed5) ←
+      if self3.h = i8
+      then
+        match self3.line with
+        | 143#uscalar => ok (true, true)
+        | 153#uscalar => ok (false, true)
+        | _ => ok (self3.vblank, changed4)
+      else ok (self3.vblank, changed4)
+    if changed5
+    then
+      let (b6, self4) ←
+        ppu.display.timing.LcdTiming.update_line
+          { self3 with vblank := b5, enables := i7, stat_pending := o }
+      ok (rose1 || b6, self4)
+    else
+      ok (rose1, { self3 with vblank := b5, enables := i7, stat_pending := o })
+  else ok (false, { self with first_line := b, line := i2, h := i3 })
+
+/-- [ceres_core::ppu::display::timing::DMG_DELAYS]
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 364:0-370:2 -/
+@[global_simps, irreducible]
+def ppu.display.timing.DMG_DELAYS : ppu.display.timing.Delays :=
+  {
+    stat_write := 0#u8,
+    lyc_write := 3#u8,
+    ly_read := 4#u8,
+    flag_read := 3#u8,
+    mode_read := 4#u8
+  }
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_mode]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 394:4-412:5 -/
+def ppu.display.timing.LcdTiming.read_mode
+  (self : ppu.display.timing.LcdTiming) (pipeline : Std.U8) :
+  Result Std.U8
+  := do
+  let i ← ppu.display.timing.LAST_VISIBLE_LINE
+  let i1 ← ppu.display.timing.VBLANK_H
+  if (self.vblank && ((self.line >= ppu.display.LINES) || (self.h >=
+    self.phases.mode1_start))) || (((self.line = ppu.display.LAST_LINE) &&
+    (self.h >= i1)) && (self.h < self.phases.mode1_end))
+  then ok 1#u8
+  else
+    if ((self.h >= self.phases.scan_start) && ((self.line < i) || (self.line =
+      ppu.display.LAST_LINE))) || (((self.h < self.phases.scan_end) &&
+      (self.line < ppu.display.LINES)) && (¬ self.first_line))
+    then ok 2#u8
+    else
+      if (self.line < ppu.display.LINES) && (¬ ((self.line = i) && (
+        self.h >= self.phases.scan_start)))
+      then if pipeline != 0#u8
+           then ok 3#u8
+           else ok 0#u8
+      else ok 0#u8
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_on]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 517:4-530:5 -/
+def ppu.display.timing.LcdTiming.turn_on
+  (self : ppu.display.timing.LcdTiming) (phases : ppu.display.timing.Phases) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  ppu.display.timing.LcdTiming.update_line
+    {
+      self
+        with
+        phases,
+        on := true,
+        first_line := true,
+        line := 0#u8,
+        h := 0#i32,
+        ly := 0#u8,
+        line_end := false,
+        vblank := false,
+        hblank := false,
+        hblank_pending := false,
+        ly_match := (self.lyc = 0#u8)
+    }
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::mode3_end]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 533:4-535:5 -/
+def ppu.display.timing.LcdTiming.mode3_end
+  (self : ppu.display.timing.LcdTiming) :
+  Result ppu.display.timing.LcdTiming
+  := do
+  ok { self with hblank_pending := true }
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::resync]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 539:4-542:5 -/
+def ppu.display.timing.LcdTiming.resync
+  (self : ppu.display.timing.LcdTiming) (line : Std.U8) :
+  Result ppu.display.timing.LcdTiming
+  := do
+  let i ← ppu.display.timing.RESYNC_H
+  ok { self with line, h := i }
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_off]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 546:4-554:5 -/
+def ppu.display.timing.LcdTiming.turn_off
+  (self : ppu.display.timing.LcdTiming) :
+  Result ppu.display.timing.LcdTiming
+  := do
+  let (_, self1) ←
+    ppu.display.timing.LcdTiming.update_line
+      {
+        self
+          with
+          on := false,
+          ly := 0#u8,
+          line_end := false,
+          vblank := false,
+          hblank := false,
+          hblank_pending := false
+      }
+  ok self1
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 565:8-569:9 -/
+@[rust_loop_body]
+def ppu.display.timing.LcdTiming.read_ly_loop.body
+  (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
+  (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × Std.U8 × Std.U8)
+    (ppu.display.timing.LcdTiming × Std.U8))
+  := do
+  if k < delay
+  then
+    let (_, t1) ← ppu.display.timing.LcdTiming.unit t
+    let k1 ← k + 1#u8
+    ok (cont (t1, t.ly, k1))
+  else ok (done (t, before))
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 565:8-569:9 -/
+@[rust_loop]
+def ppu.display.timing.LcdTiming.read_ly_loop
+  (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
+  (k : Std.U8) :
+  Result (ppu.display.timing.LcdTiming × Std.U8)
+  := do
+  loop
+    (fun (t1, before1, k1) => ppu.display.timing.LcdTiming.read_ly_loop.body
+      delay t1 before1 k1)
+    (t, before, k)
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 559:4-576:5 -/
+def ppu.display.timing.LcdTiming.read_ly
+  (self : ppu.display.timing.LcdTiming) (delays : ppu.display.timing.Delays) :
+  Result Std.U8
+  := do
+  let (t, before) ←
+    ppu.display.timing.LcdTiming.read_ly_loop delays.ly_read self self.ly 0#u8
+  if self.phases.cgb
+  then
+    if delays.ly_read > 0#u8
+    then if before != t.ly
+         then ok (before &&& t.ly)
+         else ok t.ly
+    else ok t.ly
+  else ok t.ly
+
+/-- [ceres_core::ppu::STAT_LYC_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 59:0-59:38 -/
+@[global_simps, irreducible] def ppu.STAT_LYC_B : Std.U8 := 4#u8
+
+/-- [ceres_core::ppu::STAT_MODE_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 58:0-58:39 -/
+@[global_simps, irreducible] def ppu.STAT_MODE_B : Std.U8 := 3#u8
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 599:8-610:9 -/
+@[rust_loop_body]
+def ppu.display.timing.LcdTiming.read_stat_loop.body
+  (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
+  (last2 : Std.U8) (t : ppu.display.timing.LcdTiming) (lyc_flag : Bool)
+  (mode : Std.U8) (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × Std.U8 ×
+    Std.U8) (Bool × Std.U8))
+  := do
+  if k <= last2
+  then
+    let t1 ←
+      if k > 0#u8
+      then do
+           let (_, t2) ← ppu.display.timing.LcdTiming.unit t
+           ok t2
+      else ok t
+    let (t2, lyc_flag1) ←
+      if k = last
+      then
+        do
+        let b ←
+          if t1.ly_match
+          then if holds
+               then ok true
+               else ok (t1.ly = t1.lyc)
+          else ok false
+        ok (t1, b)
+      else ok (t1, lyc_flag)
+    let mode1 ←
+      if k = last1
+      then
+        do
+        let i ← lift (stat &&& ppu.STAT_MODE_B)
+        ppu.display.timing.LcdTiming.read_mode t2 i
+      else ok mode
+    let k1 ← k + 1#u8
+    ok (cont (t2, lyc_flag1, mode1, k1))
+  else ok (done (lyc_flag, mode))
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 599:8-610:9 -/
+@[rust_loop]
+def ppu.display.timing.LcdTiming.read_stat_loop
+  (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
+  (t : ppu.display.timing.LcdTiming) (lyc_flag : Bool) (mode : Std.U8)
+  (last2 : Std.U8) (k : Std.U8) :
+  Result (Bool × Std.U8)
+  := do
+  loop
+    (fun (t1, lyc_flag1, mode1, k1) =>
+      ppu.display.timing.LcdTiming.read_stat_loop.body stat last last1 holds
+      last2 t1 lyc_flag1 mode1 k1)
+    (t, lyc_flag, mode, k)
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 582:4-612:5 -/
+def ppu.display.timing.LcdTiming.read_stat
+  (self : ppu.display.timing.LcdTiming) (stat : Std.U8)
+  (delays : ppu.display.timing.Delays) (double_speed : Bool) :
+  Result Std.U8
+  := do
+  let i ← lift (ppu.STAT_MODE_B ||| ppu.STAT_LYC_B)
+  let i1 ← lift (~~~ i)
+  let enables ← lift (stat &&& i1)
+  if self.on
+  then
+    let holds ←
+      if self.phases.cgb
+      then if double_speed
+           then ok true
+           else ok self.phases.flag_holds
+      else ok false
+    let last ←
+      if delays.flag_read > delays.mode_read
+      then ok delays.flag_read
+      else ok delays.mode_read
+    let (lyc_flag, mode) ←
+      ppu.display.timing.LcdTiming.read_stat_loop stat delays.flag_read
+        delays.mode_read holds self false 0#u8 last 0#u8
+    let i2 ← lift (enables ||| mode)
+    let i3 ← if lyc_flag
+               then ok ppu.STAT_LYC_B
+               else ok 0#u8
+    ok (i2 ||| i3)
+  else
+    let i2 ← if self.ly_match
+               then ok ppu.STAT_LYC_B
+               else ok 0#u8
+    ok (enables ||| i2)
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_stat]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 618:4-637:5 -/
+def ppu.display.timing.LcdTiming.write_stat
+  (self : ppu.display.timing.LcdTiming) (val : Std.U8)
+  (delays : ppu.display.timing.Delays) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  let enables ← lift (val &&& ppu.display.timing.STAT_ENABLES)
+  let (o, o1) := core.option.Option.take self.stat_pending
+  let (i, b) ←
+    match o with
+    | none => ok (self.enables, self.dirty)
+    | some write => ok (write.value, true)
+  if self.on
+  then
+    if delays.stat_write > 0#u8
+    then
+      ok (false,
+        {
+          self
+            with
+            enables := i,
+            stat_pending :=
+              (some { value := enables, half_dots_left := delays.stat_write }),
+            dirty := b
+        })
+    else
+      let glitch ←
+        if self.phases.cgb
+        then ok false
+        else
+          do
+          let b1 ←
+            ppu.display.timing.LcdTiming.line_for
+              { self with enables := i, stat_pending := o1, dirty := b }
+              ppu.display.timing.STAT_ENABLES
+          if b1
+          then ok (¬ self.stat_line)
+          else ok false
+      let (b1, self1) ←
+        ppu.display.timing.LcdTiming.update_line
+          {
+            self
+              with
+              enables,
+              stat_line := (self.stat_line || glitch),
+              stat_pending := o1,
+              dirty := b
+          }
+      if b1
+      then ok (true, self1)
+      else ok (glitch, self1)
+  else
+    let glitch ←
+      if self.phases.cgb
+      then ok false
+      else
+        do
+        let b1 ←
+          ppu.display.timing.LcdTiming.line_for
+            { self with enables := i, stat_pending := o1, dirty := b }
+            ppu.display.timing.STAT_ENABLES
+        if b1
+        then ok (¬ self.stat_line)
+        else ok false
+    let (b1, self1) ←
+      ppu.display.timing.LcdTiming.update_line
+        {
+          self
+            with
+            enables,
+            stat_line := (self.stat_line || glitch),
+            stat_pending := o1,
+            dirty := b
+        }
+    if b1
+    then ok (true, self1)
+    else ok (glitch, self1)
+
+/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_lyc]:
+    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 642:4-652:5 -/
+def ppu.display.timing.LcdTiming.write_lyc
+  (self : ppu.display.timing.LcdTiming) (val : Std.U8)
+  (delays : ppu.display.timing.Delays) :
+  Result ppu.display.timing.LcdTiming
+  := do
+  if self.on
+  then
+    ok
+      {
+        self
+          with
+          lyc_pending :=
+            (some { value := val, half_dots_left := delays.lyc_write })
+      }
+  else ok { self with lyc := val, lyc_pending := none }
+
+/-- [ceres_core::ppu::display::timing::relation::LCDC_EARLY]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 82:0-82:25 -/
+@[global_simps, irreducible]
+def ppu.display.timing.relation.LCDC_EARLY : Std.U8 := 2#u8
+
+/-- [ceres_core::ppu::display::timing::relation::SKEWED_LINE_END]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 86:0-86:41 -/
+@[global_simps, irreducible]
+def ppu.display.timing.relation.SKEWED_LINE_END : Result Std.I32 := do
+  let i ← ppu.display.timing.LINE_H
+  i - 17#i32
+
+/-- [ceres_core::ppu::display::timing::relation::SKEWED_FIRST]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 91:0-91:28 -/
+@[global_simps, irreducible]
+def ppu.display.timing.relation.SKEWED_FIRST : Std.I32 := 8#i32
+
+/-- [ceres_core::ppu::display::timing::relation::SKEWED_LAST]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 92:0-92:45 -/
+@[global_simps, irreducible]
+def ppu.display.timing.relation.SKEWED_LAST : Result Std.I32 := do
+  let i ← ppu.display.timing.relation.SKEWED_LINE_END
+  i - 7#i32
+
+/-- [ceres_core::ppu::display::timing::relation::STAT_OWN]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 96:0-96:47 -/
+@[global_simps, irreducible]
+def ppu.display.timing.relation.STAT_OWN : Std.U8 :=
+  ppu.display.timing.STAT_ENABLES ||| ppu.STAT_LYC_B
+
+/-- [ceres_core::ppu::display::timing::relation::ly_at]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 100:0-108:1 -/
+def ppu.display.timing.relation.ly_at
+  (line : Std.U8) (h : Std.I32) : Result Std.U8 := do
+  let i ← ppu.display.timing.LINE_END_H
+  if h >= i
+  then if line = ppu.display.LAST_LINE
+       then ok 0#u8
+       else line + 1#u8
+  else
+    if (line = ppu.display.LAST_LINE) && (h >= 4#i32)
+    then ok 0#u8
+    else ok line
+
+/-- [ceres_core::ppu::display::timing::relation::vblank_at]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 111:0-117:1 -/
+def ppu.display.timing.relation.vblank_at
+  (line : Std.U8) (h : Std.I32) : Result Bool := do
+  match line with
+  | 143#uscalar => let i ← ppu.display.timing.VBLANK_H
+                   ok (h >= i)
+  | 153#uscalar => let i ← ppu.display.timing.VBLANK_H
+                   ok (h < i)
+  | _ => let i ← ppu.display.timing.LAST_VISIBLE_LINE
+         ok (line > i)
+
+/-- [ceres_core::ppu::display::timing::relation::dmg_phases]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 120:0-130:1 -/
+def ppu.display.timing.relation.dmg_phases
+  (p : ppu.display.timing.Phases) : Result Bool := do
+  let d ← ppu.display.timing.DMG_PHASES
+  ok ((((((((p.cgb = d.cgb) && (p.hblank_clear = d.hblank_clear)) &&
+    (p.line153_ly_reset = d.line153_ly_reset)) && (p.scan_start =
+    d.scan_start)) && (p.scan_end = d.scan_end)) && (p.mode1_start =
+    d.mode1_start)) && (p.mode1_end = d.mode1_end)) && (p.flag_holds =
+    d.flag_holds))
+
+/-- [ceres_core::ppu::display::timing::relation::related_at]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 142:0-187:1 -/
+def ppu.display.timing.relation.related_at
+  (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming)
+  (line : Std.U8) (h : Std.I32) :
+  Result Bool
+  := do
+  let i ← ppu.display.timing.LINE_H
+  if (((((t.line <= ppu.display.LAST_LINE) && (t.h >= 0#i32)) && (t.h < i)) &&
+    (line <= ppu.display.LAST_LINE)) && (h >= 0#i32)) && (h < i)
+  then
+    let b ← ppu.display.timing.relation.dmg_phases t.phases
+    let i1 ← lift (~~~ ppu.display.timing.STAT_ENABLES)
+    let i2 ← lift (t.enables &&& i1)
+    let b1 := core.option.Option.is_none t.lyc_pending
+    let b2 := core.option.Option.is_none t.stat_pending
+    let i3 ← ppu.display.timing.relation.ly_at t.line t.h
+    let i4 ← ppu.display.timing.LINE_END_H
+    let b3 ← ppu.display.timing.relation.vblank_at t.line t.h
+    let b4 ← ppu.display.timing.LcdTiming.line_for t t.enables
+    let lx ←
+      if (h >= 4#i32) && (h < i4)
+      then
+        do
+        let i5 ← h - 4#i32
+        let i6 ← i5 / 8#i32
+        let i7 ← i6 + 1#i32
+        ok (IScalar.hcast .U8 i7)
+      else ok 0#u8
+    let i5 ← lift (h &&& 1#i32)
+    let i6 ← lift (h &&& 2#i32)
+    let i7 ← lift (h &&& 7#i32)
+    let i8 ← h + 1#i32
+    let i9 ← lift (i8 &&& 2#i32)
+    let i10 ← ppu.display.timing.VBLANK_H
+    ok ((((((((((((b && (i2 = 0#u8)) && (¬ t.hblank_pending)) && t.on) && (¬
+      t.dirty)) && b1) && b2) && (t.ly = i3)) && (t.line_end = (t.h >= i4))) &&
+      (t.vblank = b3)) && (t.stat_line = b4)) && ((((((((net.clk = (i5 !=
+      0#i32)) && (net.wuvu = (i6 != 0#i32))) && (net.vena = (i7 >= 4#i32))) &&
+      (net.wosu = (i9 != 0#i32))) && (net.lx = lx)) && (net.vclk = (h >= i4)))
+      && (net.nype = ((h >= i10) || (h < 4#i32)))) && (net.line_153 = (((line =
+      ppu.display.LAST_LINE) && (h >= 4#i32)) || ((line = 0#u8) && (h <
+      4#i32)))))) && (((((net.ly = t.ly) && (net.mode1 = t.vblank)) && (
+      net.lyc = t.lyc)) && (net.lyc_match = t.ly_match)) && (net.stat_enable =
+      t.enables)))
+  else ok false
+
+/-- [ceres_core::ppu::display::timing::relation::skewed]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 191:0-193:1 -/
+def ppu.display.timing.relation.skewed
+  (t : ppu.display.timing.LcdTiming) : Result Bool := do
+  let i ← lift (t.h &&& 7#i32)
+  ok (((t.on && t.first_line) && (t.line = 0#u8)) && (i = 2#i32))
+
+/-- [ceres_core::ppu::display::timing::relation::off_related]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 203:0-232:1 -/
+def ppu.display.timing.relation.off_related
+  (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming) :
+  Result Bool
+  := do
+  let b ← ppu.display.timing.relation.dmg_phases t.phases
+  let i ← ppu.display.timing.LINE_H
+  let i1 ← lift (~~~ ppu.display.timing.STAT_ENABLES)
+  let i2 ← lift (t.enables &&& i1)
+  let b1 ← ppu.display.timing.LcdTiming.line_for t t.enables
+  let b2 := core.option.Option.is_none t.lyc_pending
+  let b3 := core.option.Option.is_none t.stat_pending
+  let b4 ← ceres_netlist.lcd_timing.NetLcd.int_stat net false
+  ok (((((((((((((((((((((((((((b && (t.line <= ppu.display.LAST_LINE)) && (
+    t.h >= 0#i32)) && (t.h < i)) && (¬ t.on)) && (i2 = 0#u8)) && (¬
+    t.hblank)) && (¬ t.hblank_pending)) && (¬ t.line_end)) && (¬ t.vblank))
+    && (t.ly = 0#u8)) && (t.stat_line = b1)) && b2) && b3) && (¬ net.clk)) &&
+    (¬ net.wuvu)) && (¬ net.vena)) && (¬ net.wosu)) && (net.lx = 0#u8)) &&
+    (¬ net.vclk)) && (¬ net.nype)) && (net.ly = 0#u8)) && (¬ net.line_153))
+    && (¬ net.mode1)) && (net.lyc = t.lyc)) && (net.lyc_match = t.ly_match))
+    && (net.stat_enable = t.enables)) && (b4 = t.stat_line))
+
+/-- [ceres_core::ppu::display::timing::relation::related]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 248:0-264:1 -/
+def ppu.display.timing.relation.related
+  (net : ppu.display.timing.relation.Net) (t : ppu.display.timing.LcdTiming) :
+  Result Bool
+  := do
+  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
+  if b
+  then
+    let b1 ← ppu.display.timing.relation.off_related net.lcd t
+    ok ((¬ net.mode0) && b1)
+  else
+    let i ← ppu.display.timing.LINE_END_H
+    let i1 ← lift (t.h &&& 7#i32)
+    let b1 ← ppu.display.timing.relation.related_at net.lcd t t.line t.h
+    let b2 ← ppu.display.timing.relation.skewed t
+    let i2 ← ppu.display.timing.relation.SKEWED_FIRST + 2#i32
+    let i3 ← ppu.display.timing.relation.SKEWED_LAST
+    let i4 ← i3 + 2#i32
+    let ahead ←
+      if (b2 && (t.h >= i2)) && (t.h <= i4)
+      then
+        do
+        let i5 ← t.h - 2#i32
+        let b3 ← ppu.display.timing.relation.related_at net.lcd t 0#u8 i5
+        ok ((t.ly_match = (t.ly = t.lyc)) && b3)
+      else ok false
+    ok ((t.hblank = net.mode0) && ((((i1 = 0#i32) && (((t.ly_match = (
+      t.ly = t.lyc)) || (t.h = i)) || ((t.line = ppu.display.LAST_LINE) && (
+      t.h = 8#i32)))) && b1) || ahead))
+
+/-- [ceres_core::ppu::display::timing::relation::MODE3_LAST_LX]
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 268:0-268:30 -/
+@[global_simps, irreducible]
+def ppu.display.timing.relation.MODE3_LAST_LX : Std.U8 := 111#u8
+
+/-- [ceres_core::ppu::display::timing::relation::mode3_may_end]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 274:0-281:1 -/
+def ppu.display.timing.relation.mode3_may_end
+  (net : ppu.display.timing.relation.Net) (k : Std.U8) : Result Bool := do
+  let i ← lift (k &&& 1#u8)
+  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
+  ok ((((((i = 1#u8) && (¬ b)) && (net.lcd.ly < ppu.display.LINES)) && (¬
+    net.lcd.mode1)) && (¬ net.lcd.vclk)) && (net.lcd.lx <=
+    ppu.display.timing.relation.MODE3_LAST_LX))
+
+/-- [ceres_core::ppu::LCDC_ON_B]
+    Source: 'ceres-core/src/ppu/mod.rs', lines 41:0-41:38 -/
+@[global_simps, irreducible] def ppu.LCDC_ON_B : Std.U8 := 128#u8
+
+/-- [ceres_core::ppu::display::timing::relation::outside]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 289:0-310:1 -/
+def ppu.display.timing.relation.outside
+  (net : ppu.display.timing.relation.Net)
+  (access : ppu.display.timing.relation.Access) (mode3_end : Option Std.U8) :
+  Result Bool
+  := do
+  let pipeline ←
+    match mode3_end with
+    | none => ok false
+    | some k =>
+      do
+      let b ← ppu.display.timing.relation.mode3_may_end net k
+      ok (¬ b)
+  match access with
+  | ppu.display.timing.relation.Access.None => ok pipeline
+  | ppu.display.timing.relation.Access.ReadStat => ok pipeline
+  | ppu.display.timing.relation.Access.ReadLy => ok pipeline
+  | ppu.display.timing.relation.Access.ReadLyc => ok pipeline
+  | ppu.display.timing.relation.Access.WriteStat _ => ok pipeline
+  | ppu.display.timing.relation.Access.WriteLyc _ => ok pipeline
+  | ppu.display.timing.relation.Access.WriteLcdc data =>
+    let b := core.option.Option.is_some mode3_end
+    let i ← lift (data &&& ppu.LCDC_ON_B)
+    let b1 ←
+      ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
+    let i1 ← lift (net.lcd.stat_enable &&& ppu.STAT_IF_LYC_B)
+    ok (b || (((((i != 0#u8) && b1) && (i1 != 0#u8)) && (net.lcd.lyc = 0#u8))
+      && (¬ net.lcd.lyc_match)))
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_lcdc]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 322:8-325:9 -/
+@[rust_loop_body]
+def ppu.display.timing.relation.ceres_lcdc_loop0.body
+  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × Std.U8) (Bool ×
+    ppu.display.timing.LcdTiming))
+  := do
+  if k < ppu.display.timing.relation.LCDC_EARLY
+  then
+    let (b, t1) ← ppu.display.timing.LcdTiming.unit t
+    let k1 ← k + 1#u8
+    ok (cont (t1, rose || b, k1))
+  else ok (done (rose, t))
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_lcdc]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 322:8-325:9 -/
+@[rust_loop]
+def ppu.display.timing.relation.ceres_lcdc_loop0
+  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  loop
+    (fun (t1, rose1, k1) => ppu.display.timing.relation.ceres_lcdc_loop0.body
+      t1 rose1 k1)
+    (t, rose, k)
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_lcdc]: loop body 1:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 328:8-331:9 -/
+@[rust_loop_body]
+def ppu.display.timing.relation.ceres_lcdc_loop1.body
+  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × Std.U8)
+    (ppu.display.timing.LcdTiming × Bool))
+  := do
+  if k < ppu.display.timing.LCD_OFF_LATE
+  then
+    let (b, t1) ← ppu.display.timing.LcdTiming.unit t
+    let k1 ← k + 1#u8
+    ok (cont (t1, rose || b, k1))
+  else ok (done (t, rose))
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_lcdc]: loop 1:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 328:8-331:9 -/
+@[rust_loop]
+def ppu.display.timing.relation.ceres_lcdc_loop1
+  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
+  Result (ppu.display.timing.LcdTiming × Bool)
+  := do
+  loop
+    (fun (t1, rose1, k1) => ppu.display.timing.relation.ceres_lcdc_loop1.body
+      t1 rose1 k1)
+    (t, rose, k)
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_lcdc]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 316:0-337:1 -/
+def ppu.display.timing.relation.ceres_lcdc
+  (t : ppu.display.timing.LcdTiming) (data : Std.U8) :
+  Result (Bool × ppu.display.timing.LcdTiming)
+  := do
+  let i ← lift (data &&& ppu.LCDC_ON_B)
+  if (i != 0#u8) && (¬ t.on)
+  then
+    let p ← ppu.display.timing.DMG_PHASES
+    let (rose, t1) ← ppu.display.timing.LcdTiming.turn_on t p
+    ppu.display.timing.relation.ceres_lcdc_loop0 t1 rose 0#u8
+  else
+    if (¬ (i != 0#u8)) && t.on
+    then
+      let (t1, rose) ←
+        ppu.display.timing.relation.ceres_lcdc_loop1 t false
+          ppu.display.timing.relation.LCDC_EARLY
+      let t2 ← ppu.display.timing.LcdTiming.turn_off t1
+      ok (rose, t2)
+    else ok (false, t)
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_unit]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 341:0-348:1 -/
+def ppu.display.timing.relation.ceres_unit
+  (t : ppu.display.timing.LcdTiming) (ahead : Bool) :
+  Result (Bool × ppu.display.timing.LcdTiming × Bool)
+  := do
+  let (rose, t1) ← ppu.display.timing.LcdTiming.unit t
+  let i ← ppu.display.timing.relation.SKEWED_LINE_END
+  if ahead && (t1.h = i)
+  then
+    let t2 ← ppu.display.timing.LcdTiming.resync t1 t1.line
+    ok (rose, t2, false)
+  else ok (rose, t1, ahead)
+
+/-- [ceres_core::ppu::display::timing::relation::ends_at]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 476:0-481:1 -/
+def ppu.display.timing.relation.ends_at
+  (mode3_end : Option Std.U8) (k : Std.U8) : Result Bool := do
+  match mode3_end with
+  | none => ok false
+  | some «end» => ok («end» = k)
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_half_dot]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 354:0-359:1 -/
+def ppu.display.timing.relation.ceres_half_dot
+  (t : ppu.display.timing.LcdTiming) (ahead : Bool) (mode3_end : Option Std.U8)
+  (k : Std.U8) :
+  Result (Bool × ppu.display.timing.LcdTiming × Bool)
+  := do
+  let b ← ppu.display.timing.relation.ends_at mode3_end k
+  let t1 ← if b
+             then ppu.display.timing.LcdTiming.mode3_end t
+             else ok t
+  ppu.display.timing.relation.ceres_unit t1 ahead
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_m_cycle]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 391:4-396:5 -/
+@[rust_loop_body]
+def ppu.display.timing.relation.ceres_m_cycle_loop.body
+  (mode3_end : Option Std.U8) (t : ppu.display.timing.LcdTiming) (ahead : Bool)
+  (rose : Array Bool 4#usize) (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × (Array Bool
+    4#usize) × Std.U8) (ppu.display.timing.LcdTiming × (Array Bool 4#usize)))
+  := do
+  if k < 4#u8
+  then
+    let i ← 2#u8 * k
+    let (first, t1, ahead1) ←
+      ppu.display.timing.relation.ceres_half_dot t ahead mode3_end i
+    let i1 ← i + 1#u8
+    let (second, t2, ahead2) ←
+      ppu.display.timing.relation.ceres_half_dot t1 ahead1 mode3_end i1
+    let i2 ← lift (UScalar.cast .Usize k)
+    let a ← Array.update rose i2 (first || second)
+    let k1 ← k + 1#u8
+    ok (cont (t2, ahead2, a, k1))
+  else ok (done (t, rose))
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_m_cycle]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 391:4-396:5 -/
+@[rust_loop]
+def ppu.display.timing.relation.ceres_m_cycle_loop
+  (t : ppu.display.timing.LcdTiming) (mode3_end : Option Std.U8) (ahead : Bool)
+  (rose : Array Bool 4#usize) (k : Std.U8) :
+  Result (ppu.display.timing.LcdTiming × (Array Bool 4#usize))
+  := do
+  loop
+    (fun (t1, ahead1, rose1, k1) =>
+      ppu.display.timing.relation.ceres_m_cycle_loop.body mode3_end t1 ahead1
+      rose1 k1)
+    (t, ahead, rose, k)
+
+/-- [ceres_core::ppu::display::timing::relation::ceres_m_cycle]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 364:0-399:1 -/
+def ppu.display.timing.relation.ceres_m_cycle
+  (t : ppu.display.timing.LcdTiming)
+  (access : ppu.display.timing.relation.Access) (mode3_end : Option Std.U8) :
+  Result (((Option Std.U8) × (Array Bool 4#usize)) ×
+    ppu.display.timing.LcdTiming)
+  := do
+  let ahead ← ppu.display.timing.relation.skewed t
+  let (t1, at_access, read) ←
+    match access with
+    | ppu.display.timing.relation.Access.None => ok (t, false, none)
+    | ppu.display.timing.relation.Access.ReadStat =>
+      do
+      let i ←
+        ppu.display.timing.LcdTiming.read_stat t t.enables
+          ppu.display.timing.DMG_DELAYS false
+      let i1 ← lift (i &&& ppu.display.timing.relation.STAT_OWN)
+      ok (t, false, some i1)
+    | ppu.display.timing.relation.Access.ReadLy =>
+      do
+      let i ←
+        ppu.display.timing.LcdTiming.read_ly t ppu.display.timing.DMG_DELAYS
+      ok (t, false, some i)
+    | ppu.display.timing.relation.Access.ReadLyc => ok (t, false, some t.lyc)
+    | ppu.display.timing.relation.Access.WriteStat data =>
+      do
+      let (at_access1, t2) ←
+        ppu.display.timing.LcdTiming.write_stat t data
+          ppu.display.timing.DMG_DELAYS
+      ok (t2, at_access1, none)
+    | ppu.display.timing.relation.Access.WriteLyc data =>
+      do
+      let t2 ←
+        ppu.display.timing.LcdTiming.write_lyc t data
+          ppu.display.timing.DMG_DELAYS
+      ok (t2, false, none)
+    | ppu.display.timing.relation.Access.WriteLcdc data =>
+      do
+      let (at_access1, t2) ← ppu.display.timing.relation.ceres_lcdc t data
+      ok (t2, at_access1, none)
+  let rose := Array.repeat 4#usize false
+  let (t2, rose1) ←
+    ppu.display.timing.relation.ceres_m_cycle_loop t1 mode3_end ahead rose 0#u8
+  let b ← Array.index_usize rose1 0#usize
+  let rose2 ← Array.update rose1 0#usize (b || at_access)
+  ok ((read, rose2), t2)
+
+/-- [ceres_core::ppu::display::timing::relation::net_mode0]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 402:0-404:1 -/
+def ppu.display.timing.relation.net_mode0
+  (net : ppu.display.timing.relation.Net) : Result Bool := do
+  ok (net.mode0 && (¬ net.lcd.mode1))
+
+/-- [ceres_core::ppu::display::timing::relation::net_line_start]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 409:0-412:1 -/
+def ppu.display.timing.relation.net_line_start
+  (lcd : ceres_netlist.lcd_timing.NetLcd) : Result Bool := do
+  let i ← lift (IScalar.cast_fromBool .I32 lcd.vena)
+  let i1 ← 4#i32 * i
+  let i2 ← lift (IScalar.cast_fromBool .I32 lcd.wuvu)
+  let i3 ← 2#i32 * i2
+  let i4 ← i1 + i3
+  let i5 ← lift (IScalar.cast_fromBool .I32 lcd.clk)
+  let phase ← i4 + i5
+  let i6 ← ppu.display.timing.LINE_RESET_H
+  let i7 ← ppu.display.timing.LINE_END_H
+  let i8 ← i6 - i7
+  ok ((lcd.vclk && (phase = i8)) && (lcd.ly != ppu.display.LINES))
+
+/-- [ceres_core::ppu::display::timing::relation::net_edge_starts]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 418:0-422:1 -/
+def ppu.display.timing.relation.net_edge_starts
+  (net : ppu.display.timing.relation.Net) :
+  Result ((Bool × Bool) × ppu.display.timing.relation.Net)
+  := do
+  let mode0 ← ppu.display.timing.relation.net_mode0 net
+  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
+  let (rose, nl) ← ceres_netlist.lcd_timing.NetLcd.held_edge net.lcd b mode0
+  ok ((rose, mode0), { net with lcd := nl })
+
+/-- [ceres_core::ppu::display::timing::relation::net_edge_ends]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 428:0-442:1 -/
+def ppu.display.timing.relation.net_edge_ends
+  (net : ppu.display.timing.relation.Net) (mode0 : Bool) (level : Bool)
+  (mode3_ends : Bool) :
+  Result (Bool × ppu.display.timing.relation.Net)
+  := do
+  let reset ←
+    ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
+  let nl ←
+    if reset
+    then ceres_netlist.lcd_timing.NetLcd.reset net.lcd
+    else ok net.lcd
+  let b ← if mode3_ends
+            then ok true
+            else ok net.mode0
+  let b1 ← ppu.display.timing.relation.net_line_start nl
+  let b2 ← if reset || b1
+             then ok false
+             else ok b
+  let after_reset ← ceres_netlist.lcd_timing.NetLcd.int_stat nl mode0
+  let b3 ←
+    ppu.display.timing.relation.net_mode0 { net with lcd := nl, mode0 := b2 }
+  let after_render ← ceres_netlist.lcd_timing.NetLcd.int_stat nl b3
+  ok ((after_reset && (¬ level)) || (after_render && (¬ after_reset)),
+    { net with lcd := nl, mode0 := b2 })
+
+/-- [ceres_core::ppu::display::timing::relation::net_edge]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 445:0-449:1 -/
+def ppu.display.timing.relation.net_edge
+  (net : ppu.display.timing.relation.Net) (mode3_ends : Bool) :
+  Result (Bool × ppu.display.timing.relation.Net)
+  := do
+  let ((rose, mode0), net1) ← ppu.display.timing.relation.net_edge_starts net
+  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net1.lcd mode0
+  let (b, net2) ←
+    ppu.display.timing.relation.net_edge_ends net1 mode0 level mode3_ends
+  ok (rose || b, net2)
+
+/-- [ceres_core::ppu::display::timing::relation::net_write]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 453:0-473:1 -/
+def ppu.display.timing.relation.net_write
+  (net : ceres_netlist.lcd_timing.NetLcd)
+  (access : ppu.display.timing.relation.Access) (byte : Std.U8) (mode0 : Bool)
+  (level : Bool) :
+  Result (Bool × ceres_netlist.lcd_timing.NetLcd × Bool)
+  := do
+  let net1 ←
+    match access with
+    | ppu.display.timing.relation.Access.None => ok net
+    | ppu.display.timing.relation.Access.ReadStat => ok net
+    | ppu.display.timing.relation.Access.ReadLy => ok net
+    | ppu.display.timing.relation.Access.ReadLyc => ok net
+    | ppu.display.timing.relation.Access.WriteStat _ =>
+      ceres_netlist.lcd_timing.NetLcd.write net 65345#u16 byte
+    | ppu.display.timing.relation.Access.WriteLyc _ =>
+      ceres_netlist.lcd_timing.NetLcd.write net 65349#u16 byte
+    | ppu.display.timing.relation.Access.WriteLcdc _ => ok net
+  let now ← ceres_netlist.lcd_timing.NetLcd.int_stat net1 mode0
+  ok (now && (¬ level), net1, now)
+
+/-- [ceres_core::ppu::display::timing::relation::net_shown]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 484:0-494:1 -/
+def ppu.display.timing.relation.net_shown
+  (net : ceres_netlist.lcd_timing.NetLcd)
+  (access : ppu.display.timing.relation.Access) :
+  Result (Option Std.U8)
+  := do
+  match access with
+  | ppu.display.timing.relation.Access.None => ok none
+  | ppu.display.timing.relation.Access.ReadStat =>
+    let o ← ceres_netlist.lcd_timing.NetLcd.read net 65345#u16 false false
+    match o with
+    | none => ok none
+    | some b =>
+      let i ← lift (b &&& ppu.display.timing.relation.STAT_OWN)
+      ok (some i)
+  | ppu.display.timing.relation.Access.ReadLy =>
+    ceres_netlist.lcd_timing.NetLcd.read net 65348#u16 false false
+  | ppu.display.timing.relation.Access.ReadLyc =>
+    ceres_netlist.lcd_timing.NetLcd.read net 65349#u16 false false
+  | ppu.display.timing.relation.Access.WriteStat _ => ok none
+  | ppu.display.timing.relation.Access.WriteLyc _ => ok none
+  | ppu.display.timing.relation.Access.WriteLcdc _ => ok none
+
+/-- [ceres_core::ppu::display::timing::relation::and_bus]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 497:0-502:1 -/
+def ppu.display.timing.relation.and_bus
+  (a : Option Std.U8) (b : Option Std.U8) : Result (Option Std.U8) := do
+  match a with
+  | none => ok none
+  | some x =>
+    match b with
+    | none => ok none
+    | some y => let i ← lift (x &&& y)
+                ok (some i)
+
+/-- [ceres_core::ppu::display::timing::relation::net_m_cycle]: loop body 0:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 538:4-541:5 -/
+@[rust_loop_body]
+def ppu.display.timing.relation.net_m_cycle_loop.body
+  (mode3_end : Option Std.U8) (net : ppu.display.timing.relation.Net)
+  (rose : Array Bool 8#usize) (k : Std.U8) :
+  Result (ControlFlow (ppu.display.timing.relation.Net × (Array Bool 8#usize)
+    × Std.U8) (ppu.display.timing.relation.Net × (Array Bool 8#usize)))
+  := do
+  if k < 8#u8
+  then
+    let b ← ppu.display.timing.relation.ends_at mode3_end k
+    let (b1, net1) ← ppu.display.timing.relation.net_edge net b
+    let i ← lift (UScalar.cast .Usize k)
+    let a ← Array.update rose i b1
+    let k1 ← k + 1#u8
+    ok (cont (net1, a, k1))
+  else ok (done (net, rose))
+
+/-- [ceres_core::ppu::display::timing::relation::net_m_cycle]: loop 0:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 538:4-541:5 -/
+@[rust_loop]
+def ppu.display.timing.relation.net_m_cycle_loop
+  (net : ppu.display.timing.relation.Net) (mode3_end : Option Std.U8)
+  (rose : Array Bool 8#usize) (k : Std.U8) :
+  Result (ppu.display.timing.relation.Net × (Array Bool 8#usize))
+  := do
+  loop
+    (fun (net1, rose1, k1) => ppu.display.timing.relation.net_m_cycle_loop.body
+      mode3_end net1 rose1 k1)
+    (net, rose, k)
+
+/-- [ceres_core::ppu::display::timing::relation::net_m_cycle]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 511:0-543:1 -/
+def ppu.display.timing.relation.net_m_cycle
+  (net : ppu.display.timing.relation.Net)
+  (access : ppu.display.timing.relation.Access) (mode3_end : Option Std.U8) :
+  Result (((Option Std.U8) × (Array Bool 8#usize)) ×
+    ppu.display.timing.relation.Net)
+  := do
+  let rose := Array.repeat 8#usize false
+  let ((edge_rose, mode0), net1) ←
+    ppu.display.timing.relation.net_edge_starts net
+  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net1.lcd mode0
+  let (nl, nlc, level1, written) ←
+    match access with
+    | ppu.display.timing.relation.Access.None =>
+      ok (net1.lcd, net1.control, level, false)
+    | ppu.display.timing.relation.Access.ReadStat =>
+      ok (net1.lcd, net1.control, level, false)
+    | ppu.display.timing.relation.Access.ReadLy =>
+      ok (net1.lcd, net1.control, level, false)
+    | ppu.display.timing.relation.Access.ReadLyc =>
+      ok (net1.lcd, net1.control, level, false)
+    | ppu.display.timing.relation.Access.WriteStat data =>
+      do
+      let (glitch, nl1, level2) ←
+        ppu.display.timing.relation.net_write net1.lcd access 255#u8 mode0
+          level
+      let (lands, nl2, level3) ←
+        ppu.display.timing.relation.net_write nl1 access data mode0 level2
+      ok (nl2, net1.control, level3, glitch || lands)
+    | ppu.display.timing.relation.Access.WriteLyc data =>
+      do
+      let (glitch, nl1, level2) ←
+        ppu.display.timing.relation.net_write net1.lcd access 255#u8 mode0
+          level
+      let (lands, nl2, level3) ←
+        ppu.display.timing.relation.net_write nl1 access data mode0 level2
+      ok (nl2, net1.control, level3, glitch || lands)
+    | ppu.display.timing.relation.Access.WriteLcdc data =>
+      do
+      let nlc1 ←
+        ceres_netlist.lcd_control.NetLcdControl.settle net1.control false (some
+          data)
+      ok (net1.lcd, nlc1, level, false)
+  let b ← ppu.display.timing.relation.ends_at mode3_end 0#u8
+  let (b1, net2) ←
+    ppu.display.timing.relation.net_edge_ends
+      { net1 with lcd := nl, control := nlc } mode0 level1 b
+  let rose1 ← Array.update rose 0#usize ((edge_rose || written) || b1)
+  let bus ← ppu.display.timing.relation.net_shown net2.lcd access
+  let b2 ← ppu.display.timing.relation.ends_at mode3_end 1#u8
+  let (b3, net3) ← ppu.display.timing.relation.net_edge net2 b2
+  let rose2 ← Array.update rose1 1#usize b3
+  let o ← ppu.display.timing.relation.net_shown net3.lcd access
+  let bus1 ← ppu.display.timing.relation.and_bus bus o
+  let b4 ← ppu.display.timing.relation.ends_at mode3_end 2#u8
+  let (b5, net4) ← ppu.display.timing.relation.net_edge net3 b4
+  let rose3 ← Array.update rose2 2#usize b5
+  let o1 ← ppu.display.timing.relation.net_shown net4.lcd access
+  let bus2 ← ppu.display.timing.relation.and_bus bus1 o1
+  let b6 ← ppu.display.timing.relation.ends_at mode3_end 3#u8
+  let (b7, net5) ← ppu.display.timing.relation.net_edge net4 b6
+  let a ← Array.update rose3 3#usize b7
+  let o2 ← ppu.display.timing.relation.net_shown net5.lcd access
+  let bus3 ← ppu.display.timing.relation.and_bus bus2 o2
+  let (net6, rose4) ←
+    ppu.display.timing.relation.net_m_cycle_loop net5 mode3_end a 4#u8
+  ok ((bus3, rose4), net6)
+
+/-- [ceres_core::ppu::display::timing::relation::step_agrees]:
+    Source: 'ceres-core/src/ppu/display/timing/relation.rs', lines 554:0-616:1 -/
+def ppu.display.timing.relation.step_agrees
+  (net : ppu.display.timing.relation.Net) (t : ppu.display.timing.LcdTiming)
+  (access : ppu.display.timing.relation.Access) (mode3_end : Option Std.U8) :
+  Result Bool
+  := do
+  let b ← ppu.display.timing.relation.related net t
+  let b1 ← ppu.display.timing.relation.outside net access mode3_end
+  if (¬ b) || b1
+  then ok true
+  else
+    let ((net_read, net_rose), net1) ←
+      ppu.display.timing.relation.net_m_cycle net access mode3_end
+    let ((ceres_read, ceres_rose), t1) ←
+      ppu.display.timing.relation.ceres_m_cycle t access mode3_end
+    let b2 ← timing.relation.same_read net_read ceres_read
+    let b3 ← interrupts.relation.same_stat net_rose ceres_rose
+    let b4 ← ppu.display.timing.relation.related net1 t1
+    ok ((b2 && b3) && b4)
+
+/-- [ceres_core::timer_if::relation::{ceres_core::timer_if::relation::JointHost}::new]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 42:4-47:5 -/
+def timer_if.relation.JointHost.new
+  (serial_div_mask : Std.U16) (ints : interrupts.Interrupts) :
+  Result timer_if.relation.JointHost
+  := do
+  ok { serial_div_mask, ints }
+
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::apu_m_cycle]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 83:4-83:43 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+  (self : timer_if.relation.JointHost) (c : timing.timer.Clock) :
+  Result timer_if.relation.JointHost
+  := do
+  ok self
+
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::apu_delayed_envelope_tick]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 81:4-81:57 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+  (self : timer_if.relation.JointHost) (c : timing.timer.Clock) :
+  Result timer_if.relation.JointHost
+  := do
+  ok self
+
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::apu_envelopes_armed]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 79:4-79:40 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+  (self : timer_if.relation.JointHost) :
+  Result timer_if.relation.JointHost
+  := do
+  ok self
+
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::apu_frame_sequencer_step]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 77:4-77:56 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+  (self : timer_if.relation.JointHost) (c : timing.timer.Clock) :
+  Result timer_if.relation.JointHost
+  := do
+  ok self
+
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::serial_clock_edge]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 75:4-75:38 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+  (self : timer_if.relation.JointHost) :
+  Result timer_if.relation.JointHost
+  := do
+  ok self
+
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::serial_div_mask]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 71:4-73:5 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+  (self : timer_if.relation.JointHost) : Result Std.U16 := do
+  ok self.serial_div_mask
+
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::request_timer_interrupt]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 67:4-69:5 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+  (self : timer_if.relation.JointHost) :
+  Result timer_if.relation.JointHost
+  := do
   let i ← interrupts.Interrupts.request_timer self.ints
   ok { self with ints := i }
 
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::double_speed]:
-    Source: 'ceres-core/src/check.rs', lines 63:4-65:5 -/
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
-  (self : check.JointHost) : Result Bool := do
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::double_speed]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 63:4-65:5 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+  (self : timer_if.relation.JointHost) : Result Bool := do
   ok false
 
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::is_cgb_mode]:
-    Source: 'ceres-core/src/check.rs', lines 59:4-61:5 -/
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
-  (self : check.JointHost) : Result Bool := do
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::is_cgb_mode]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 59:4-61:5 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+  (self : timer_if.relation.JointHost) : Result Bool := do
   ok false
 
-/-- [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}::is_cgb_hardware]:
-    Source: 'ceres-core/src/check.rs', lines 55:4-57:5 -/
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
-  (self : check.JointHost) : Result Bool := do
+/-- [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}::is_cgb_hardware]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 55:4-57:5 -/
+def
+  timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+  (self : timer_if.relation.JointHost) : Result Bool := do
   ok false
 
-/-- Trait implementation: [ceres_core::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::check::JointHost}]
-    Source: 'ceres-core/src/check.rs', lines 54:0-84:1 -/
+/-- Trait implementation: [ceres_core::timer_if::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timer_if::relation::JointHost}]
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 54:0-84:1 -/
 @[reducible]
-def check.JointHost.Insts.Ceres_coreTimingTimerTimerHost :
-  timing.timer.TimerHost check.JointHost := {
+def timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost :
+  timing.timer.TimerHost timer_if.relation.JointHost := {
   is_cgb_hardware :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
   is_cgb_mode :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
   double_speed :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
   request_timer_interrupt :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
   serial_div_mask :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
   serial_clock_edge :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
   apu_frame_sequencer_step :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
   apu_envelopes_armed :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
   apu_delayed_envelope_tick :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
   apu_m_cycle :=
-    check.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+    timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
 }
 
 /-- [ceres_core::timing::timer::TAC_CLOCK]
@@ -1695,9 +4518,9 @@ def timing.timer.Clock.impl.tima
   then ok 0#u8
   else ok self.tima
 
-/-- [ceres_core::timing::check::ceres_access]:
-    Source: 'ceres-core/src/timing/check.rs', lines 87:0-115:1 -/
-def timing.check.ceres_access
+/-- [ceres_core::timing::relation::ceres_access]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 87:0-115:1 -/
+def timing.relation.ceres_access
   {H : Type _} (timerTimerHostInst : timing.timer.TimerHost H)
   (clock : timing.timer.Clock) (host : H) (access : ceres_netlist.timer.Access)
   :
@@ -1737,182 +4560,10 @@ def timing.check.ceres_access
         timing.timer.Clock.write_tac timerTimerHostInst clock host val
       ok (none, clock1, host)
 
-/-- [ceres_core::interrupts::INT_MASK]
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 13:0-13:37 -/
-@[global_simps, irreducible] def interrupts.INT_MASK : Std.U8 := 31#u8
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::write_if]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 86:4-88:5 -/
-def interrupts.Interrupts.write_if
-  (self : interrupts.Interrupts) (val : Std.U8) :
-  Result interrupts.Interrupts
-  := do
-  let i ← lift (val &&& interrupts.INT_MASK)
-  ok { self with ifr := i }
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::acknowledge_interrupt]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 29:4-31:5 -/
-def interrupts.Interrupts.acknowledge_interrupt
-  (self : interrupts.Interrupts) (int_bit : Std.U8) :
-  Result interrupts.Interrupts
-  := do
-  let i ← lift (~~~ int_bit)
-  let i1 ← lift (self.ifr &&& i)
-  ok { self with ifr := i1 }
-
-/-- [ceres_core::interrupts::check::ceres_t_cycle]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 93:0-114:1 -/
-def interrupts.check.ceres_t_cycle
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
-  (t : Std.Usize) (request : Std.U8) (queue : Std.U8) :
-  Result interrupts.Interrupts
-  := do
-  let i ← lift (ints.ifr ||| request)
-  match access with
-  | ceres_netlist.interrupts.Access.None => ok { ints with ifr := i }
-  | ceres_netlist.interrupts.Access.ReadIf => ok { ints with ifr := i }
-  | ceres_netlist.interrupts.Access.WriteIf val =>
-    if t = 0#usize
-    then interrupts.Interrupts.write_if { ints with ifr := i } val
-    else ok { ints with ifr := i }
-  | ceres_netlist.interrupts.Access.Entry =>
-    if (t = 1#usize) && (queue != 0#u8)
-    then
-      let i1 ← ceres_netlist.interrupts.lowest queue
-      interrupts.Interrupts.acknowledge_interrupt { ints with ifr := i } i1
-    else ok { ints with ifr := i }
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_if]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 48:4-50:5 -/
-def interrupts.Interrupts.read_if
-  (self : interrupts.Interrupts) : Result Std.U8 := do
-  let i ← lift (~~~ interrupts.INT_MASK)
-  ok (self.ifr ||| i)
-
-/-- [ceres_core::interrupts::{ceres_core::interrupts::Interrupts}::read_ie]:
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 43:4-45:5 -/
-def interrupts.Interrupts.read_ie
-  (self : interrupts.Interrupts) : Result Std.U8 := do
-  ok self.ie
-
-/-- [ceres_core::interrupts::check::ceres_boundary]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 82:0-89:1 -/
-def interrupts.check.ceres_boundary
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access) :
-  Result ((Option Std.U8) × Std.U8)
-  := do
-  let read ←
-    match access with
-    | ceres_netlist.interrupts.Access.None => ok none
-    | ceres_netlist.interrupts.Access.ReadIf =>
-      do
-      let i ← interrupts.Interrupts.read_if ints
-      ok (some i)
-    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
-    | ceres_netlist.interrupts.Access.Entry => ok none
-  let i ← interrupts.Interrupts.read_ie ints
-  let i1 ← lift (i &&& interrupts.INT_MASK)
-  let i2 ← interrupts.Interrupts.read_if ints
-  let i3 ← lift (i1 &&& i2)
-  let queue ← lift (i3 &&& interrupts.INT_MASK)
-  ok (read, queue)
-
-/-- [ceres_core::interrupts::check::requests]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 72:4-76:5 -/
+/-- [ceres_core::timer_if::relation::ceres_m_cycle_joint]: loop body 0:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 108:4-112:5 -/
 @[rust_loop_body]
-def interrupts.check.requests_loop.body
-  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
-  (i : Std.Usize) :
-  Result (ControlFlow ((Array Std.U8 4#usize) × Std.Usize) (Array Std.U8
-    4#usize))
-  := do
-  if i < 8#usize
-  then
-    let p ← Array.index_usize ceres_netlist.interrupts.PHASES i
-    let t ← ceres_netlist.interrupts.t_cycle p
-    let i1 ← Array.index_usize rises i
-    let i2 ← lift (i1 &&& interrupts.INT_MASK)
-    let i3 ← Array.index_usize requests t
-    let i4 ← lift (i3 ||| i2)
-    let a ← Array.update requests t i4
-    let i5 ← i + 1#usize
-    ok (cont (a, i5))
-  else ok (done requests)
-
-/-- [ceres_core::interrupts::check::requests]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 72:4-76:5 -/
-@[rust_loop]
-def interrupts.check.requests_loop
-  (rises : Array Std.U8 8#usize) (requests : Array Std.U8 4#usize)
-  (i : Std.Usize) :
-  Result (Array Std.U8 4#usize)
-  := do
-  loop
-    (fun (requests1, i1) => interrupts.check.requests_loop.body rises requests1
-      i1)
-    (requests, i)
-
-/-- [ceres_core::interrupts::check::requests]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 69:0-78:1 -/
-def interrupts.check.requests
-  (rises : Array Std.U8 8#usize) : Result (Array Std.U8 4#usize) := do
-  let requests := Array.repeat 4#usize 0#u8
-  interrupts.check.requests_loop rises requests 0#usize
-
-/-- [ceres_core::interrupts::INT_LCD_B]
-    Source: 'ceres-core/src/interrupts/mod.rs', lines 8:0-8:27 -/
-@[global_simps, irreducible] def interrupts.INT_LCD_B : Std.U8 := 2#u8
-
-/-- [ceres_core::interrupts::check::with_stat]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 58:4-63:5 -/
-@[rust_loop_body]
-def interrupts.check.with_stat_loop.body
-  (stat : Array Bool 4#usize) (requests : Array Std.U8 4#usize) (t : Std.Usize)
-  :
-  Result (ControlFlow ((Array Std.U8 4#usize) × Std.Usize) (Array Std.U8
-    4#usize))
-  := do
-  if t < 4#usize
-  then
-    let b ← Array.index_usize stat t
-    let requests1 ←
-      if b
-      then
-        do
-        let i ← Array.index_usize requests t
-        let i1 ← lift (i ||| interrupts.INT_LCD_B)
-        Array.update requests t i1
-      else ok requests
-    let t1 ← t + 1#usize
-    ok (cont (requests1, t1))
-  else ok (done requests)
-
-/-- [ceres_core::interrupts::check::with_stat]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 58:4-63:5 -/
-@[rust_loop]
-def interrupts.check.with_stat_loop
-  (stat : Array Bool 4#usize) (requests : Array Std.U8 4#usize) (t : Std.Usize)
-  :
-  Result (Array Std.U8 4#usize)
-  := do
-  loop
-    (fun (requests1, t1) => interrupts.check.with_stat_loop.body stat requests1
-      t1)
-    (requests, t)
-
-/-- [ceres_core::interrupts::check::with_stat]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 55:0-65:1 -/
-@[reducible]
-def interrupts.check.with_stat
-  (requests : Array Std.U8 4#usize) (stat : Array Bool 4#usize) :
-  Result (Array Std.U8 4#usize)
-  := do
-  interrupts.check.with_stat_loop stat requests 0#usize
-
-/-- [ceres_core::check::ceres_m_cycle_joint]: loop body 0:
-    Source: 'ceres-core/src/check.rs', lines 108:4-112:5 -/
-@[rust_loop_body]
-def check.ceres_m_cycle_joint_loop.body
+def timer_if.relation.ceres_m_cycle_joint_loop.body
   (if_access : ceres_netlist.interrupts.Access) (queue : Std.U8)
   (other : Array Std.U8 4#usize) (clock : timing.timer.Clock) (i : Std.U16)
   (i1 : interrupts.Interrupts) (t : Std.Usize) :
@@ -1923,43 +4574,45 @@ def check.ceres_m_cycle_joint_loop.body
   then
     let (clock1, host) ←
       timing.timer.Clock.run
-        check.JointHost.Insts.Ceres_coreTimingTimerTimerHost clock
+        timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost clock
         { serial_div_mask := i, ints := i1 } 1#i32
     let i2 ← Array.index_usize other t
-    let i3 ← interrupts.check.ceres_t_cycle host.ints if_access t i2 queue
+    let i3 ← interrupts.relation.ceres_t_cycle host.ints if_access t i2 queue
     let t1 ← t + 1#usize
     ok (cont (clock1, host.serial_div_mask, i3, t1))
   else ok (done (clock, i, i1))
 
-/-- [ceres_core::check::ceres_m_cycle_joint]: loop 0:
-    Source: 'ceres-core/src/check.rs', lines 108:4-112:5 -/
+/-- [ceres_core::timer_if::relation::ceres_m_cycle_joint]: loop 0:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 108:4-112:5 -/
 @[rust_loop]
-def check.ceres_m_cycle_joint_loop
+def timer_if.relation.ceres_m_cycle_joint_loop
   (clock : timing.timer.Clock) (i : Std.U16) (i1 : interrupts.Interrupts)
   (if_access : ceres_netlist.interrupts.Access) (queue : Std.U8)
   (other : Array Std.U8 4#usize) (t : Std.Usize) :
   Result (timing.timer.Clock × Std.U16 × interrupts.Interrupts)
   := do
   loop
-    (fun (clock1, i2, i3, t1) => check.ceres_m_cycle_joint_loop.body if_access
-      queue other clock1 i2 i3 t1)
+    (fun (clock1, i2, i3, t1) =>
+      timer_if.relation.ceres_m_cycle_joint_loop.body if_access queue other
+      clock1 i2 i3 t1)
     (clock, i, i1, t)
 
-/-- [ceres_core::check::ceres_m_cycle_joint]:
-    Source: 'ceres-core/src/check.rs', lines 92:0-114:1 -/
-def check.ceres_m_cycle_joint
-  (clock : timing.timer.Clock) (host : check.JointHost)
+/-- [ceres_core::timer_if::relation::ceres_m_cycle_joint]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 92:0-114:1 -/
+def timer_if.relation.ceres_m_cycle_joint
+  (clock : timing.timer.Clock) (host : timer_if.relation.JointHost)
   (timer_access : ceres_netlist.timer.Access)
   (if_access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
   (stat : Array Bool 4#usize) :
   Result (((Option Std.U8) × (Option Std.U8) × (Option Std.U8)) ×
-    timing.timer.Clock × check.JointHost)
+    timing.timer.Clock × timer_if.relation.JointHost)
   := do
   let (timer_read, clock1, host1) ←
-    timing.check.ceres_access
-      check.JointHost.Insts.Ceres_coreTimingTimerTimerHost clock host
-      timer_access
-  let (if_read, queue) ← interrupts.check.ceres_boundary host1.ints if_access
+    timing.relation.ceres_access
+      timer_if.relation.JointHost.Insts.Ceres_coreTimingTimerTimerHost clock
+      host timer_access
+  let (if_read, queue) ←
+    interrupts.relation.ceres_boundary host1.ints if_access
   let taken ←
     match if_access with
     | ceres_netlist.interrupts.Access.None => ok none
@@ -1969,17 +4622,17 @@ def check.ceres_m_cycle_joint
       do
       let i ← ceres_netlist.interrupts.lowest queue
       ok (some i)
-  let a ← interrupts.check.requests rises
-  let other ← interrupts.check.with_stat a stat
+  let a ← interrupts.relation.requests rises
+  let other ← interrupts.relation.with_stat a stat
   let (clock2, i, i1) ←
-    check.ceres_m_cycle_joint_loop clock1 host1.serial_div_mask host1.ints
-      if_access queue other 0#usize
+    timer_if.relation.ceres_m_cycle_joint_loop clock1 host1.serial_div_mask
+      host1.ints if_access queue other 0#usize
   ok ((timer_read, if_read, taken), clock2,
     { serial_div_mask := i, ints := i1 })
 
-/-- [ceres_core::timing::check::related]:
-    Source: 'ceres-core/src/timing/check.rs', lines 196:0-231:1 -/
-def timing.check.related
+/-- [ceres_core::timing::relation::related]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 196:0-231:1 -/
+def timing.relation.related
   (net : ceres_netlist.timer.NetTimer) (clock : timing.timer.Clock) :
   Result Bool
   := do
@@ -2007,21 +4660,9 @@ def timing.check.related
     0#u16)) && b) && (net.timer_clock = b1)) && (¬ net.write_tma)) && (¬
     net.write_tac)) && (¬ net.enable_race_counts)) && timer)
 
-/-- [ceres_core::timing::check::same_read]:
-    Source: 'ceres-core/src/timing/check.rs', lines 187:0-193:1 -/
-def timing.check.same_read
-  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
-  match a with
-  | none => match b with
-            | none => ok true
-            | some _ => ok false
-  | some x => match b with
-              | none => ok false
-              | some y => ok (x = y)
-
-/-- [ceres_core::timing::check::same_clock]:
-    Source: 'ceres-core/src/timing/check.rs', lines 165:0-184:1 -/
-def timing.check.same_clock
+/-- [ceres_core::timing::relation::same_clock]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 165:0-184:1 -/
+def timing.relation.same_clock
   (a : timing.timer.Clock) (b : timing.timer.Clock) : Result Bool := do
   let late_bit ←
     match a.apu_late_bit with
@@ -2039,116 +4680,118 @@ def timing.check.same_clock
     && (a.during_div_write = b.during_div_write)) && (a.apu_delay =
     b.apu_delay)) && late_bit) && (a.apu_odd = b.apu_odd))
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_m_cycle]:
-    Source: 'ceres-core/src/timing/check.rs', lines 83:4-83:43 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
-  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
-  Result timing.check.CheckHost
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::apu_m_cycle]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 83:4-83:43 -/
+def timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+  (self : timing.relation.CheckHost) (c : timing.timer.Clock) :
+  Result timing.relation.CheckHost
   := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_delayed_envelope_tick]:
-    Source: 'ceres-core/src/timing/check.rs', lines 81:4-81:57 -/
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::apu_delayed_envelope_tick]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 81:4-81:57 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
-  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
-  Result timing.check.CheckHost
+  timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+  (self : timing.relation.CheckHost) (c : timing.timer.Clock) :
+  Result timing.relation.CheckHost
   := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_envelopes_armed]:
-    Source: 'ceres-core/src/timing/check.rs', lines 79:4-79:40 -/
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::apu_envelopes_armed]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 79:4-79:40 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
-  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+  timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+  (self : timing.relation.CheckHost) : Result timing.relation.CheckHost := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::apu_frame_sequencer_step]:
-    Source: 'ceres-core/src/timing/check.rs', lines 77:4-77:56 -/
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::apu_frame_sequencer_step]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 77:4-77:56 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
-  (self : timing.check.CheckHost) (c : timing.timer.Clock) :
-  Result timing.check.CheckHost
+  timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+  (self : timing.relation.CheckHost) (c : timing.timer.Clock) :
+  Result timing.relation.CheckHost
   := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::serial_clock_edge]:
-    Source: 'ceres-core/src/timing/check.rs', lines 75:4-75:38 -/
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::serial_clock_edge]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 75:4-75:38 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
-  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+  timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+  (self : timing.relation.CheckHost) : Result timing.relation.CheckHost := do
   ok self
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::serial_div_mask]:
-    Source: 'ceres-core/src/timing/check.rs', lines 71:4-73:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
-  (self : timing.check.CheckHost) : Result Std.U16 := do
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::serial_div_mask]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 71:4-73:5 -/
+def
+  timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+  (self : timing.relation.CheckHost) : Result Std.U16 := do
   ok self.serial_div_mask
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::request_timer_interrupt]:
-    Source: 'ceres-core/src/timing/check.rs', lines 67:4-69:5 -/
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::request_timer_interrupt]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 67:4-69:5 -/
 def
-  timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
-  (self : timing.check.CheckHost) : Result timing.check.CheckHost := do
+  timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+  (self : timing.relation.CheckHost) : Result timing.relation.CheckHost := do
   let i ← self.timer_interrupts + 1#u32
   ok { self with timer_interrupts := i }
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::double_speed]:
-    Source: 'ceres-core/src/timing/check.rs', lines 63:4-65:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
-  (self : timing.check.CheckHost) : Result Bool := do
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::double_speed]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 63:4-65:5 -/
+def timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+  (self : timing.relation.CheckHost) : Result Bool := do
   ok false
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::is_cgb_mode]:
-    Source: 'ceres-core/src/timing/check.rs', lines 59:4-61:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
-  (self : timing.check.CheckHost) : Result Bool := do
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::is_cgb_mode]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 59:4-61:5 -/
+def timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+  (self : timing.relation.CheckHost) : Result Bool := do
   ok false
 
-/-- [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}::is_cgb_hardware]:
-    Source: 'ceres-core/src/timing/check.rs', lines 55:4-57:5 -/
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
-  (self : timing.check.CheckHost) : Result Bool := do
+/-- [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}::is_cgb_hardware]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 55:4-57:5 -/
+def
+  timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+  (self : timing.relation.CheckHost) : Result Bool := do
   ok false
 
-/-- Trait implementation: [ceres_core::timing::check::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::check::CheckHost}]
-    Source: 'ceres-core/src/timing/check.rs', lines 54:0-84:1 -/
+/-- Trait implementation: [ceres_core::timing::relation::{impl ceres_core::timing::timer::TimerHost for ceres_core::timing::relation::CheckHost}]
+    Source: 'ceres-core/src/timing/relation.rs', lines 54:0-84:1 -/
 @[reducible]
-def timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost :
-  timing.timer.TimerHost timing.check.CheckHost := {
+def timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost :
+  timing.timer.TimerHost timing.relation.CheckHost := {
   is_cgb_hardware :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware
   is_cgb_mode :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode
   double_speed :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed
   request_timer_interrupt :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt
   serial_div_mask :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask
   serial_clock_edge :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge
   apu_frame_sequencer_step :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step
   apu_envelopes_armed :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed
   apu_delayed_envelope_tick :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick
   apu_m_cycle :=
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle
 }
 
-/-- [ceres_core::timing::check::ceres_t_cycle]:
-    Source: 'ceres-core/src/timing/check.rs', lines 136:0-153:1 -/
-def timing.check.ceres_t_cycle
-  (clock : timing.timer.Clock) (host : timing.check.CheckHost) (t : Std.U8)
+/-- [ceres_core::timing::relation::ceres_t_cycle]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 136:0-153:1 -/
+def timing.relation.ceres_t_cycle
+  (clock : timing.timer.Clock) (host : timing.relation.CheckHost) (t : Std.U8)
   (first : Option Std.U8) (twice : Bool) :
   Result (((Option Std.U8) × Bool) × timing.timer.Clock ×
-    timing.check.CheckHost)
+    timing.relation.CheckHost)
   := do
   let (clock1, host1) ←
     timing.timer.Clock.run
-      timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
+      timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
       1#i32
   if host1.timer_interrupts = host.timer_interrupts
   then ok ((first, twice), clock1, host1)
@@ -2157,107 +4800,37 @@ def timing.check.ceres_t_cycle
     | none => ok ((some t, twice), clock1, host1)
     | some _ => ok ((first, true), clock1, host1)
 
-/-- [ceres_core::timing::check::ceres_m_cycle]:
-    Source: 'ceres-core/src/timing/check.rs', lines 121:0-132:1 -/
-def timing.check.ceres_m_cycle
-  (clock : timing.timer.Clock) (host : timing.check.CheckHost)
+/-- [ceres_core::timing::relation::ceres_m_cycle]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 121:0-132:1 -/
+def timing.relation.ceres_m_cycle
+  (clock : timing.timer.Clock) (host : timing.relation.CheckHost)
   (access : ceres_netlist.timer.Access) :
   Result (((Option Std.U8) × (Option Std.U8) × Bool) × timing.timer.Clock ×
-    timing.check.CheckHost)
+    timing.relation.CheckHost)
   := do
   let (read, clock1, host1) ←
-    timing.check.ceres_access
-      timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
+    timing.relation.ceres_access
+      timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost clock host
       access
   let ((first, twice), clock2, host2) ←
-    timing.check.ceres_t_cycle clock1 host1 0#u8 none false
+    timing.relation.ceres_t_cycle clock1 host1 0#u8 none false
   let ((first1, twice1), clock3, host3) ←
-    timing.check.ceres_t_cycle clock2 host2 1#u8 first twice
+    timing.relation.ceres_t_cycle clock2 host2 1#u8 first twice
   let ((first2, twice2), clock4, host4) ←
-    timing.check.ceres_t_cycle clock3 host3 2#u8 first1 twice1
+    timing.relation.ceres_t_cycle clock3 host3 2#u8 first1 twice1
   let ((first3, twice3), clock5, host5) ←
-    timing.check.ceres_t_cycle clock4 host4 3#u8 first2 twice2
+    timing.relation.ceres_t_cycle clock4 host4 3#u8 first2 twice2
   ok ((read, first3, twice3), clock5, host5)
 
-/-- [ceres_core::timing::check::{ceres_core::timing::check::CheckHost}::new]:
-    Source: 'ceres-core/src/timing/check.rs', lines 46:4-51:5 -/
-def timing.check.CheckHost.new
-  (serial_div_mask : Std.U16) : Result timing.check.CheckHost := do
+/-- [ceres_core::timing::relation::{ceres_core::timing::relation::CheckHost}::new]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 46:4-51:5 -/
+def timing.relation.CheckHost.new
+  (serial_div_mask : Std.U16) : Result timing.relation.CheckHost := do
   ok { serial_div_mask, timer_interrupts := 0#u32 }
 
-/-- [ceres_core::interrupts::check::ceres_step]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 159:4-162:5 -/
-@[rust_loop_body]
-def interrupts.check.ceres_step_loop.body
-  (access : ceres_netlist.interrupts.Access) (requests : Array Std.U8 4#usize)
-  (queue : Std.U8) (ints : interrupts.Interrupts) (t : Std.Usize) :
-  Result (ControlFlow (interrupts.Interrupts × Std.Usize)
-    interrupts.Interrupts)
-  := do
-  if t < 4#usize
-  then
-    let i ← Array.index_usize requests t
-    let ints1 ← interrupts.check.ceres_t_cycle ints access t i queue
-    let t1 ← t + 1#usize
-    ok (cont (ints1, t1))
-  else ok (done ints)
-
-/-- [ceres_core::interrupts::check::ceres_step]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 159:4-162:5 -/
-@[rust_loop]
-def interrupts.check.ceres_step_loop
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
-  (requests : Array Std.U8 4#usize) (queue : Std.U8) (t : Std.Usize) :
-  Result interrupts.Interrupts
-  := do
-  loop
-    (fun (ints1, t1) => interrupts.check.ceres_step_loop.body access requests
-      queue ints1 t1)
-    (ints, t)
-
-/-- [ceres_core::interrupts::check::ceres_step]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 142:0-164:1 -/
-def interrupts.check.ceres_step
-  (ints : interrupts.Interrupts) (access : ceres_netlist.interrupts.Access)
-  (rises : Array Std.U8 8#usize) (timer : Option Std.U8)
-  (stat : Array Bool 4#usize) :
-  Result (((Option Std.U8) × (Option Std.U8)) × interrupts.Interrupts)
-  := do
-  let a ← interrupts.check.requests rises
-  let requests ← interrupts.check.with_stat a stat
-  let requests1 ←
-    match timer with
-    | none => ok requests
-    | some t =>
-      do
-      let i ← lift (t &&& 3#u8)
-      let i1 ← lift (core.convert.num.FromUsizeU8.from i)
-      let i2 ← Array.index_usize requests i1
-      let i3 ← lift (i2 ||| ceres_netlist.interrupts.TIMER)
-      Array.update requests i1 i3
-  let (read, queue) ← interrupts.check.ceres_boundary ints access
-  let taken ←
-    match access with
-    | ceres_netlist.interrupts.Access.None => ok none
-    | ceres_netlist.interrupts.Access.ReadIf => ok none
-    | ceres_netlist.interrupts.Access.WriteIf _ => ok none
-    | ceres_netlist.interrupts.Access.Entry =>
-      do
-      let i ← ceres_netlist.interrupts.lowest queue
-      ok (some i)
-  let ints1 ←
-    interrupts.check.ceres_step_loop ints access requests1 queue 0#usize
-  ok ((read, taken), ints1)
-
-/-- [ceres_core::interrupts::check::same_ints]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 40:0-42:1 -/
-def interrupts.check.same_ints
-  (a : interrupts.Interrupts) (b : interrupts.Interrupts) : Result Bool := do
-  ok ((a.ie = b.ie) && (a.ifr = b.ifr))
-
-/-- [ceres_core::check::in_sequence]:
-    Source: 'ceres-core/src/check.rs', lines 124:0-161:1 -/
-def check.in_sequence
+/-- [ceres_core::timer_if::relation::in_sequence]:
+    Source: 'ceres-core/src/timer_if/relation.rs', lines 124:0-161:1 -/
+def timer_if.relation.in_sequence
   (net : ceres_netlist.timer.NetTimer) (clock : timing.timer.Clock)
   (clock_joint : timing.timer.Clock) (ints : interrupts.Interrupts)
   (ints_joint : interrupts.Interrupts)
@@ -2266,2579 +4839,32 @@ def check.in_sequence
   (stat : Array Bool 4#usize) :
   Result Bool
   := do
-  let b ← timing.check.related net clock
-  let b1 ← timing.check.same_clock clock clock_joint
-  let b2 ← interrupts.check.same_ints ints ints_joint
+  let b ← timing.relation.related net clock
+  let b1 ← timing.relation.same_clock clock clock_joint
+  let b2 ← interrupts.relation.same_ints ints ints_joint
   if ((¬ b) || (¬ b1)) || (¬ b2)
   then ok true
   else
-    let host ← timing.check.CheckHost.new serial_div_mask
+    let host ← timing.relation.CheckHost.new serial_div_mask
     let ((timer_read, timer_irq, twice), clock1, _) ←
-      timing.check.ceres_m_cycle clock host timer_access
+      timing.relation.ceres_m_cycle clock host timer_access
     let ((if_read, taken), ints1) ←
-      interrupts.check.ceres_step ints if_access rises timer_irq stat
-    let joint ← check.JointHost.new serial_div_mask ints_joint
+      interrupts.relation.ceres_step ints if_access rises timer_irq stat
+    let joint ← timer_if.relation.JointHost.new serial_div_mask ints_joint
     let ((joint_timer_read, joint_if_read, joint_taken), clock_joint1, joint1)
       ←
-      check.ceres_m_cycle_joint clock_joint joint timer_access if_access rises
-        stat
-    let b3 ← timing.check.same_read timer_read joint_timer_read
-    let b4 ← timing.check.same_read if_read joint_if_read
-    let b5 ← timing.check.same_read taken joint_taken
-    let b6 ← timing.check.same_clock clock1 clock_joint1
-    let b7 ← interrupts.check.same_ints ints1 joint1.ints
+      timer_if.relation.ceres_m_cycle_joint clock_joint joint timer_access
+        if_access rises stat
+    let b3 ← timing.relation.same_read timer_read joint_timer_read
+    let b4 ← timing.relation.same_read if_read joint_if_read
+    let b5 ← timing.relation.same_read taken joint_taken
+    let b6 ← timing.relation.same_clock clock1 clock_joint1
+    let b7 ← interrupts.relation.same_ints ints1 joint1.ints
     ok (twice || ((((b3 && b4) && b5) && b6) && b7))
 
-/-- [ceres_core::interrupts::check::related]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 35:0-37:1 -/
-def interrupts.check.related
-  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts) :
-  Result Bool
-  := do
-  let i ← lift (~~~ interrupts.INT_MASK)
-  let i1 ← lift (net.flags &&& i)
-  ok (((i1 = 0#u8) && (ints.ifr = net.flags)) && (ints.ie = net.ie))
-
-/-- [ceres_core::interrupts::check::same_stat]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 48:0-52:1 -/
-def interrupts.check.same_stat
-  (net : Array Bool 8#usize) (ceres : Array Bool 4#usize) : Result Bool := do
-  let b ← Array.index_usize net 0#usize
-  let b1 ← Array.index_usize net 1#usize
-  let b2 ← Array.index_usize net 2#usize
-  let b3 ← Array.index_usize ceres 0#usize
-  let b4 ← Array.index_usize net 3#usize
-  let b5 ← Array.index_usize ceres 1#usize
-  let b6 ← Array.index_usize net 4#usize
-  let b7 ← Array.index_usize net 5#usize
-  let b8 ← Array.index_usize net 6#usize
-  let b9 ← Array.index_usize net 7#usize
-  let b10 ← Array.index_usize ceres 2#usize
-  let b11 ← Array.index_usize ceres 3#usize
-  ok (((((b || b1) || b2) = b3) && (b4 = b5)) && ((((b6 || b7) || b8) || b9) =
-    (b10 || b11)))
-
-/-- [ceres_core::interrupts::check::net_step]: loop body 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 131:4-136:5 -/
-@[rust_loop_body]
-def interrupts.check.net_step_loop.body
-  (stat : Array Bool 8#usize) (rises : Array Std.U8 8#usize) (i : Std.Usize) :
-  Result (ControlFlow ((Array Std.U8 8#usize) × Std.Usize) (Array Std.U8
-    8#usize))
-  := do
-  if i < 8#usize
-  then
-    let b ← Array.index_usize stat i
-    let rises1 ←
-      if b
-      then
-        do
-        let i1 ← Array.index_usize rises i
-        let i2 ← lift (i1 ||| interrupts.INT_LCD_B)
-        Array.update rises i i2
-      else ok rises
-    let i1 ← i + 1#usize
-    ok (cont (rises1, i1))
-  else ok (done rises)
-
-/-- [ceres_core::interrupts::check::net_step]: loop 0:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 131:4-136:5 -/
-@[rust_loop]
-def interrupts.check.net_step_loop
-  (stat : Array Bool 8#usize) (rises : Array Std.U8 8#usize) (i : Std.Usize) :
-  Result (Array Std.U8 8#usize)
-  := do
-  loop
-    (fun (rises1, i1) => interrupts.check.net_step_loop.body stat rises1 i1)
-    (rises, i)
-
-/-- [ceres_core::interrupts::check::net_step]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 119:0-138:1 -/
-def interrupts.check.net_step
-  (net : ceres_netlist.interrupts.NetIf)
-  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  (timer : Bool) (stat : Array Bool 8#usize) :
-  Result (((Option Std.U8) × (Option Std.U8)) ×
-    ceres_netlist.interrupts.NetIf)
-  := do
-  let rises1 ←
-    if timer
-    then
-      do
-      let i ← Array.index_usize rises ceres_netlist.interrupts.A
-      let i1 ← lift (i ||| ceres_netlist.interrupts.TIMER)
-      Array.update rises ceres_netlist.interrupts.A i1
-    else ok rises
-  let rises2 ← interrupts.check.net_step_loop stat rises1 0#usize
-  ceres_netlist.interrupts.NetIf.m_cycle net access rises2
-
-/-- [ceres_core::timing::check::same_interrupt]:
-    Source: 'ceres-core/src/timing/check.rs', lines 157:0-162:1 -/
-def timing.check.same_interrupt
-  (net : Bool) (ceres : Option Std.U8) : Result Bool := do
-  match ceres with
-  | none => ok (¬ net)
-  | some t => ok (net && (t = 2#u8))
-
-/-- [ceres_core::interrupts::check::step_agrees]:
-    Source: 'ceres-core/src/interrupts/check.rs', lines 172:0-215:1 -/
-def interrupts.check.step_agrees
-  (net : ceres_netlist.interrupts.NetIf) (ints : interrupts.Interrupts)
-  (access : ceres_netlist.interrupts.Access) (rises : Array Std.U8 8#usize)
-  (net_timer : Bool) (ceres_timer : Option Std.U8)
-  (net_stat : Array Bool 8#usize) (ceres_stat : Array Bool 4#usize) :
-  Result Bool
-  := do
-  let b ← interrupts.check.related net ints
-  let b1 ← timing.check.same_interrupt net_timer ceres_timer
-  let b2 ← interrupts.check.same_stat net_stat ceres_stat
-  if ((¬ b) || (¬ b1)) || (¬ b2)
-  then ok true
-  else
-    let ((net_read, net_taken), net1) ←
-      interrupts.check.net_step net access rises net_timer net_stat
-    let ((ceres_read, ceres_taken), ints1) ←
-      interrupts.check.ceres_step ints access rises ceres_timer ceres_stat
-    let b3 ← timing.check.same_read net_read ceres_read
-    let b4 ← timing.check.same_read net_taken ceres_taken
-    let b5 ← interrupts.check.related net1 ints1
-    ok ((b3 && b4) && b5)
-
-/-- [ceres_core::memory::dma::check::net_m_cycle]:
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 56:0-79:1 -/
-def memory.dma.check.net_m_cycle
-  (net : ceres_netlist.dma.NetDma) (access : memory.dma.check.Access) :
-  Result (((Option Std.U8) × (Option (Std.U16 × Std.U8)) × Bool × Bool) ×
-    ceres_netlist.dma.NetDma)
-  := do
-  let write ←
-    match access with
-    | memory.dma.check.Access.None => ok none
-    | memory.dma.check.Access.Read => ok none
-    | memory.dma.check.Access.Write val => ok (some val)
-  let net1 ←
-    ceres_netlist.dma.NetDma.phase net ceres_netlist.clocks.Phase.E write
-  let net2 ←
-    ceres_netlist.dma.NetDma.phase net1 ceres_netlist.clocks.Phase.F write
-  let net3 ←
-    ceres_netlist.dma.NetDma.phase net2 ceres_netlist.clocks.Phase.G write
-  let oam ← ceres_netlist.dma.NetDma.oam_write net3
-  let net4 ←
-    ceres_netlist.dma.NetDma.phase net3 ceres_netlist.clocks.Phase.H none
-  let (net5, read) ←
-    match access with
-    | memory.dma.check.Access.None => ok (net4, none)
-    | memory.dma.check.Access.Read => ok (net4, some net4.source)
-    | memory.dma.check.Access.Write _ => ok (net4, none)
-  let net6 ←
-    ceres_netlist.dma.NetDma.phase net5 ceres_netlist.clocks.Phase.A none
-  let net7 ←
-    ceres_netlist.dma.NetDma.phase net6 ceres_netlist.clocks.Phase.B none
-  let net8 ←
-    ceres_netlist.dma.NetDma.phase net7 ceres_netlist.clocks.Phase.C none
-  let net9 ←
-    ceres_netlist.dma.NetDma.phase net8 ceres_netlist.clocks.Phase.D none
-  ok ((read, oam, net.run, net9.run), net9)
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{impl core::ops::function::FnOnce<(u8,), (u16, u8)> for ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}<'_0>}::call_once]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
-def
-  memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8.call_once
-  (c : memory.dma.Dma.write.closure) (tupled_args : Std.U8) :
-  Result (Std.U16 × Std.U8)
-  := do
-  let i ← lift (core.convert.num.FromU16U8.from tupled_args)
-  let i1 ← lift (c ||| i)
-  ok (i1, tupled_args)
-
-/-- Trait implementation: [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{impl core::ops::function::FnOnce<(u8,), (u16, u8)> for ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write::{closure}<'_0>}]
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 293:17-293:66 -/
-@[reducible]
-def memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8 :
-  core.ops.function.FnOnce memory.dma.Dma.write.closure Std.U8 (Std.U16 ×
-  Std.U8) := {
-  call_once :=
-    memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8.call_once
-}
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::is_after_restart]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 195:4-197:5 -/
-def memory.dma.Dma.is_after_restart (self : memory.dma.Dma) : Result Bool := do
-  let b ←
-    match self.phase with
-    | memory.dma.DmaPhase.Idle => ok false
-    | memory.dma.DmaPhase.StartUp => ok false
-    | memory.dma.DmaPhase.Copy i =>
-      match i with
-      | 0#uscalar => ok true
-      | _ => ok false
-    | memory.dma.DmaPhase.Last => ok false
-  if b
-  then ok self.restarting
-  else ok false
-
-/-- [ceres_core::ppu::oam::{ceres_core::ppu::oam::Oam}::SIZE]
-    Source: 'ceres-core/src/ppu/oam.rs', lines 19:4-19:37 -/
-@[global_simps, irreducible] def ppu.oam.Oam.SIZE : Std.U8 := 160#u8
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::DmaPhase}::written]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 46:4-52:5 -/
-def memory.dma.DmaPhase.written
-  (self : memory.dma.DmaPhase) : Result (Option Std.U8) := do
-  match self with
-  | memory.dma.DmaPhase.Idle => ok none
-  | memory.dma.DmaPhase.StartUp => ok none
-  | memory.dma.DmaPhase.Copy next =>
-    if next != 0#u8
-    then ok (some next)
-    else ok none
-  | memory.dma.DmaPhase.Last => ok (some ppu.oam.Oam.SIZE)
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::oam_byte]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 201:4-209:5 -/
-def memory.dma.Dma.oam_byte
-  (self : memory.dma.Dma) : Result (Option Std.U8) := do
-  let b ← memory.dma.Dma.is_after_restart self
-  if b
-  then ok (some 0#u8)
-  else
-    let o ← memory.dma.DmaPhase.written self.phase
-    match o with
-    | none => ok none
-    | some written => let i ← written - 1#u8
-                      ok (some i)
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::write]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 278:4-294:5 -/
-def memory.dma.Dma.write
-  (self : memory.dma.Dma) (val : Std.U8) :
-  Result ((Option (Std.U16 × Std.U8)) × memory.dma.Dma)
-  := do
-  let last ← memory.dma.Dma.oam_byte self
-  let (dp, b) ←
-    match self.phase with
-    | memory.dma.DmaPhase.Idle => ok (memory.dma.DmaPhase.Idle, false)
-    | memory.dma.DmaPhase.StartUp => ok (memory.dma.DmaPhase.StartUp, true)
-    | memory.dma.DmaPhase.Copy i =>
-      do
-      let b1 ← match i with
-                 | 0#uscalar => ok true
-                 | _ => ok false
-      ok (self.phase, b1)
-    | memory.dma.DmaPhase.Last => ok (memory.dma.DmaPhase.Last, false)
-  let (i, i1, dp1, b1, b2) ←
-    if b
-    then
-      ok (self.cycles, self.cycles_modulo, dp, self.restarting,
-        self.ran_when_written)
-    else
-      do
-      let b3 ←
-        match dp with
-        | memory.dma.DmaPhase.Idle => ok false
-        | memory.dma.DmaPhase.StartUp => ok false
-        | memory.dma.DmaPhase.Copy _ => ok true
-        | memory.dma.DmaPhase.Last => ok false
-      let b4 ←
-        match dp with
-        | memory.dma.DmaPhase.Idle => ok false
-        | memory.dma.DmaPhase.StartUp => ok false
-        | memory.dma.DmaPhase.Copy _ => ok true
-        | memory.dma.DmaPhase.Last => ok true
-      ok (0#i32, 2#i32, memory.dma.DmaPhase.StartUp, b3, b4)
-  let i2 ← lift (core.convert.num.FromU16U8.from val)
-  let i3 ← i2 <<< 8#i32
-  let o ←
-    core.option.Option.map
-      memory.dma.Dma.write.closure.Insts.CoreOpsFunctionFnOnceTupleU8PairU16U8
-      last i3
-  ok (o,
-    {
-      cycles := i,
-      cycles_modulo := i1,
-      phase := dp1,
-      current_src := i3,
-      reg := val,
-      restarting := b1,
-      ran_when_written := b2
-    })
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::DmaPhase}::step]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 35:4-42:5 -/
-def memory.dma.DmaPhase.step
-  (self : memory.dma.DmaPhase) : Result memory.dma.DmaPhase := do
-  match self with
-  | memory.dma.DmaPhase.Idle => ok memory.dma.DmaPhase.Idle
-  | memory.dma.DmaPhase.StartUp => ok (memory.dma.DmaPhase.Copy 0#u8)
-  | memory.dma.DmaPhase.Copy next =>
-    let i ← next + 1#u8
-    if i < ppu.oam.Oam.SIZE
-    then ok (memory.dma.DmaPhase.Copy i)
-    else ok memory.dma.DmaPhase.Last
-  | memory.dma.DmaPhase.Last => ok memory.dma.DmaPhase.Idle
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::end_pause]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 268:4-270:5 -/
-def memory.dma.Dma.end_pause
-  (self : memory.dma.Dma) : Result memory.dma.Dma := do
-  let dp ← memory.dma.DmaPhase.step self.phase
-  ok { self with phase := dp }
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::step]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 252:4-265:5 -/
-def memory.dma.Dma.step
-  (self : memory.dma.Dma) : Result (memory.dma.DmaStep × memory.dma.Dma) := do
-  match self.phase with
-  | memory.dma.DmaPhase.Idle => ok (memory.dma.DmaStep.Pause none, self)
-  | memory.dma.DmaPhase.StartUp =>
-    if self.restarting
-    then ok (memory.dma.DmaStep.Pause (some (self.current_src, 0#u8)), self)
-    else ok (memory.dma.DmaStep.Pause none, self)
-  | memory.dma.DmaPhase.Copy dest =>
-    let dp ← memory.dma.DmaPhase.step self.phase
-    let i ← lift (core.num.U16.wrapping_add self.current_src 1#u16)
-    ok (memory.dma.DmaStep.Copy self.current_src dest,
-      { self with phase := dp, current_src := i })
-  | memory.dma.DmaPhase.Last => ok (memory.dma.DmaStep.Pause none, self)
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::due_step]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 244:4-250:5 -/
-def memory.dma.Dma.due_step
-  (self : memory.dma.Dma) :
-  Result ((Option memory.dma.DmaStep) × memory.dma.Dma)
-  := do
-  if self.cycles_modulo < 4#i32
-  then ok (none, self)
-  else
-    let i ← self.cycles_modulo - 4#i32
-    let (ds, self1) ← memory.dma.Dma.step { self with cycles_modulo := i }
-    ok (some ds, self1)
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::begin_run]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 235:4-238:5 -/
-def memory.dma.Dma.begin_run
-  (self : memory.dma.Dma) : Result memory.dma.Dma := do
-  let i ← self.cycles_modulo + self.cycles
-  ok { self with cycles := 0#i32, cycles_modulo := i }
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::set_cycles]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 229:4-231:5 -/
-def memory.dma.Dma.set_cycles
-  (self : memory.dma.Dma) (cycles : Std.I32) : Result memory.dma.Dma := do
-  ok { self with cycles }
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::read]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 178:4-180:5 -/
-def memory.dma.Dma.read (self : memory.dma.Dma) : Result Std.U8 := do
-  ok self.reg
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::is_active]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 132:4-134:5 -/
-def memory.dma.Dma.is_active (self : memory.dma.Dma) : Result Bool := do
-  let b ←
-    match self.phase with
-    | memory.dma.DmaPhase.Idle => ok true
-    | memory.dma.DmaPhase.StartUp => ok false
-    | memory.dma.DmaPhase.Copy _ => ok false
-    | memory.dma.DmaPhase.Last => ok false
-  ok (¬ b)
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::blocks_oam]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 173:4-175:5 -/
-def memory.dma.Dma.blocks_oam (self : memory.dma.Dma) : Result Bool := do
-  let b ← memory.dma.Dma.is_active self
-  if b
-  then
-    let b1 ←
-      match self.phase with
-      | memory.dma.DmaPhase.Idle => ok false
-      | memory.dma.DmaPhase.StartUp => ok false
-      | memory.dma.DmaPhase.Copy i =>
-        match i with
-        | 0#uscalar => ok true
-        | _ => ok false
-      | memory.dma.DmaPhase.Last => ok false
-    if b1
-    then ok self.restarting
-    else ok true
-  else ok false
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::runs_in]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 153:4-160:5 -/
-def memory.dma.Dma.runs_in
-  (self : memory.dma.Dma) (phase : memory.dma.DmaPhase) : Result Bool := do
-  match phase with
-  | memory.dma.DmaPhase.Idle => ok false
-  | memory.dma.DmaPhase.StartUp => ok self.ran_when_written
-  | memory.dma.DmaPhase.Copy i =>
-    match i with
-    | 0#uscalar => ok self.restarting
-    | _ => ok true
-  | memory.dma.DmaPhase.Last => ok true
-
-/-- [ceres_core::memory::dma::{ceres_core::memory::dma::Dma}::runs]:
-    Source: 'ceres-core/src/memory/dma/mod.rs', lines 164:4-166:5 -/
-def memory.dma.Dma.runs (self : memory.dma.Dma) : Result Bool := do
-  memory.dma.Dma.runs_in self self.phase
-
-/-- [ceres_core::memory::dma::check::ceres_m_cycle]:
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 100:0-138:1 -/
-def memory.dma.check.ceres_m_cycle
-  (ceres : memory.dma.check.CeresDma) (access : memory.dma.check.Access) :
-  Result (memory.dma.check.CeresOut × memory.dma.check.CeresDma)
-  := do
-  let (ceres1, read) ←
-    match access with
-    | memory.dma.check.Access.None => ok (ceres, none)
-    | memory.dma.check.Access.Read =>
-      do
-      let i ← memory.dma.Dma.read ceres.dma
-      ok (ceres, some i)
-    | memory.dma.check.Access.Write val =>
-      do
-      let (o, d) ← memory.dma.Dma.write ceres.dma val
-      ok (({ dma := d, last_copy := o } : memory.dma.check.CeresDma), none)
-  let runs_after_access ← memory.dma.Dma.runs ceres1.dma
-  let b ← memory.dma.Dma.is_active ceres1.dma
-  let (d, copy, twice) ←
-    if b
-    then
-      do
-      let d1 ← memory.dma.Dma.set_cycles ceres1.dma 4#i32
-      let d2 ← memory.dma.Dma.begin_run d1
-      let (o, d3) ← memory.dma.Dma.due_step d2
-      match o with
-      | none => ok (d3, none, false)
-      | some ds =>
-        match ds with
-        | memory.dma.DmaStep.Copy src dest =>
-          let (o1, d4) ← memory.dma.Dma.due_step d3
-          let twice1 := core.option.Option.is_some o1
-          ok (d4, some (src, dest), twice1)
-        | memory.dma.DmaStep.Pause rewrite =>
-          let d4 ← memory.dma.Dma.end_pause d3
-          ok (d4, rewrite, false)
-    else ok (ceres1.dma, none, false)
-  let b1 ← memory.dma.Dma.runs d
-  let b2 ← memory.dma.Dma.blocks_oam d
-  ok
-    ({
-       read,
-       written := ceres1.last_copy,
-       runs_after_access,
-       runs := b1,
-       blocks_oam := b2,
-       twice
-     }, { dma := d, last_copy := copy })
-
-/-- [ceres_core::memory::dma::check::same_write]:
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 141:0-147:1 -/
-def memory.dma.check.same_write
-  (a : Option (Std.U16 × Std.U8)) (b : Option (Std.U16 × Std.U8)) :
-  Result Bool
-  := do
-  match a with
-  | none => match b with
-            | none => ok true
-            | some _ => ok false
-  | some p =>
-    match b with
-    | none => ok false
-    | some p1 =>
-      let (a_src, a_dest) := p
-      let (b_src, b_dest) := p1
-      ok ((a_src = b_src) && (a_dest = b_dest))
-
-/-- [ceres_core::memory::dma::check::same_read]:
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 150:0-156:1 -/
-def memory.dma.check.same_read
-  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
-  match a with
-  | none => match b with
-            | none => ok true
-            | some _ => ok false
-  | some x => match b with
-              | none => ok false
-              | some y => ok (x = y)
-
-/-- [ceres_core::memory::dma::check::copying]:
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 209:0-223:1 -/
-def memory.dma.check.copying
-  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.check.CeresDma)
-  (base : Std.U16) (next_byte : Std.U8) (in_range : Bool) :
-  Result Bool
-  := do
-  let n ← next_byte - 1#u8
-  let i ← lift (core.convert.num.FromU16U8.from n)
-  let i1 ← lift (base ||| i)
-  let b ← memory.dma.check.same_write ceres.last_copy (some (i1, n))
-  let i2 ← lift (core.convert.num.FromU16U8.from next_byte)
-  let i3 ← base + i2
-  ok ((((((((((in_range && (¬ net.requested)) && (¬ net.start_1)) &&
-    (net.start_2 = (n = 0#u8))) && net.enabled) && net.run) && (¬ net.done))
-    && (net.count = n)) && b) && (ceres.dma.current_src = i3)) &&
-    (ceres.dma.cycles_modulo = 2#i32))
-
-/-- [ceres_core::memory::dma::check::related]:
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 159:0-206:1 -/
-def memory.dma.check.related
-  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.check.CeresDma) :
-  Result Bool
-  := do
-  let i ← lift (core.convert.num.FromU16U8.from ceres.dma.reg)
-  let base ← i <<< 8#i32
-  let state ←
-    match ceres.dma.phase with
-    | memory.dma.DmaPhase.Idle =>
-      do
-      let b ← memory.dma.check.same_write ceres.last_copy none
-      ok ((((((¬ net.requested) && (¬ net.start_1)) && (¬ net.start_2)) &&
-        (¬ net.enabled)) && (¬ net.run)) && b)
-    | memory.dma.DmaPhase.StartUp => ok false
-    | memory.dma.DmaPhase.Copy next =>
-      match next with
-      | 0#uscalar =>
-        if ceres.dma.restarting
-        then
-          do
-          let b ←
-            memory.dma.check.same_write ceres.last_copy (some (base, 0#u8))
-          ok (((((((net.requested && net.start_1) && (¬ net.start_2)) &&
-            net.enabled) && net.run) && b) && (ceres.dma.current_src = base))
-            && (ceres.dma.cycles_modulo = 2#i32))
-        else
-          do
-          let b ← memory.dma.check.same_write ceres.last_copy none
-          ok (((((((net.requested && net.start_1) && (¬ net.start_2)) && (¬
-            net.enabled)) && (¬ net.run)) && b) && (ceres.dma.current_src =
-            base)) && (ceres.dma.cycles_modulo = 2#i32))
-      | _ => memory.dma.check.copying net ceres base next (next < 160#u8)
-    | memory.dma.DmaPhase.Last =>
-      memory.dma.check.copying net ceres base 160#u8 true
-  ok (((ceres.dma.reg = net.source) && (ceres.dma.cycles = 0#i32)) && state)
-
-/-- [ceres_core::memory::dma::check::step_agrees]:
-    Source: 'ceres-core/src/memory/dma/check.rs', lines 230:0-263:1 -/
-def memory.dma.check.step_agrees
-  (net : ceres_netlist.dma.NetDma) (ceres : memory.dma.check.CeresDma)
-  (access : memory.dma.check.Access) :
-  Result Bool
-  := do
-  let b ← memory.dma.check.related net ceres
-  if b
-  then
-    let ((net_read, net_write, run_before, run_after), net1) ←
-      memory.dma.check.net_m_cycle net access
-    let (out, ceres1) ← memory.dma.check.ceres_m_cycle ceres access
-    let b1 ← memory.dma.check.same_read net_read out.read
-    let b2 ← memory.dma.check.same_write net_write out.written
-    let b3 ← memory.dma.check.related net1 ceres1
-    ok ((((((b1 && b2) && (out.runs_after_access = run_before)) && (out.runs =
-      run_after)) && (out.blocks_oam = run_after)) && (¬ out.twice)) && b3)
-  else ok true
-
-/-- [ceres_core::ppu::display::LINE_LENGTH]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 59:0-59:40 -/
-@[global_simps, irreducible] def ppu.display.LINE_LENGTH : Std.I32 := 456#i32
-
-/-- [ceres_core::ppu::PX_HEIGHT]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 26:0-26:30
-    Visibility: public -/
-@[global_simps, irreducible] def ppu.PX_HEIGHT : Std.U8 := 144#u8
-
-/-- [ceres_core::ppu::display::LINES]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 61:0-61:39 -/
-@[global_simps, irreducible] def ppu.display.LINES : Std.U8 := ppu.PX_HEIGHT
-
-/-- [ceres_core::ppu::display::LAST_LINE]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 63:0-63:37 -/
-@[global_simps, irreducible] def ppu.display.LAST_LINE : Std.U8 := 153#u8
-
-/-- [ceres_core::ppu::display::objects::check::wuvu]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 80:0-82:1 -/
-def ppu.display.objects.check.wuvu (h : Std.I32) : Result Bool := do
-  let i ← h + 912#i32
-  let i1 ← lift (i &&& 2#i32)
-  ok (i1 != 0#i32)
-
-/-- [ceres_core::ppu::display::objects::check::wosu]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 84:0-86:1 -/
-def ppu.display.objects.check.wosu (h : Std.I32) : Result Bool := do
-  let i ← h + 913#i32
-  let i1 ← lift (i &&& 2#i32)
-  ok (i1 != 0#i32)
-
-/-- [ceres_core::ppu::display::objects::check::net_edge]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 90:0-121:1 -/
-def ppu.display.objects.check.net_edge
-  (net : ppu.display.objects.check.NetSide) (h : Std.I32)
-  (line : ppu.display.objects.check.Line) (y : Std.U8) :
-  Result ppu.display.objects.check.NetSide
-  := do
-  let i ← lift (h &&& 1#i32)
-  let i1 ← h - 1#i32
-  let b ← ppu.display.objects.check.wuvu i1
-  let b1 ← ppu.display.objects.check.wuvu h
-  let b2 ← ppu.display.objects.check.wosu i1
-  let ns ←
-    ceres_netlist.oam_scan.NetScan.edge net.scan
-      {
-        rising := (i != 0#i32),
-        wuvu_before := b,
-        wuvu_after := b1,
-        wosu_before := b2,
-        vclk := ((h >= (-7)#i32) && (h <= 0#i32)),
-        ly := line.ly
-      } net.latches.second line.tall
-  let i2 ← if (¬ b) && b1
-             then ok net.scan.index
-             else ok net.scanned
-  let b3 ← ppu.display.objects.check.wosu h
-  let nol ←
-    ceres_netlist.oam.NetOamLatches.settle net.latches
-      {
-        scanning := ns.scanning,
-        run := false,
-        dma_phi := false,
-        wuvu := b1,
-        wosu := b3,
-        fetch_read := false,
-        fetch_hold := false
-      } y
-  let o ←
-    ceres_netlist.oam_scan.NetScan.save ns b3 nol.second line.ly line.tall
-  match o with
-  | none => ok { net with scan := ns, latches := nol, scanned := i2 }
-  | some slot =>
-    let i3 ← lift (UScalar.cast .Usize slot)
-    let a ← Array.update net.slots i3 (some i2)
-    ok { scan := ns, latches := nol, scanned := i2, slots := a }
-
-/-- [ceres_core::ppu::display::objects::on_line]:
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 95:0-99:1 -/
-def ppu.display.objects.on_line
-  (y : Std.U8) (line : Std.U8) (height_16 : Bool) : Result Bool := do
-  let i ← lift (UScalar.hcast .I32 y)
-  let top ← i - 16#i32
-  let line1 ← lift (UScalar.hcast .I32 line)
-  if top <= line1
-  then
-    let i1 ← if height_16
-               then ok 16#i32
-               else ok 8#i32
-    let i2 ← top + i1
-    ok (i2 > line1)
-  else ok false
-
-/-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::OamLatches}::latch]:
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 67:4-73:5 -/
-def ppu.display.objects.OamLatches.latch
-  (self : ppu.display.objects.OamLatches) (read : Option (Std.U8 × Std.U8)) :
-  Result ((Std.U8 × Std.U8) × ppu.display.objects.OamLatches)
-  := do
-  match read with
-  | none => ok ((self.y, self.x), self)
-  | some p => let (y, x) := p
-              ok (p, { y, x })
-
-/-- [ceres_core::ppu::display::objects::MAX_OBJECTS_PER_LINE]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 22:0-22:39 -/
-@[global_simps, irreducible]
-def ppu.display.objects.MAX_OBJECTS_PER_LINE : Std.Usize := 10#usize
-
-/-- [ceres_core::ppu::display::objects::check::ceres_read]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 124:0-131:1 -/
-def ppu.display.objects.check.ceres_read
-  (ceres : ppu.display.objects.check.CeresSide)
-  (line : ppu.display.objects.check.Line) (y : Std.U8) :
-  Result ppu.display.objects.check.CeresSide
-  := do
-  let ((seen, _), ol) ←
-    ppu.display.objects.OamLatches.latch ceres.latches (some (y, 0#u8))
-  let b ← ppu.display.objects.on_line seen line.ly line.tall
-  let (a, i) ←
-    if b && (ceres.found < ppu.display.objects.MAX_OBJECTS_PER_LINE)
-    then
-      do
-      let a1 ← Array.update ceres.first ceres.found (some ceres.read)
-      let i1 ← ceres.found + 1#usize
-      ok (a1, i1)
-    else ok (ceres.first, ceres.found)
-  let i1 ← ceres.read + 1#u8
-  ok { latches := ol, read := i1, first := a, found := i }
-
-/-- [ceres_core::ppu::display::objects::check::net_window]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 135:0-141:1 -/
-def ppu.display.objects.check.net_window
-  (net : ppu.display.objects.check.NetSide)
-  (line : ppu.display.objects.check.Line) (j : Std.U8) (y : Std.U8) :
-  Result ppu.display.objects.check.NetSide
-  := do
-  let i ← lift (UScalar.hcast .I32 j)
-  let i1 ← 4#i32 * i
-  let h ← i1 - 2#i32
-  let net1 ← ppu.display.objects.check.net_edge net h line y
-  let i2 ← h + 1#i32
-  let net2 ← ppu.display.objects.check.net_edge net1 i2 line y
-  let i3 ← h + 2#i32
-  let net3 ← ppu.display.objects.check.net_edge net2 i3 line y
-  let i4 ← h + 3#i32
-  ppu.display.objects.check.net_edge net3 i4 line y
-
-/-- [ceres_core::ppu::display::objects::check::step]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 145:0-148:1 -/
-def ppu.display.objects.check.step
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide)
-  (line : ppu.display.objects.check.Line) (j : Std.U8) (y : Std.U8) :
-  Result (ppu.display.objects.check.NetSide ×
-    ppu.display.objects.check.CeresSide)
-  := do
-  let net1 ← ppu.display.objects.check.net_window net line j y
-  let ceres1 ← ppu.display.objects.check.ceres_read ceres line y
-  ok (net1, ceres1)
-
-/-- [ceres_core::ppu::display::objects::check::same_slot]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 152:0-158:1 -/
-def ppu.display.objects.check.same_slot
-  (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
-  match a with
-  | none => match b with
-            | none => ok true
-            | some _ => ok false
-  | some x => match b with
-              | none => ok false
-              | some y => ok (x = y)
-
-/-- [ceres_core::ppu::display::objects::check::slots_are]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 165:4-169:5 -/
-@[rust_loop_body]
-def ppu.display.objects.check.slots_are_loop.body
-  (net : ppu.display.objects.check.NetSide) (n : Std.Usize)
-  (ceres : ppu.display.objects.check.CeresSide) (ok1 : Bool) (i : Std.Usize) :
-  Result (ControlFlow (ppu.display.objects.check.CeresSide × Bool ×
-    Std.Usize) Bool)
-  := do
-  if i < 10#usize
-  then
-    let (ceres1, want) ←
-      if i < n
-      then do
-           let want1 ← Array.index_usize ceres.first i
-           ok (ceres, want1)
-      else ok (ceres, none)
-    let o ← Array.index_usize net.slots i
-    let b ← ppu.display.objects.check.same_slot o want
-    let i1 ← i + 1#usize
-    ok (cont (ceres1, ok1 && b, i1))
-  else ok (done ok1)
-
-/-- [ceres_core::ppu::display::objects::check::slots_are]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 165:4-169:5 -/
-@[rust_loop]
-def ppu.display.objects.check.slots_are_loop
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide) (n : Std.Usize) (ok1 : Bool)
-  (i : Std.Usize) :
-  Result Bool
-  := do
-  loop
-    (fun (ceres1, ok2, i1) => ppu.display.objects.check.slots_are_loop.body net
-      n ceres1 ok2 i1)
-    (ceres, ok1, i)
-
-/-- [ceres_core::ppu::display::objects::check::slots_are]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 162:0-171:1 -/
-@[reducible]
-def ppu.display.objects.check.slots_are
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide) (n : Std.Usize) :
-  Result Bool
-  := do
-  ppu.display.objects.check.slots_are_loop net ceres n true 0#usize
-
-/-- [ceres_core::ppu::display::objects::check::unpack]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 196:0-201:1 -/
-def ppu.display.objects.check.unpack
-  (slot : Option Std.U8) : Result (Bool × Std.U8) := do
-  match slot with
-  | none => ok (false, 0#u8)
-  | some index => ok (true, index)
-
-/-- [ceres_core::ppu::display::objects::check::list_is_sound]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 179:4-190:5 -/
-@[rust_loop_body]
-def ppu.display.objects.check.list_is_sound_loop.body
-  (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
-  (ok1 : Bool) (last : Std.I32) (i2 : Std.Usize) :
-  Result (ControlFlow (Bool × Std.I32 × Std.Usize) Bool)
-  := do
-  if i2 < 10#usize
-  then
-    let o ← Array.index_usize a i2
-    let (present, index) ← ppu.display.objects.check.unpack o
-    let i3 ← lift (UScalar.hcast .I32 index)
-    let last1 ← if present
-                  then ok (UScalar.hcast .I32 index)
-                  else ok last
-    let i4 ← i2 + 1#usize
-    ok (cont (ok1 && ((((present && (i2 < i1)) && (i3 > last)) && (index < i))
-      || ((¬ present) && (i2 >= i1))), last1, i4))
-  else ok (done ok1)
-
-/-- [ceres_core::ppu::display::objects::check::list_is_sound]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 179:4-190:5 -/
-@[rust_loop]
-def ppu.display.objects.check.list_is_sound_loop
-  (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
-  (ok1 : Bool) (last : Std.I32) (i2 : Std.Usize) :
-  Result Bool
-  := do
-  loop
-    (fun (ok2, last1, i3) => ppu.display.objects.check.list_is_sound_loop.body
-      i a i1 ok2 last1 i3)
-    (ok1, last, i2)
-
-/-- [ceres_core::ppu::display::objects::check::list_is_sound]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 175:0-192:1 -/
-@[reducible]
-def ppu.display.objects.check.list_is_sound
-  (ceres : ppu.display.objects.check.CeresSide) : Result Bool := do
-  ppu.display.objects.check.list_is_sound_loop ceres.read ceres.first
-    ceres.found (ceres.found <= ppu.display.objects.MAX_OBJECTS_PER_LINE)
-    (-1)#i32 0#usize
-
-/-- [ceres_core::ppu::display::objects::check::related]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 210:0-241:1 -/
-def ppu.display.objects.check.related
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide)
-  (line : ppu.display.objects.check.Line) (j : Std.U8) :
-  Result Bool
-  := do
-  let i ← lift (core.num.U8.wrapping_sub j 1#u8)
-  let i1 ← lift (core.num.U8.wrapping_add j 1#u8)
-  let i2 ← lift (UScalar.cast .Usize net.scan.count)
-  let i3 ←
-    lift (UScalar.cast_fromBool .Usize ((¬ net.scan.not_saving) &&
-      (net.scan.count < ceres_netlist.oam_scan.SLOTS)))
-  let saved ← i2 + i3
-  let i4 ← saved + 1#usize
-  let i5 ← saved % 10#usize
-  let o ← Array.index_usize ceres.first i5
-  let b ← ppu.display.objects.check.same_slot o (some j)
-  let b1 ← ppu.display.objects.check.slots_are net ceres saved
-  let b2 ← ppu.display.objects.check.list_is_sound ceres
-  let b3 ← ppu.display.objects.on_line net.latches.second line.ly line.tall
-  let i6 ← lift (UScalar.cast .Usize net.scan.count)
-  let b4 ← ppu.display.objects.on_line ceres.latches.y line.ly line.tall
-  ok (((((((((((((net.scan.scanning && net.scan.ceno) && (¬
-    net.scan.start_scan)) && (¬ net.scan.anel)) && (¬ net.scan.byba)) && (¬
-    net.scan.doba)) && (net.scan.index = j)) && (net.scanned = i)) &&
-    (ceres.read = i1)) && (net.latches.first = ceres.latches.y)) && (
-    line.ly < 144#u8)) && (((((ceres.found = saved) || ((ceres.found = i4) &&
-    b)) && (net.scan.count <= ceres_netlist.oam_scan.SLOTS)) && b1) && b2)) &&
-    (((¬ net.scan.not_saving) && (net.scan.count <
-    ceres_netlist.oam_scan.SLOTS)) = (b3 && (i6 <
-    ppu.display.objects.MAX_OBJECTS_PER_LINE)))) && ((b4 && (saved <
-    ppu.display.objects.MAX_OBJECTS_PER_LINE)) = ((ceres.found = i4) && b)))
-
-/-- [ceres_core::ppu::display::objects::check::step_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 245:0-252:1 -/
-def ppu.display.objects.check.step_agrees
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide)
-  (line : ppu.display.objects.check.Line) (j : Std.U8) (y : Std.U8) :
-  Result Bool
-  := do
-  let b ← ppu.display.objects.check.related net ceres line j
-  if ((j >= 2#u8) && (j <= 38#u8)) && b
-  then
-    let (net1, ceres1) ← ppu.display.objects.check.step net ceres line j y
-    let i ← j + 1#u8
-    ppu.display.objects.check.related net1 ceres1 line i
-  else ok true
-
-/-- [ceres_core::ppu::display::objects::check::NO_SPRITES]
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 256:0-256:98 -/
-@[global_simps, irreducible]
-def ppu.display.objects.check.NO_SPRITES : Array (Option Std.U8) 10#usize :=
-  Array.make 10#usize [
-    none, none, none, none, none, none, none, none, none, none
-    ]
-
-/-- [ceres_core::ppu::display::objects::check::net_at_line_end]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 261:0-281:1 -/
-def ppu.display.objects.check.net_at_line_end
-  (count : Std.U8) (not_saving : Bool) (held : Std.U8) :
-  Result ppu.display.objects.check.NetSide
-  := do
-  ok
-    {
-      scan :=
-        {
-          start_scan := false,
-          anel := false,
-          scanning := false,
-          ceno := false,
-          index := 39#u8,
-          byba := true,
-          doba := true,
-          not_saving,
-          count
-        },
-      latches := { first := held, second := held },
-      scanned := 39#u8,
-      slots := ppu.display.objects.check.NO_SPRITES
-    }
-
-/-- [ceres_core::ppu::display::objects::check::ceres_at_line_end]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 284:0-291:1 -/
-def ppu.display.objects.check.ceres_at_line_end
-  (held : Std.U8) : Result ppu.display.objects.check.CeresSide := do
-  ok
-    {
-      latches := { y := held, x := 0#u8 },
-      read := 0#u8,
-      first := ppu.display.objects.check.NO_SPRITES,
-      found := 0#usize
-    }
-
-/-- [ceres_core::ppu::display::objects::check::lead_in]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 297:0-315:1 -/
-def ppu.display.objects.check.lead_in
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide)
-  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 4#usize) :
-  Result (ppu.display.objects.check.NetSide ×
-    ppu.display.objects.check.CeresSide)
-  := do
-  let y39 ← Array.index_usize ys 0#usize
-  let y0 ← Array.index_usize ys 1#usize
-  let y1 ← Array.index_usize ys 2#usize
-  let y2 ← Array.index_usize ys 3#usize
-  let net1 ← ppu.display.objects.check.net_edge net (-7)#i32 line y39
-  let net2 ← ppu.display.objects.check.net_edge net1 (-6)#i32 line y0
-  let net3 ← ppu.display.objects.check.net_edge net2 (-5)#i32 line y0
-  let net4 ← ppu.display.objects.check.net_edge net3 (-4)#i32 line y0
-  let net5 ← ppu.display.objects.check.net_edge net4 (-3)#i32 line y0
-  let ceres1 ← ppu.display.objects.check.ceres_read ceres line y0
-  let net6 ← ppu.display.objects.check.net_edge net5 (-2)#i32 line y1
-  let net7 ← ppu.display.objects.check.net_edge net6 (-1)#i32 line y1
-  let net8 ← ppu.display.objects.check.net_edge net7 0#i32 line y1
-  let net9 ← ppu.display.objects.check.net_edge net8 1#i32 line y1
-  let ceres2 ← ppu.display.objects.check.ceres_read ceres1 line y1
-  let net10 ← ppu.display.objects.check.net_edge net9 2#i32 line y2
-  let net11 ← ppu.display.objects.check.net_edge net10 3#i32 line y2
-  let net12 ← ppu.display.objects.check.net_edge net11 4#i32 line y2
-  let net13 ← ppu.display.objects.check.net_edge net12 5#i32 line y2
-  let ceres3 ← ppu.display.objects.check.ceres_read ceres2 line y2
-  ok (net13, ceres3)
-
-/-- [ceres_core::ppu::display::objects::check::lead_in_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 319:0-333:1 -/
-def ppu.display.objects.check.lead_in_agrees
-  (count : Std.U8) (not_saving : Bool) (held : Std.U8)
-  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 4#usize) :
-  Result Bool
-  := do
-  if (count <= ceres_netlist.oam_scan.SLOTS) && (line.ly < 144#u8)
-  then
-    let net ← ppu.display.objects.check.net_at_line_end count not_saving held
-    let ceres ← ppu.display.objects.check.ceres_at_line_end held
-    let (net1, ceres1) ← ppu.display.objects.check.lead_in net ceres line ys
-    ppu.display.objects.check.related net1 ceres1 line 2#u8
-  else ok true
-
-/-- [ceres_core::ppu::display::objects::check::tail]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 339:4-342:5 -/
-@[rust_loop_body]
-def ppu.display.objects.check.tail_loop.body
-  (line : ppu.display.objects.check.Line) (y39 : Std.U8)
-  (net : ppu.display.objects.check.NetSide) (h : Std.I32) :
-  Result (ControlFlow (ppu.display.objects.check.NetSide × Std.I32)
-    ppu.display.objects.check.NetSide)
-  := do
-  if h <= 161#i32
-  then
-    let net1 ← ppu.display.objects.check.net_edge net h line y39
-    let h1 ← h + 1#i32
-    ok (cont (net1, h1))
-  else ok (done net)
-
-/-- [ceres_core::ppu::display::objects::check::tail]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 339:4-342:5 -/
-@[rust_loop]
-def ppu.display.objects.check.tail_loop
-  (net : ppu.display.objects.check.NetSide)
-  (line : ppu.display.objects.check.Line) (y39 : Std.U8) (h : Std.I32) :
-  Result ppu.display.objects.check.NetSide
-  := do
-  loop
-    (fun (net1, h1) => ppu.display.objects.check.tail_loop.body line y39 net1
-      h1)
-    (net, h)
-
-/-- [ceres_core::ppu::display::objects::check::tail]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 337:0-343:1 -/
-@[reducible]
-def ppu.display.objects.check.tail
-  (net : ppu.display.objects.check.NetSide)
-  (line : ppu.display.objects.check.Line) (y39 : Std.U8) :
-  Result ppu.display.objects.check.NetSide
-  := do
-  ppu.display.objects.check.tail_loop net line y39 154#i32
-
-/-- [ceres_core::ppu::display::objects::check::tail_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 348:0-366:1 -/
-def ppu.display.objects.check.tail_agrees
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide)
-  (line : ppu.display.objects.check.Line) :
-  Result Bool
-  := do
-  let b ← ppu.display.objects.check.related net ceres line 39#u8
-  if b
-  then
-    let net1 ← ppu.display.objects.check.tail net line ceres.latches.y
-    let b1 ← ppu.display.objects.check.slots_are net1 ceres ceres.found
-    ok ((((((((((¬ net1.scan.scanning) && (net1.scan.index = 39#u8)) &&
-      (net1.scanned = 39#u8)) && net1.scan.byba) && net1.scan.doba) && (¬
-      net1.scan.start_scan)) && (¬ net1.scan.anel)) && (¬ net1.scan.ceno)) &&
-      (net1.scan.count <= ceres_netlist.oam_scan.SLOTS)) && b1)
-  else ok true
-
-/-- [ceres_core::ppu::display::objects::check::scan]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 382:4-385:5 -/
-@[rust_loop_body]
-def ppu.display.objects.check.scan_loop.body
-  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize)
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide) (j : Std.U8) :
-  Result (ControlFlow (ppu.display.objects.check.NetSide ×
-    ppu.display.objects.check.CeresSide × Std.U8)
-    (ppu.display.objects.check.NetSide × ppu.display.objects.check.CeresSide))
-  := do
-  if j <= 38#u8
-  then
-    let i ← lift (UScalar.cast .Usize j)
-    let i1 ← i + 1#usize
-    let i2 ← Array.index_usize ys i1
-    let (net1, ceres1) ← ppu.display.objects.check.step net ceres line j i2
-    let j1 ← j + 1#u8
-    ok (cont (net1, ceres1, j1))
-  else ok (done (net, ceres))
-
-/-- [ceres_core::ppu::display::objects::check::scan]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 382:4-385:5 -/
-@[rust_loop]
-def ppu.display.objects.check.scan_loop
-  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize)
-  (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide) (j : Std.U8) :
-  Result (ppu.display.objects.check.NetSide ×
-    ppu.display.objects.check.CeresSide)
-  := do
-  loop
-    (fun (net1, ceres1, j1) => ppu.display.objects.check.scan_loop.body line ys
-      net1 ceres1 j1)
-    (net, ceres, j)
-
-/-- [ceres_core::ppu::display::objects::check::scan]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 371:0-390:1 -/
-def ppu.display.objects.check.scan
-  (count : Std.U8) (not_saving : Bool) (held : Std.U8)
-  (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize) :
-  Result (ppu.display.objects.check.NetSide ×
-    ppu.display.objects.check.CeresSide)
-  := do
-  let net ← ppu.display.objects.check.net_at_line_end count not_saving held
-  let ceres ← ppu.display.objects.check.ceres_at_line_end held
-  let i ← Array.index_usize ys 39#usize
-  let i1 ← Array.index_usize ys 0#usize
-  let i2 ← Array.index_usize ys 1#usize
-  let i3 ← Array.index_usize ys 2#usize
-  let (net1, ceres1) ←
-    ppu.display.objects.check.lead_in net ceres line
-      (Array.make 4#usize [ i, i1, i2, i3 ])
-  let (net2, ceres2) ←
-    ppu.display.objects.check.scan_loop line ys net1 ceres1 2#u8
-  let net3 ← ppu.display.objects.check.tail net2 line ceres2.latches.y
-  ok (net3, ceres2)
-
-/-- [ceres_core::ppu::display::timing::check::LCDC_EARLY]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 82:0-82:25 -/
-@[global_simps, irreducible]
-def ppu.display.timing.check.LCDC_EARLY : Std.U8 := 2#u8
-
-/-- [ceres_core::ppu::display::timing::LINE_H]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 44:0-44:36 -/
-@[global_simps, irreducible]
-def ppu.display.timing.LINE_H : Result Std.I32 :=
-  2#i32 * ppu.display.LINE_LENGTH
-
-/-- [ceres_core::ppu::display::timing::check::SKEWED_LINE_END]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 86:0-86:41 -/
-@[global_simps, irreducible]
-def ppu.display.timing.check.SKEWED_LINE_END : Result Std.I32 := do
-  let i ← ppu.display.timing.LINE_H
-  i - 17#i32
-
-/-- [ceres_core::ppu::display::timing::check::SKEWED_FIRST]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 91:0-91:28 -/
-@[global_simps, irreducible]
-def ppu.display.timing.check.SKEWED_FIRST : Std.I32 := 8#i32
-
-/-- [ceres_core::ppu::display::timing::check::SKEWED_LAST]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 92:0-92:45 -/
-@[global_simps, irreducible]
-def ppu.display.timing.check.SKEWED_LAST : Result Std.I32 := do
-  let i ← ppu.display.timing.check.SKEWED_LINE_END
-  i - 7#i32
-
-/-- [ceres_core::ppu::STAT_LYC_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 59:0-59:38 -/
-@[global_simps, irreducible] def ppu.STAT_LYC_B : Std.U8 := 4#u8
-
-/-- [ceres_core::ppu::STAT_IF_LYC_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 63:0-63:42 -/
-@[global_simps, irreducible] def ppu.STAT_IF_LYC_B : Std.U8 := 64#u8
-
-/-- [ceres_core::ppu::STAT_IF_OAM_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 62:0-62:42 -/
-@[global_simps, irreducible] def ppu.STAT_IF_OAM_B : Std.U8 := 32#u8
-
-/-- [ceres_core::ppu::STAT_IF_VBLANK_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 61:0-61:45 -/
-@[global_simps, irreducible] def ppu.STAT_IF_VBLANK_B : Std.U8 := 16#u8
-
-/-- [ceres_core::ppu::STAT_IF_HBLANK_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 60:0-60:44 -/
-@[global_simps, irreducible] def ppu.STAT_IF_HBLANK_B : Std.U8 := 8#u8
-
-/-- [ceres_core::ppu::display::timing::STAT_ENABLES]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 94:0-94:93 -/
-@[global_simps, irreducible]
-def ppu.display.timing.STAT_ENABLES : Std.U8 :=
-  let i := ppu.STAT_IF_HBLANK_B ||| ppu.STAT_IF_VBLANK_B
-  let i1 := i ||| ppu.STAT_IF_OAM_B
-  i1 ||| ppu.STAT_IF_LYC_B
-
-/-- [ceres_core::ppu::display::timing::check::STAT_OWN]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 96:0-96:47 -/
-@[global_simps, irreducible]
-def ppu.display.timing.check.STAT_OWN : Std.U8 :=
-  ppu.display.timing.STAT_ENABLES ||| ppu.STAT_LYC_B
-
-/-- [ceres_core::ppu::display::timing::LINE_END_H]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 77:0-77:46 -/
-@[global_simps, irreducible]
-def ppu.display.timing.LINE_END_H : Result Std.I32 := do
-  let i ← ppu.display.timing.LINE_H
-  i - 8#i32
-
-/-- [ceres_core::ppu::display::timing::check::ly_at]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 100:0-108:1 -/
-def ppu.display.timing.check.ly_at
-  (line : Std.U8) (h : Std.I32) : Result Std.U8 := do
-  let i ← ppu.display.timing.LINE_END_H
-  if h >= i
-  then if line = ppu.display.LAST_LINE
-       then ok 0#u8
-       else line + 1#u8
-  else
-    if (line = ppu.display.LAST_LINE) && (h >= 4#i32)
-    then ok 0#u8
-    else ok line
-
-/-- [ceres_core::ppu::display::timing::LAST_VISIBLE_LINE]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 91:0-91:40 -/
-@[global_simps, irreducible]
-def ppu.display.timing.LAST_VISIBLE_LINE : Result Std.U8 :=
-  ppu.display.LINES - 1#u8
-
-/-- [ceres_core::ppu::display::timing::VBLANK_H]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 81:0-81:48 -/
-@[global_simps, irreducible]
-def ppu.display.timing.VBLANK_H : Result Std.I32 := do
-  let i ← ppu.display.timing.LINE_END_H
-  i + 4#i32
-
-/-- [ceres_core::ppu::display::timing::check::vblank_at]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 111:0-117:1 -/
-def ppu.display.timing.check.vblank_at
-  (line : Std.U8) (h : Std.I32) : Result Bool := do
-  match line with
-  | 143#uscalar => let i ← ppu.display.timing.VBLANK_H
-                   ok (h >= i)
-  | 153#uscalar => let i ← ppu.display.timing.VBLANK_H
-                   ok (h < i)
-  | _ => let i ← ppu.display.timing.LAST_VISIBLE_LINE
-         ok (line > i)
-
-/-- [ceres_core::ppu::display::timing::LINE_RESET_H]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 79:0-79:52 -/
-@[global_simps, irreducible]
-def ppu.display.timing.LINE_RESET_H : Result Std.I32 := do
-  let i ← ppu.display.timing.LINE_END_H
-  i + 2#i32
-
-/-- [ceres_core::ppu::display::timing::DMG_PHASES]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 122:0-131:2 -/
-@[global_simps, irreducible]
-def ppu.display.timing.DMG_PHASES : Result ppu.display.timing.Phases := do
-  let i ← ppu.display.timing.LINE_RESET_H
-  let i1 ← i + 4#i32
-  let i2 ← 2#i32 * 77#i32
-  let i3 ← i2 + 4#i32
-  let i4 ← ppu.display.timing.LINE_H
-  let i5 ← ppu.display.timing.VBLANK_H
-  ok
-    {
-      cgb := false,
-      hblank_clear := i,
-      line153_ly_reset := 4#i32,
-      scan_start := i1,
-      scan_end := i3,
-      mode1_start := i4,
-      mode1_end := i5,
-      flag_holds := false
-    }
-
-/-- [ceres_core::ppu::display::timing::check::dmg_phases]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 120:0-130:1 -/
-def ppu.display.timing.check.dmg_phases
-  (p : ppu.display.timing.Phases) : Result Bool := do
-  let d ← ppu.display.timing.DMG_PHASES
-  ok ((((((((p.cgb = d.cgb) && (p.hblank_clear = d.hblank_clear)) &&
-    (p.line153_ly_reset = d.line153_ly_reset)) && (p.scan_start =
-    d.scan_start)) && (p.scan_end = d.scan_end)) && (p.mode1_start =
-    d.mode1_start)) && (p.mode1_end = d.mode1_end)) && (p.flag_holds =
-    d.flag_holds))
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::line_for]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 234:4-239:5 -/
-def ppu.display.timing.LcdTiming.line_for
-  (self : ppu.display.timing.LcdTiming) (enables : Std.U8) : Result Bool := do
-  let i ← lift (enables &&& ppu.STAT_IF_LYC_B)
-  if i != 0#u8
-  then
-    if self.ly_match
-    then ok true
-    else
-      let i1 ← lift (enables &&& ppu.STAT_IF_OAM_B)
-      if i1 != 0#u8
-      then
-        if self.line_end
-        then
-          if self.vblank
-          then
-            let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
-            if i2 != 0#u8
-            then
-              if self.vblank
-              then ok true
-              else
-                let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-                if i3 != 0#u8
-                then if self.hblank
-                     then ok (¬ self.vblank)
-                     else ok false
-                else ok false
-            else
-              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-              if i3 != 0#u8
-              then if self.hblank
-                   then ok (¬ self.vblank)
-                   else ok false
-              else ok false
-          else ok true
-        else
-          let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
-          if i2 != 0#u8
-          then
-            if self.vblank
-            then ok true
-            else
-              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-              if i3 != 0#u8
-              then if self.hblank
-                   then ok (¬ self.vblank)
-                   else ok false
-              else ok false
-          else
-            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-            if i3 != 0#u8
-            then if self.hblank
-                 then ok (¬ self.vblank)
-                 else ok false
-            else ok false
-      else
-        let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
-        if i2 != 0#u8
-        then
-          if self.vblank
-          then ok true
-          else
-            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-            if i3 != 0#u8
-            then if self.hblank
-                 then ok (¬ self.vblank)
-                 else ok false
-            else ok false
-        else
-          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-          if i3 != 0#u8
-          then if self.hblank
-               then ok (¬ self.vblank)
-               else ok false
-          else ok false
-  else
-    let i1 ← lift (enables &&& ppu.STAT_IF_OAM_B)
-    if i1 != 0#u8
-    then
-      if self.line_end
-      then
-        if self.vblank
-        then
-          let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
-          if i2 != 0#u8
-          then
-            if self.vblank
-            then ok true
-            else
-              let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-              if i3 != 0#u8
-              then if self.hblank
-                   then ok (¬ self.vblank)
-                   else ok false
-              else ok false
-          else
-            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-            if i3 != 0#u8
-            then if self.hblank
-                 then ok (¬ self.vblank)
-                 else ok false
-            else ok false
-        else ok true
-      else
-        let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
-        if i2 != 0#u8
-        then
-          if self.vblank
-          then ok true
-          else
-            let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-            if i3 != 0#u8
-            then if self.hblank
-                 then ok (¬ self.vblank)
-                 else ok false
-            else ok false
-        else
-          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-          if i3 != 0#u8
-          then if self.hblank
-               then ok (¬ self.vblank)
-               else ok false
-          else ok false
-    else
-      let i2 ← lift (enables &&& ppu.STAT_IF_VBLANK_B)
-      if i2 != 0#u8
-      then
-        if self.vblank
-        then ok true
-        else
-          let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-          if i3 != 0#u8
-          then if self.hblank
-               then ok (¬ self.vblank)
-               else ok false
-          else ok false
-      else
-        let i3 ← lift (enables &&& ppu.STAT_IF_HBLANK_B)
-        if i3 != 0#u8
-        then if self.hblank
-             then ok (¬ self.vblank)
-             else ok false
-        else ok false
-
-/-- [ceres_core::ppu::display::timing::check::related_at]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 142:0-187:1 -/
-def ppu.display.timing.check.related_at
-  (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming)
-  (line : Std.U8) (h : Std.I32) :
-  Result Bool
-  := do
-  let i ← ppu.display.timing.LINE_H
-  if (((((t.line <= ppu.display.LAST_LINE) && (t.h >= 0#i32)) && (t.h < i)) &&
-    (line <= ppu.display.LAST_LINE)) && (h >= 0#i32)) && (h < i)
-  then
-    let b ← ppu.display.timing.check.dmg_phases t.phases
-    let i1 ← lift (~~~ ppu.display.timing.STAT_ENABLES)
-    let i2 ← lift (t.enables &&& i1)
-    let b1 := core.option.Option.is_none t.lyc_pending
-    let b2 := core.option.Option.is_none t.stat_pending
-    let i3 ← ppu.display.timing.check.ly_at t.line t.h
-    let i4 ← ppu.display.timing.LINE_END_H
-    let b3 ← ppu.display.timing.check.vblank_at t.line t.h
-    let b4 ← ppu.display.timing.LcdTiming.line_for t t.enables
-    let lx ←
-      if (h >= 4#i32) && (h < i4)
-      then
-        do
-        let i5 ← h - 4#i32
-        let i6 ← i5 / 8#i32
-        let i7 ← i6 + 1#i32
-        ok (IScalar.hcast .U8 i7)
-      else ok 0#u8
-    let i5 ← lift (h &&& 1#i32)
-    let i6 ← lift (h &&& 2#i32)
-    let i7 ← lift (h &&& 7#i32)
-    let i8 ← h + 1#i32
-    let i9 ← lift (i8 &&& 2#i32)
-    let i10 ← ppu.display.timing.VBLANK_H
-    ok ((((((((((((b && (i2 = 0#u8)) && (¬ t.hblank_pending)) && t.on) && (¬
-      t.dirty)) && b1) && b2) && (t.ly = i3)) && (t.line_end = (t.h >= i4))) &&
-      (t.vblank = b3)) && (t.stat_line = b4)) && ((((((((net.clk = (i5 !=
-      0#i32)) && (net.wuvu = (i6 != 0#i32))) && (net.vena = (i7 >= 4#i32))) &&
-      (net.wosu = (i9 != 0#i32))) && (net.lx = lx)) && (net.vclk = (h >= i4)))
-      && (net.nype = ((h >= i10) || (h < 4#i32)))) && (net.line_153 = (((line =
-      ppu.display.LAST_LINE) && (h >= 4#i32)) || ((line = 0#u8) && (h <
-      4#i32)))))) && (((((net.ly = t.ly) && (net.mode1 = t.vblank)) && (
-      net.lyc = t.lyc)) && (net.lyc_match = t.ly_match)) && (net.stat_enable =
-      t.enables)))
-  else ok false
-
-/-- [ceres_core::ppu::display::timing::check::skewed]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 191:0-193:1 -/
-def ppu.display.timing.check.skewed
-  (t : ppu.display.timing.LcdTiming) : Result Bool := do
-  let i ← lift (t.h &&& 7#i32)
-  ok (((t.on && t.first_line) && (t.line = 0#u8)) && (i = 2#i32))
-
-/-- [ceres_core::ppu::display::timing::check::off_related]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 203:0-232:1 -/
-def ppu.display.timing.check.off_related
-  (net : ceres_netlist.lcd_timing.NetLcd) (t : ppu.display.timing.LcdTiming) :
-  Result Bool
-  := do
-  let b ← ppu.display.timing.check.dmg_phases t.phases
-  let i ← ppu.display.timing.LINE_H
-  let i1 ← lift (~~~ ppu.display.timing.STAT_ENABLES)
-  let i2 ← lift (t.enables &&& i1)
-  let b1 ← ppu.display.timing.LcdTiming.line_for t t.enables
-  let b2 := core.option.Option.is_none t.lyc_pending
-  let b3 := core.option.Option.is_none t.stat_pending
-  let b4 ← ceres_netlist.lcd_timing.NetLcd.int_stat net false
-  ok (((((((((((((((((((((((((((b && (t.line <= ppu.display.LAST_LINE)) && (
-    t.h >= 0#i32)) && (t.h < i)) && (¬ t.on)) && (i2 = 0#u8)) && (¬
-    t.hblank)) && (¬ t.hblank_pending)) && (¬ t.line_end)) && (¬ t.vblank))
-    && (t.ly = 0#u8)) && (t.stat_line = b1)) && b2) && b3) && (¬ net.clk)) &&
-    (¬ net.wuvu)) && (¬ net.vena)) && (¬ net.wosu)) && (net.lx = 0#u8)) &&
-    (¬ net.vclk)) && (¬ net.nype)) && (net.ly = 0#u8)) && (¬ net.line_153))
-    && (¬ net.mode1)) && (net.lyc = t.lyc)) && (net.lyc_match = t.ly_match))
-    && (net.stat_enable = t.enables)) && (b4 = t.stat_line))
-
-/-- [ceres_core::ppu::display::timing::check::related]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 248:0-264:1 -/
-def ppu.display.timing.check.related
-  (net : ppu.display.timing.check.Net) (t : ppu.display.timing.LcdTiming) :
-  Result Bool
-  := do
-  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
-  if b
-  then
-    let b1 ← ppu.display.timing.check.off_related net.lcd t
-    ok ((¬ net.mode0) && b1)
-  else
-    let i ← ppu.display.timing.LINE_END_H
-    let i1 ← lift (t.h &&& 7#i32)
-    let b1 ← ppu.display.timing.check.related_at net.lcd t t.line t.h
-    let b2 ← ppu.display.timing.check.skewed t
-    let i2 ← ppu.display.timing.check.SKEWED_FIRST + 2#i32
-    let i3 ← ppu.display.timing.check.SKEWED_LAST
-    let i4 ← i3 + 2#i32
-    let ahead ←
-      if (b2 && (t.h >= i2)) && (t.h <= i4)
-      then
-        do
-        let i5 ← t.h - 2#i32
-        let b3 ← ppu.display.timing.check.related_at net.lcd t 0#u8 i5
-        ok ((t.ly_match = (t.ly = t.lyc)) && b3)
-      else ok false
-    ok ((t.hblank = net.mode0) && ((((i1 = 0#i32) && (((t.ly_match = (
-      t.ly = t.lyc)) || (t.h = i)) || ((t.line = ppu.display.LAST_LINE) && (
-      t.h = 8#i32)))) && b1) || ahead))
-
-/-- [ceres_core::ppu::display::timing::check::MODE3_LAST_LX]
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 268:0-268:30 -/
-@[global_simps, irreducible]
-def ppu.display.timing.check.MODE3_LAST_LX : Std.U8 := 111#u8
-
-/-- [ceres_core::ppu::display::timing::check::mode3_may_end]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 274:0-281:1 -/
-def ppu.display.timing.check.mode3_may_end
-  (net : ppu.display.timing.check.Net) (k : Std.U8) : Result Bool := do
-  let i ← lift (k &&& 1#u8)
-  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
-  ok ((((((i = 1#u8) && (¬ b)) && (net.lcd.ly < ppu.display.LINES)) && (¬
-    net.lcd.mode1)) && (¬ net.lcd.vclk)) && (net.lcd.lx <=
-    ppu.display.timing.check.MODE3_LAST_LX))
-
-/-- [ceres_core::ppu::LCDC_ON_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 41:0-41:38 -/
-@[global_simps, irreducible] def ppu.LCDC_ON_B : Std.U8 := 128#u8
-
-/-- [ceres_core::ppu::display::timing::check::outside]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 289:0-310:1 -/
-def ppu.display.timing.check.outside
-  (net : ppu.display.timing.check.Net)
-  (access : ppu.display.timing.check.Access) (mode3_end : Option Std.U8) :
-  Result Bool
-  := do
-  let pipeline ←
-    match mode3_end with
-    | none => ok false
-    | some k =>
-      do
-      let b ← ppu.display.timing.check.mode3_may_end net k
-      ok (¬ b)
-  match access with
-  | ppu.display.timing.check.Access.None => ok pipeline
-  | ppu.display.timing.check.Access.ReadStat => ok pipeline
-  | ppu.display.timing.check.Access.ReadLy => ok pipeline
-  | ppu.display.timing.check.Access.ReadLyc => ok pipeline
-  | ppu.display.timing.check.Access.WriteStat _ => ok pipeline
-  | ppu.display.timing.check.Access.WriteLyc _ => ok pipeline
-  | ppu.display.timing.check.Access.WriteLcdc data =>
-    let b := core.option.Option.is_some mode3_end
-    let i ← lift (data &&& ppu.LCDC_ON_B)
-    let b1 ←
-      ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
-    let i1 ← lift (net.lcd.stat_enable &&& ppu.STAT_IF_LYC_B)
-    ok (b || (((((i != 0#u8) && b1) && (i1 != 0#u8)) && (net.lcd.lyc = 0#u8))
-      && (¬ net.lcd.lyc_match)))
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::update_line]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 242:4-247:5 -/
-def ppu.display.timing.LcdTiming.update_line
-  (self : ppu.display.timing.LcdTiming) :
-  Result (Bool × ppu.display.timing.LcdTiming)
-  := do
-  let line ← ppu.display.timing.LcdTiming.line_for self self.enables
-  if line
-  then ok (¬ self.stat_line, { self with stat_line := line })
-  else ok (false, { self with stat_line := line })
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_off]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 546:4-554:5 -/
-def ppu.display.timing.LcdTiming.turn_off
-  (self : ppu.display.timing.LcdTiming) :
-  Result ppu.display.timing.LcdTiming
-  := do
-  let (_, self1) ←
-    ppu.display.timing.LcdTiming.update_line
-      {
-        self
-          with
-          on := false,
-          ly := 0#u8,
-          line_end := false,
-          vblank := false,
-          hblank := false,
-          hblank_pending := false
-      }
-  ok self1
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::turn_on]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 517:4-530:5 -/
-def ppu.display.timing.LcdTiming.turn_on
-  (self : ppu.display.timing.LcdTiming) (phases : ppu.display.timing.Phases) :
-  Result (Bool × ppu.display.timing.LcdTiming)
-  := do
-  ppu.display.timing.LcdTiming.update_line
-    {
-      self
-        with
-        phases,
-        on := true,
-        first_line := true,
-        line := 0#u8,
-        h := 0#i32,
-        ly := 0#u8,
-        line_end := false,
-        vblank := false,
-        hblank := false,
-        hblank_pending := false,
-        ly_match := (self.lyc = 0#u8)
-    }
-
-/-- [ceres_core::ppu::display::timing::LY_MATCH_PHASE]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 83:0-83:30 -/
-@[global_simps, irreducible]
-def ppu.display.timing.LY_MATCH_PHASE : Std.I32 := 4#i32
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::PendingWrite}::ticked]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 56:4-65:5 -/
-def ppu.display.timing.PendingWrite.ticked
-  (self : ppu.display.timing.PendingWrite) :
-  Result ppu.display.timing.PendingWrite
-  := do
-  if self.half_dots_left > 1#u8
-  then
-    let i ← self.half_dots_left - 1#u8
-    ok { self with half_dots_left := i }
-  else ok { self with half_dots_left := 1#u8 }
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::unit]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 250:4-348:5 -/
-def ppu.display.timing.LcdTiming.unit
-  (self : ppu.display.timing.LcdTiming) :
-  Result (Bool × ppu.display.timing.LcdTiming)
-  := do
-  let i ← self.h + 1#i32
-  let i1 ← ppu.display.timing.LINE_H
-  let (b, i2, i3) ←
-    if i = i1
-    then
-      do
-      let i4 ←
-        if self.line = ppu.display.LAST_LINE
-        then ok 0#u8
-        else self.line + 1#u8
-      ok (false, i4, 0#i32)
-    else ok (self.first_line, self.line, i)
-  if self.on
-  then
-    let (b1, b2, changed) ←
-      if self.hblank_pending
-      then ok (true, false, true)
-      else ok (self.hblank, self.hblank_pending, self.dirty)
-    let (i4, b3, changed1) ←
-      match i3 with
-      | 0#iscalar => ok (self.ly, false, true)
-      | 904#iscalar =>
-        do
-        let i5 ← if i2 = ppu.display.LAST_LINE
-                   then ok 0#u8
-                   else i2 + 1#u8
-        ok (i5, true, true)
-      | _ => ok (self.ly, self.line_end, changed)
-    let (b4, changed2) ←
-      if i3 = self.phases.hblank_clear
-      then
-        do
-        let i5 ← ppu.display.timing.LAST_VISIBLE_LINE
-        if i2 != i5
-        then if b1
-             then ok (false, true)
-             else ok (b1, changed1)
-        else ok (b1, changed1)
-      else ok (b1, changed1)
-    let i5 ← lift (i3 &&& 7#i32)
-    let (self1, rose) ←
-      match self.lyc_pending with
-      | none =>
-        ok
-          ({
-             self
-               with
-               first_line := b,
-               line := i2,
-               h := i3,
-               ly := i4,
-               line_end := b3,
-               hblank := b4,
-               hblank_pending := b2,
-               dirty := false
-           }, false)
-      | some write =>
-        if write.half_dots_left <= 1#u8
-        then
-          if i5 = ppu.display.timing.LY_MATCH_PHASE
-          then
-            do
-            let (b5, self2) ←
-              ppu.display.timing.LcdTiming.update_line
-                {
-                  self
-                    with
-                    first_line := b,
-                    line := i2,
-                    h := i3,
-                    ly := i4,
-                    line_end := b3,
-                    hblank := b4,
-                    hblank_pending := b2,
-                    ly_match := (i4 = write.value),
-                    lyc := write.value,
-                    lyc_pending := none,
-                    dirty := false
-                }
-            ok (self2, false || b5)
-          else
-            if self.phases.cgb
-            then
-              do
-              let pw ← ppu.display.timing.PendingWrite.ticked write
-              ok
-                ({
-                   self
-                     with
-                     first_line := b,
-                     line := i2,
-                     h := i3,
-                     ly := i4,
-                     line_end := b3,
-                     hblank := b4,
-                     hblank_pending := b2,
-                     lyc_pending := (some pw),
-                     dirty := false
-                 }, false)
-            else
-              do
-              let (b5, self2) ←
-                ppu.display.timing.LcdTiming.update_line
-                  {
-                    self
-                      with
-                      first_line := b,
-                      line := i2,
-                      h := i3,
-                      ly := i4,
-                      line_end := b3,
-                      hblank := b4,
-                      hblank_pending := b2,
-                      ly_match := (i4 = write.value),
-                      lyc := write.value,
-                      lyc_pending := none,
-                      dirty := false
-                  }
-              ok (self2, false || b5)
-        else
-          do
-          let pw ← ppu.display.timing.PendingWrite.ticked write
-          ok
-            ({
-               self
-                 with
-                 first_line := b,
-                 line := i2,
-                 h := i3,
-                 ly := i4,
-                 line_end := b3,
-                 hblank := b4,
-                 hblank_pending := b2,
-                 lyc_pending := (some pw),
-                 dirty := false
-             }, false)
-    let (self2, changed3) ←
-      if i5 = ppu.display.timing.LY_MATCH_PHASE
-      then
-        do
-        let (b5, b6) ←
-          if self1.ly_match != (self1.ly = self1.lyc)
-          then ok (¬ self1.ly_match, true)
-          else ok (self1.ly_match, changed2)
-        ok ({ self1 with ly_match := b5 }, b6)
-      else ok (self1, changed2)
-    let i6 ←
-      if self2.h = self2.phases.line153_ly_reset
-      then if self2.line = ppu.display.LAST_LINE
-           then ok 0#u8
-           else ok self2.ly
-      else ok self2.ly
-    let (self3, rose1) ←
-      if changed3
-      then
-        do
-        let (b5, self4) ←
-          ppu.display.timing.LcdTiming.update_line { self2 with ly := i6 }
-        ok (self4, rose || b5)
-      else ok ({ self2 with ly := i6 }, rose)
-    let (i7, o, changed4) ←
-      match self3.stat_pending with
-      | none => ok (self3.enables, none, false)
-      | some write =>
-        if write.half_dots_left <= 1#u8
-        then ok (write.value, none, true)
-        else
-          do
-          let pw ← ppu.display.timing.PendingWrite.ticked write
-          ok (self3.enables, some pw, false)
-    let i8 ← ppu.display.timing.VBLANK_H
-    let (b5, changed5) ←
-      if self3.h = i8
-      then
-        match self3.line with
-        | 143#uscalar => ok (true, true)
-        | 153#uscalar => ok (false, true)
-        | _ => ok (self3.vblank, changed4)
-      else ok (self3.vblank, changed4)
-    if changed5
-    then
-      let (b6, self4) ←
-        ppu.display.timing.LcdTiming.update_line
-          { self3 with vblank := b5, enables := i7, stat_pending := o }
-      ok (rose1 || b6, self4)
-    else
-      ok (rose1, { self3 with vblank := b5, enables := i7, stat_pending := o })
-  else ok (false, { self with first_line := b, line := i2, h := i3 })
-
-/-- [ceres_core::ppu::display::timing::LCD_OFF_LATE]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 89:0-89:27 -/
-@[global_simps, irreducible]
-def ppu.display.timing.LCD_OFF_LATE : Std.U8 := 3#u8
-
-/-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 322:8-325:9 -/
-@[rust_loop_body]
-def ppu.display.timing.check.ceres_lcdc_loop0.body
-  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
-  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × Std.U8) (Bool ×
-    ppu.display.timing.LcdTiming))
-  := do
-  if k < ppu.display.timing.check.LCDC_EARLY
-  then
-    let (b, t1) ← ppu.display.timing.LcdTiming.unit t
-    let k1 ← k + 1#u8
-    ok (cont (t1, rose || b, k1))
-  else ok (done (rose, t))
-
-/-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 322:8-325:9 -/
-@[rust_loop]
-def ppu.display.timing.check.ceres_lcdc_loop0
-  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
-  Result (Bool × ppu.display.timing.LcdTiming)
-  := do
-  loop
-    (fun (t1, rose1, k1) => ppu.display.timing.check.ceres_lcdc_loop0.body t1
-      rose1 k1)
-    (t, rose, k)
-
-/-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop body 1:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 328:8-331:9 -/
-@[rust_loop_body]
-def ppu.display.timing.check.ceres_lcdc_loop1.body
-  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
-  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × Std.U8)
-    (ppu.display.timing.LcdTiming × Bool))
-  := do
-  if k < ppu.display.timing.LCD_OFF_LATE
-  then
-    let (b, t1) ← ppu.display.timing.LcdTiming.unit t
-    let k1 ← k + 1#u8
-    ok (cont (t1, rose || b, k1))
-  else ok (done (t, rose))
-
-/-- [ceres_core::ppu::display::timing::check::ceres_lcdc]: loop 1:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 328:8-331:9 -/
-@[rust_loop]
-def ppu.display.timing.check.ceres_lcdc_loop1
-  (t : ppu.display.timing.LcdTiming) (rose : Bool) (k : Std.U8) :
-  Result (ppu.display.timing.LcdTiming × Bool)
-  := do
-  loop
-    (fun (t1, rose1, k1) => ppu.display.timing.check.ceres_lcdc_loop1.body t1
-      rose1 k1)
-    (t, rose, k)
-
-/-- [ceres_core::ppu::display::timing::check::ceres_lcdc]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 316:0-337:1 -/
-def ppu.display.timing.check.ceres_lcdc
-  (t : ppu.display.timing.LcdTiming) (data : Std.U8) :
-  Result (Bool × ppu.display.timing.LcdTiming)
-  := do
-  let i ← lift (data &&& ppu.LCDC_ON_B)
-  if (i != 0#u8) && (¬ t.on)
-  then
-    let p ← ppu.display.timing.DMG_PHASES
-    let (rose, t1) ← ppu.display.timing.LcdTiming.turn_on t p
-    ppu.display.timing.check.ceres_lcdc_loop0 t1 rose 0#u8
-  else
-    if (¬ (i != 0#u8)) && t.on
-    then
-      let (t1, rose) ←
-        ppu.display.timing.check.ceres_lcdc_loop1 t false
-          ppu.display.timing.check.LCDC_EARLY
-      let t2 ← ppu.display.timing.LcdTiming.turn_off t1
-      ok (rose, t2)
-    else ok (false, t)
-
-/-- [ceres_core::ppu::display::timing::RESYNC_H]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 85:0-85:34 -/
-@[global_simps, irreducible]
-def ppu.display.timing.RESYNC_H : Result Std.I32 := do
-  let i ← ppu.display.timing.LINE_H
-  i - 19#i32
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::resync]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 539:4-542:5 -/
-def ppu.display.timing.LcdTiming.resync
-  (self : ppu.display.timing.LcdTiming) (line : Std.U8) :
-  Result ppu.display.timing.LcdTiming
-  := do
-  let i ← ppu.display.timing.RESYNC_H
-  ok { self with line, h := i }
-
-/-- [ceres_core::ppu::display::timing::check::ceres_unit]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 341:0-348:1 -/
-def ppu.display.timing.check.ceres_unit
-  (t : ppu.display.timing.LcdTiming) (ahead : Bool) :
-  Result (Bool × ppu.display.timing.LcdTiming × Bool)
-  := do
-  let (rose, t1) ← ppu.display.timing.LcdTiming.unit t
-  let i ← ppu.display.timing.check.SKEWED_LINE_END
-  if ahead && (t1.h = i)
-  then
-    let t2 ← ppu.display.timing.LcdTiming.resync t1 t1.line
-    ok (rose, t2, false)
-  else ok (rose, t1, ahead)
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::mode3_end]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 533:4-535:5 -/
-def ppu.display.timing.LcdTiming.mode3_end
-  (self : ppu.display.timing.LcdTiming) :
-  Result ppu.display.timing.LcdTiming
-  := do
-  ok { self with hblank_pending := true }
-
-/-- [ceres_core::ppu::display::timing::check::ends_at]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 476:0-481:1 -/
-def ppu.display.timing.check.ends_at
-  (mode3_end : Option Std.U8) (k : Std.U8) : Result Bool := do
-  match mode3_end with
-  | none => ok false
-  | some «end» => ok («end» = k)
-
-/-- [ceres_core::ppu::display::timing::check::ceres_half_dot]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 354:0-359:1 -/
-def ppu.display.timing.check.ceres_half_dot
-  (t : ppu.display.timing.LcdTiming) (ahead : Bool) (mode3_end : Option Std.U8)
-  (k : Std.U8) :
-  Result (Bool × ppu.display.timing.LcdTiming × Bool)
-  := do
-  let b ← ppu.display.timing.check.ends_at mode3_end k
-  let t1 ← if b
-             then ppu.display.timing.LcdTiming.mode3_end t
-             else ok t
-  ppu.display.timing.check.ceres_unit t1 ahead
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_lyc]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 642:4-652:5 -/
-def ppu.display.timing.LcdTiming.write_lyc
-  (self : ppu.display.timing.LcdTiming) (val : Std.U8)
-  (delays : ppu.display.timing.Delays) :
-  Result ppu.display.timing.LcdTiming
-  := do
-  if self.on
-  then
-    ok
-      {
-        self
-          with
-          lyc_pending :=
-            (some { value := val, half_dots_left := delays.lyc_write })
-      }
-  else ok { self with lyc := val, lyc_pending := none }
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::write_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 618:4-637:5 -/
-def ppu.display.timing.LcdTiming.write_stat
-  (self : ppu.display.timing.LcdTiming) (val : Std.U8)
-  (delays : ppu.display.timing.Delays) :
-  Result (Bool × ppu.display.timing.LcdTiming)
-  := do
-  let enables ← lift (val &&& ppu.display.timing.STAT_ENABLES)
-  let (o, o1) := core.option.Option.take self.stat_pending
-  let (i, b) ←
-    match o with
-    | none => ok (self.enables, self.dirty)
-    | some write => ok (write.value, true)
-  if self.on
-  then
-    if delays.stat_write > 0#u8
-    then
-      ok (false,
-        {
-          self
-            with
-            enables := i,
-            stat_pending :=
-              (some { value := enables, half_dots_left := delays.stat_write }),
-            dirty := b
-        })
-    else
-      let glitch ←
-        if self.phases.cgb
-        then ok false
-        else
-          do
-          let b1 ←
-            ppu.display.timing.LcdTiming.line_for
-              { self with enables := i, stat_pending := o1, dirty := b }
-              ppu.display.timing.STAT_ENABLES
-          if b1
-          then ok (¬ self.stat_line)
-          else ok false
-      let (b1, self1) ←
-        ppu.display.timing.LcdTiming.update_line
-          {
-            self
-              with
-              enables,
-              stat_line := (self.stat_line || glitch),
-              stat_pending := o1,
-              dirty := b
-          }
-      if b1
-      then ok (true, self1)
-      else ok (glitch, self1)
-  else
-    let glitch ←
-      if self.phases.cgb
-      then ok false
-      else
-        do
-        let b1 ←
-          ppu.display.timing.LcdTiming.line_for
-            { self with enables := i, stat_pending := o1, dirty := b }
-            ppu.display.timing.STAT_ENABLES
-        if b1
-        then ok (¬ self.stat_line)
-        else ok false
-    let (b1, self1) ←
-      ppu.display.timing.LcdTiming.update_line
-        {
-          self
-            with
-            enables,
-            stat_line := (self.stat_line || glitch),
-            stat_pending := o1,
-            dirty := b
-        }
-    if b1
-    then ok (true, self1)
-    else ok (glitch, self1)
-
-/-- [ceres_core::ppu::STAT_MODE_B]
-    Source: 'ceres-core/src/ppu/mod.rs', lines 58:0-58:39 -/
-@[global_simps, irreducible] def ppu.STAT_MODE_B : Std.U8 := 3#u8
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_mode]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 394:4-412:5 -/
-def ppu.display.timing.LcdTiming.read_mode
-  (self : ppu.display.timing.LcdTiming) (pipeline : Std.U8) :
-  Result Std.U8
-  := do
-  let i ← ppu.display.timing.LAST_VISIBLE_LINE
-  let i1 ← ppu.display.timing.VBLANK_H
-  if (self.vblank && ((self.line >= ppu.display.LINES) || (self.h >=
-    self.phases.mode1_start))) || (((self.line = ppu.display.LAST_LINE) &&
-    (self.h >= i1)) && (self.h < self.phases.mode1_end))
-  then ok 1#u8
-  else
-    if ((self.h >= self.phases.scan_start) && ((self.line < i) || (self.line =
-      ppu.display.LAST_LINE))) || (((self.h < self.phases.scan_end) &&
-      (self.line < ppu.display.LINES)) && (¬ self.first_line))
-    then ok 2#u8
-    else
-      if (self.line < ppu.display.LINES) && (¬ ((self.line = i) && (
-        self.h >= self.phases.scan_start)))
-      then if pipeline != 0#u8
-           then ok 3#u8
-           else ok 0#u8
-      else ok 0#u8
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 599:8-610:9 -/
-@[rust_loop_body]
-def ppu.display.timing.LcdTiming.read_stat_loop.body
-  (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
-  (last2 : Std.U8) (t : ppu.display.timing.LcdTiming) (lyc_flag : Bool)
-  (mode : Std.U8) (k : Std.U8) :
-  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × Std.U8 ×
-    Std.U8) (Bool × Std.U8))
-  := do
-  if k <= last2
-  then
-    let t1 ←
-      if k > 0#u8
-      then do
-           let (_, t2) ← ppu.display.timing.LcdTiming.unit t
-           ok t2
-      else ok t
-    let (t2, lyc_flag1) ←
-      if k = last
-      then
-        do
-        let b ←
-          if t1.ly_match
-          then if holds
-               then ok true
-               else ok (t1.ly = t1.lyc)
-          else ok false
-        ok (t1, b)
-      else ok (t1, lyc_flag)
-    let mode1 ←
-      if k = last1
-      then
-        do
-        let i ← lift (stat &&& ppu.STAT_MODE_B)
-        ppu.display.timing.LcdTiming.read_mode t2 i
-      else ok mode
-    let k1 ← k + 1#u8
-    ok (cont (t2, lyc_flag1, mode1, k1))
-  else ok (done (lyc_flag, mode))
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 599:8-610:9 -/
-@[rust_loop]
-def ppu.display.timing.LcdTiming.read_stat_loop
-  (stat : Std.U8) (last : Std.U8) (last1 : Std.U8) (holds : Bool)
-  (t : ppu.display.timing.LcdTiming) (lyc_flag : Bool) (mode : Std.U8)
-  (last2 : Std.U8) (k : Std.U8) :
-  Result (Bool × Std.U8)
-  := do
-  loop
-    (fun (t1, lyc_flag1, mode1, k1) =>
-      ppu.display.timing.LcdTiming.read_stat_loop.body stat last last1 holds
-      last2 t1 lyc_flag1 mode1 k1)
-    (t, lyc_flag, mode, k)
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_stat]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 582:4-612:5 -/
-def ppu.display.timing.LcdTiming.read_stat
-  (self : ppu.display.timing.LcdTiming) (stat : Std.U8)
-  (delays : ppu.display.timing.Delays) (double_speed : Bool) :
-  Result Std.U8
-  := do
-  let i ← lift (ppu.STAT_MODE_B ||| ppu.STAT_LYC_B)
-  let i1 ← lift (~~~ i)
-  let enables ← lift (stat &&& i1)
-  if self.on
-  then
-    let holds ←
-      if self.phases.cgb
-      then if double_speed
-           then ok true
-           else ok self.phases.flag_holds
-      else ok false
-    let last ←
-      if delays.flag_read > delays.mode_read
-      then ok delays.flag_read
-      else ok delays.mode_read
-    let (lyc_flag, mode) ←
-      ppu.display.timing.LcdTiming.read_stat_loop stat delays.flag_read
-        delays.mode_read holds self false 0#u8 last 0#u8
-    let i2 ← lift (enables ||| mode)
-    let i3 ← if lyc_flag
-               then ok ppu.STAT_LYC_B
-               else ok 0#u8
-    ok (i2 ||| i3)
-  else
-    let i2 ← if self.ly_match
-               then ok ppu.STAT_LYC_B
-               else ok 0#u8
-    ok (enables ||| i2)
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 565:8-569:9 -/
-@[rust_loop_body]
-def ppu.display.timing.LcdTiming.read_ly_loop.body
-  (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
-  (k : Std.U8) :
-  Result (ControlFlow (ppu.display.timing.LcdTiming × Std.U8 × Std.U8)
-    (ppu.display.timing.LcdTiming × Std.U8))
-  := do
-  if k < delay
-  then
-    let (_, t1) ← ppu.display.timing.LcdTiming.unit t
-    let k1 ← k + 1#u8
-    ok (cont (t1, t.ly, k1))
-  else ok (done (t, before))
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 565:8-569:9 -/
-@[rust_loop]
-def ppu.display.timing.LcdTiming.read_ly_loop
-  (delay : Std.U8) (t : ppu.display.timing.LcdTiming) (before : Std.U8)
-  (k : Std.U8) :
-  Result (ppu.display.timing.LcdTiming × Std.U8)
-  := do
-  loop
-    (fun (t1, before1, k1) => ppu.display.timing.LcdTiming.read_ly_loop.body
-      delay t1 before1 k1)
-    (t, before, k)
-
-/-- [ceres_core::ppu::display::timing::{ceres_core::ppu::display::timing::LcdTiming}::read_ly]:
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 559:4-576:5 -/
-def ppu.display.timing.LcdTiming.read_ly
-  (self : ppu.display.timing.LcdTiming) (delays : ppu.display.timing.Delays) :
-  Result Std.U8
-  := do
-  let (t, before) ←
-    ppu.display.timing.LcdTiming.read_ly_loop delays.ly_read self self.ly 0#u8
-  if self.phases.cgb
-  then
-    if delays.ly_read > 0#u8
-    then if before != t.ly
-         then ok (before &&& t.ly)
-         else ok t.ly
-    else ok t.ly
-  else ok t.ly
-
-/-- [ceres_core::ppu::display::timing::DMG_DELAYS]
-    Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 364:0-370:2 -/
-@[global_simps, irreducible]
-def ppu.display.timing.DMG_DELAYS : ppu.display.timing.Delays :=
-  {
-    stat_write := 0#u8,
-    lyc_write := 3#u8,
-    ly_read := 4#u8,
-    flag_read := 3#u8,
-    mode_read := 4#u8
-  }
-
-/-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 391:4-396:5 -/
-@[rust_loop_body]
-def ppu.display.timing.check.ceres_m_cycle_loop.body
-  (mode3_end : Option Std.U8) (t : ppu.display.timing.LcdTiming) (ahead : Bool)
-  (rose : Array Bool 4#usize) (k : Std.U8) :
-  Result (ControlFlow (ppu.display.timing.LcdTiming × Bool × (Array Bool
-    4#usize) × Std.U8) (ppu.display.timing.LcdTiming × (Array Bool 4#usize)))
-  := do
-  if k < 4#u8
-  then
-    let i ← 2#u8 * k
-    let (first, t1, ahead1) ←
-      ppu.display.timing.check.ceres_half_dot t ahead mode3_end i
-    let i1 ← i + 1#u8
-    let (second, t2, ahead2) ←
-      ppu.display.timing.check.ceres_half_dot t1 ahead1 mode3_end i1
-    let i2 ← lift (UScalar.cast .Usize k)
-    let a ← Array.update rose i2 (first || second)
-    let k1 ← k + 1#u8
-    ok (cont (t2, ahead2, a, k1))
-  else ok (done (t, rose))
-
-/-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 391:4-396:5 -/
-@[rust_loop]
-def ppu.display.timing.check.ceres_m_cycle_loop
-  (t : ppu.display.timing.LcdTiming) (mode3_end : Option Std.U8) (ahead : Bool)
-  (rose : Array Bool 4#usize) (k : Std.U8) :
-  Result (ppu.display.timing.LcdTiming × (Array Bool 4#usize))
-  := do
-  loop
-    (fun (t1, ahead1, rose1, k1) =>
-      ppu.display.timing.check.ceres_m_cycle_loop.body mode3_end t1 ahead1
-      rose1 k1)
-    (t, ahead, rose, k)
-
-/-- [ceres_core::ppu::display::timing::check::ceres_m_cycle]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 364:0-399:1 -/
-def ppu.display.timing.check.ceres_m_cycle
-  (t : ppu.display.timing.LcdTiming) (access : ppu.display.timing.check.Access)
-  (mode3_end : Option Std.U8) :
-  Result (((Option Std.U8) × (Array Bool 4#usize)) ×
-    ppu.display.timing.LcdTiming)
-  := do
-  let ahead ← ppu.display.timing.check.skewed t
-  let (t1, at_access, read) ←
-    match access with
-    | ppu.display.timing.check.Access.None => ok (t, false, none)
-    | ppu.display.timing.check.Access.ReadStat =>
-      do
-      let i ←
-        ppu.display.timing.LcdTiming.read_stat t t.enables
-          ppu.display.timing.DMG_DELAYS false
-      let i1 ← lift (i &&& ppu.display.timing.check.STAT_OWN)
-      ok (t, false, some i1)
-    | ppu.display.timing.check.Access.ReadLy =>
-      do
-      let i ←
-        ppu.display.timing.LcdTiming.read_ly t ppu.display.timing.DMG_DELAYS
-      ok (t, false, some i)
-    | ppu.display.timing.check.Access.ReadLyc => ok (t, false, some t.lyc)
-    | ppu.display.timing.check.Access.WriteStat data =>
-      do
-      let (at_access1, t2) ←
-        ppu.display.timing.LcdTiming.write_stat t data
-          ppu.display.timing.DMG_DELAYS
-      ok (t2, at_access1, none)
-    | ppu.display.timing.check.Access.WriteLyc data =>
-      do
-      let t2 ←
-        ppu.display.timing.LcdTiming.write_lyc t data
-          ppu.display.timing.DMG_DELAYS
-      ok (t2, false, none)
-    | ppu.display.timing.check.Access.WriteLcdc data =>
-      do
-      let (at_access1, t2) ← ppu.display.timing.check.ceres_lcdc t data
-      ok (t2, at_access1, none)
-  let rose := Array.repeat 4#usize false
-  let (t2, rose1) ←
-    ppu.display.timing.check.ceres_m_cycle_loop t1 mode3_end ahead rose 0#u8
-  let b ← Array.index_usize rose1 0#usize
-  let rose2 ← Array.update rose1 0#usize (b || at_access)
-  ok ((read, rose2), t2)
-
-/-- [ceres_core::ppu::display::timing::check::net_mode0]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 402:0-404:1 -/
-def ppu.display.timing.check.net_mode0
-  (net : ppu.display.timing.check.Net) : Result Bool := do
-  ok (net.mode0 && (¬ net.lcd.mode1))
-
-/-- [ceres_core::ppu::display::timing::check::net_line_start]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 409:0-412:1 -/
-def ppu.display.timing.check.net_line_start
-  (lcd : ceres_netlist.lcd_timing.NetLcd) : Result Bool := do
-  let i ← lift (IScalar.cast_fromBool .I32 lcd.vena)
-  let i1 ← 4#i32 * i
-  let i2 ← lift (IScalar.cast_fromBool .I32 lcd.wuvu)
-  let i3 ← 2#i32 * i2
-  let i4 ← i1 + i3
-  let i5 ← lift (IScalar.cast_fromBool .I32 lcd.clk)
-  let phase ← i4 + i5
-  let i6 ← ppu.display.timing.LINE_RESET_H
-  let i7 ← ppu.display.timing.LINE_END_H
-  let i8 ← i6 - i7
-  ok ((lcd.vclk && (phase = i8)) && (lcd.ly != ppu.display.LINES))
-
-/-- [ceres_core::ppu::display::timing::check::net_edge_starts]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 418:0-422:1 -/
-def ppu.display.timing.check.net_edge_starts
-  (net : ppu.display.timing.check.Net) :
-  Result ((Bool × Bool) × ppu.display.timing.check.Net)
-  := do
-  let mode0 ← ppu.display.timing.check.net_mode0 net
-  let b ← ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
-  let (rose, nl) ← ceres_netlist.lcd_timing.NetLcd.held_edge net.lcd b mode0
-  ok ((rose, mode0), { net with lcd := nl })
-
-/-- [ceres_core::ppu::display::timing::check::net_edge_ends]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 428:0-442:1 -/
-def ppu.display.timing.check.net_edge_ends
-  (net : ppu.display.timing.check.Net) (mode0 : Bool) (level : Bool)
-  (mode3_ends : Bool) :
-  Result (Bool × ppu.display.timing.check.Net)
-  := do
-  let reset ←
-    ceres_netlist.lcd_control.NetLcdControl.ppu_reset net.control false
-  let nl ←
-    if reset
-    then ceres_netlist.lcd_timing.NetLcd.reset net.lcd
-    else ok net.lcd
-  let b ← if mode3_ends
-            then ok true
-            else ok net.mode0
-  let b1 ← ppu.display.timing.check.net_line_start nl
-  let b2 ← if reset || b1
-             then ok false
-             else ok b
-  let after_reset ← ceres_netlist.lcd_timing.NetLcd.int_stat nl mode0
-  let b3 ←
-    ppu.display.timing.check.net_mode0 { net with lcd := nl, mode0 := b2 }
-  let after_render ← ceres_netlist.lcd_timing.NetLcd.int_stat nl b3
-  ok ((after_reset && (¬ level)) || (after_render && (¬ after_reset)),
-    { net with lcd := nl, mode0 := b2 })
-
-/-- [ceres_core::ppu::display::timing::check::net_edge]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 445:0-449:1 -/
-def ppu.display.timing.check.net_edge
-  (net : ppu.display.timing.check.Net) (mode3_ends : Bool) :
-  Result (Bool × ppu.display.timing.check.Net)
-  := do
-  let ((rose, mode0), net1) ← ppu.display.timing.check.net_edge_starts net
-  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net1.lcd mode0
-  let (b, net2) ←
-    ppu.display.timing.check.net_edge_ends net1 mode0 level mode3_ends
-  ok (rose || b, net2)
-
-/-- [ceres_core::ppu::display::timing::check::net_write]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 453:0-473:1 -/
-def ppu.display.timing.check.net_write
-  (net : ceres_netlist.lcd_timing.NetLcd)
-  (access : ppu.display.timing.check.Access) (byte : Std.U8) (mode0 : Bool)
-  (level : Bool) :
-  Result (Bool × ceres_netlist.lcd_timing.NetLcd × Bool)
-  := do
-  let net1 ←
-    match access with
-    | ppu.display.timing.check.Access.None => ok net
-    | ppu.display.timing.check.Access.ReadStat => ok net
-    | ppu.display.timing.check.Access.ReadLy => ok net
-    | ppu.display.timing.check.Access.ReadLyc => ok net
-    | ppu.display.timing.check.Access.WriteStat _ =>
-      ceres_netlist.lcd_timing.NetLcd.write net 65345#u16 byte
-    | ppu.display.timing.check.Access.WriteLyc _ =>
-      ceres_netlist.lcd_timing.NetLcd.write net 65349#u16 byte
-    | ppu.display.timing.check.Access.WriteLcdc _ => ok net
-  let now ← ceres_netlist.lcd_timing.NetLcd.int_stat net1 mode0
-  ok (now && (¬ level), net1, now)
-
-/-- [ceres_core::ppu::display::timing::check::net_shown]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 484:0-494:1 -/
-def ppu.display.timing.check.net_shown
-  (net : ceres_netlist.lcd_timing.NetLcd)
-  (access : ppu.display.timing.check.Access) :
-  Result (Option Std.U8)
-  := do
-  match access with
-  | ppu.display.timing.check.Access.None => ok none
-  | ppu.display.timing.check.Access.ReadStat =>
-    let o ← ceres_netlist.lcd_timing.NetLcd.read net 65345#u16 false false
-    match o with
-    | none => ok none
-    | some b =>
-      let i ← lift (b &&& ppu.display.timing.check.STAT_OWN)
-      ok (some i)
-  | ppu.display.timing.check.Access.ReadLy =>
-    ceres_netlist.lcd_timing.NetLcd.read net 65348#u16 false false
-  | ppu.display.timing.check.Access.ReadLyc =>
-    ceres_netlist.lcd_timing.NetLcd.read net 65349#u16 false false
-  | ppu.display.timing.check.Access.WriteStat _ => ok none
-  | ppu.display.timing.check.Access.WriteLyc _ => ok none
-  | ppu.display.timing.check.Access.WriteLcdc _ => ok none
-
-/-- [ceres_core::ppu::display::timing::check::and_bus]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 497:0-502:1 -/
-def ppu.display.timing.check.and_bus
-  (a : Option Std.U8) (b : Option Std.U8) : Result (Option Std.U8) := do
-  match a with
-  | none => ok none
-  | some x =>
-    match b with
-    | none => ok none
-    | some y => let i ← lift (x &&& y)
-                ok (some i)
-
-/-- [ceres_core::ppu::display::timing::check::net_m_cycle]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 538:4-541:5 -/
-@[rust_loop_body]
-def ppu.display.timing.check.net_m_cycle_loop.body
-  (mode3_end : Option Std.U8) (net : ppu.display.timing.check.Net)
-  (rose : Array Bool 8#usize) (k : Std.U8) :
-  Result (ControlFlow (ppu.display.timing.check.Net × (Array Bool 8#usize) ×
-    Std.U8) (ppu.display.timing.check.Net × (Array Bool 8#usize)))
-  := do
-  if k < 8#u8
-  then
-    let b ← ppu.display.timing.check.ends_at mode3_end k
-    let (b1, net1) ← ppu.display.timing.check.net_edge net b
-    let i ← lift (UScalar.cast .Usize k)
-    let a ← Array.update rose i b1
-    let k1 ← k + 1#u8
-    ok (cont (net1, a, k1))
-  else ok (done (net, rose))
-
-/-- [ceres_core::ppu::display::timing::check::net_m_cycle]: loop 0:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 538:4-541:5 -/
-@[rust_loop]
-def ppu.display.timing.check.net_m_cycle_loop
-  (net : ppu.display.timing.check.Net) (mode3_end : Option Std.U8)
-  (rose : Array Bool 8#usize) (k : Std.U8) :
-  Result (ppu.display.timing.check.Net × (Array Bool 8#usize))
-  := do
-  loop
-    (fun (net1, rose1, k1) => ppu.display.timing.check.net_m_cycle_loop.body
-      mode3_end net1 rose1 k1)
-    (net, rose, k)
-
-/-- [ceres_core::ppu::display::timing::check::net_m_cycle]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 511:0-543:1 -/
-def ppu.display.timing.check.net_m_cycle
-  (net : ppu.display.timing.check.Net)
-  (access : ppu.display.timing.check.Access) (mode3_end : Option Std.U8) :
-  Result (((Option Std.U8) × (Array Bool 8#usize)) ×
-    ppu.display.timing.check.Net)
-  := do
-  let rose := Array.repeat 8#usize false
-  let ((edge_rose, mode0), net1) ←
-    ppu.display.timing.check.net_edge_starts net
-  let level ← ceres_netlist.lcd_timing.NetLcd.int_stat net1.lcd mode0
-  let (nl, nlc, level1, written) ←
-    match access with
-    | ppu.display.timing.check.Access.None =>
-      ok (net1.lcd, net1.control, level, false)
-    | ppu.display.timing.check.Access.ReadStat =>
-      ok (net1.lcd, net1.control, level, false)
-    | ppu.display.timing.check.Access.ReadLy =>
-      ok (net1.lcd, net1.control, level, false)
-    | ppu.display.timing.check.Access.ReadLyc =>
-      ok (net1.lcd, net1.control, level, false)
-    | ppu.display.timing.check.Access.WriteStat data =>
-      do
-      let (glitch, nl1, level2) ←
-        ppu.display.timing.check.net_write net1.lcd access 255#u8 mode0 level
-      let (lands, nl2, level3) ←
-        ppu.display.timing.check.net_write nl1 access data mode0 level2
-      ok (nl2, net1.control, level3, glitch || lands)
-    | ppu.display.timing.check.Access.WriteLyc data =>
-      do
-      let (glitch, nl1, level2) ←
-        ppu.display.timing.check.net_write net1.lcd access 255#u8 mode0 level
-      let (lands, nl2, level3) ←
-        ppu.display.timing.check.net_write nl1 access data mode0 level2
-      ok (nl2, net1.control, level3, glitch || lands)
-    | ppu.display.timing.check.Access.WriteLcdc data =>
-      do
-      let nlc1 ←
-        ceres_netlist.lcd_control.NetLcdControl.settle net1.control false (some
-          data)
-      ok (net1.lcd, nlc1, level, false)
-  let b ← ppu.display.timing.check.ends_at mode3_end 0#u8
-  let (b1, net2) ←
-    ppu.display.timing.check.net_edge_ends
-      { net1 with lcd := nl, control := nlc } mode0 level1 b
-  let rose1 ← Array.update rose 0#usize ((edge_rose || written) || b1)
-  let bus ← ppu.display.timing.check.net_shown net2.lcd access
-  let b2 ← ppu.display.timing.check.ends_at mode3_end 1#u8
-  let (b3, net3) ← ppu.display.timing.check.net_edge net2 b2
-  let rose2 ← Array.update rose1 1#usize b3
-  let o ← ppu.display.timing.check.net_shown net3.lcd access
-  let bus1 ← ppu.display.timing.check.and_bus bus o
-  let b4 ← ppu.display.timing.check.ends_at mode3_end 2#u8
-  let (b5, net4) ← ppu.display.timing.check.net_edge net3 b4
-  let rose3 ← Array.update rose2 2#usize b5
-  let o1 ← ppu.display.timing.check.net_shown net4.lcd access
-  let bus2 ← ppu.display.timing.check.and_bus bus1 o1
-  let b6 ← ppu.display.timing.check.ends_at mode3_end 3#u8
-  let (b7, net5) ← ppu.display.timing.check.net_edge net4 b6
-  let a ← Array.update rose3 3#usize b7
-  let o2 ← ppu.display.timing.check.net_shown net5.lcd access
-  let bus3 ← ppu.display.timing.check.and_bus bus2 o2
-  let (net6, rose4) ←
-    ppu.display.timing.check.net_m_cycle_loop net5 mode3_end a 4#u8
-  ok ((bus3, rose4), net6)
-
-/-- [ceres_core::ppu::display::timing::check::step_agrees]:
-    Source: 'ceres-core/src/ppu/display/timing/check.rs', lines 554:0-616:1 -/
-def ppu.display.timing.check.step_agrees
-  (net : ppu.display.timing.check.Net) (t : ppu.display.timing.LcdTiming)
-  (access : ppu.display.timing.check.Access) (mode3_end : Option Std.U8) :
-  Result Bool
-  := do
-  let b ← ppu.display.timing.check.related net t
-  let b1 ← ppu.display.timing.check.outside net access mode3_end
-  if (¬ b) || b1
-  then ok true
-  else
-    let ((net_read, net_rose), net1) ←
-      ppu.display.timing.check.net_m_cycle net access mode3_end
-    let ((ceres_read, ceres_rose), t1) ←
-      ppu.display.timing.check.ceres_m_cycle t access mode3_end
-    let b2 ← timing.check.same_read net_read ceres_read
-    let b3 ← interrupts.check.same_stat net_rose ceres_rose
-    let b4 ← ppu.display.timing.check.related net1 t1
-    ok ((b2 && b3) && b4)
-
-/-- [ceres_core::timing::check::known_difference]:
-    Source: 'ceres-core/src/timing/check.rs', lines 234:0-267:1 -/
-def timing.check.known_difference
+/-- [ceres_core::timing::relation::known_difference]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 234:0-267:1 -/
+def timing.relation.known_difference
   (net : ceres_netlist.timer.NetTimer) (access : ceres_netlist.timer.Access) :
   Result Bool
   := do
@@ -4883,26 +4909,26 @@ def timing.check.known_difference
     (¬ net.bit7_before)) && (net.tima = 255#u8)) && glitch) || ((net.int_timer
     && (tma = 255#u8)) && (b && (¬ b1)))))
 
-/-- [ceres_core::timing::check::step_agrees]:
-    Source: 'ceres-core/src/timing/check.rs', lines 273:0-313:1 -/
-def timing.check.step_agrees
+/-- [ceres_core::timing::relation::step_agrees]:
+    Source: 'ceres-core/src/timing/relation.rs', lines 273:0-313:1 -/
+def timing.relation.step_agrees
   (net : ceres_netlist.timer.NetTimer) (clock : timing.timer.Clock)
   (access : ceres_netlist.timer.Access) (serial_div_mask : Std.U16) :
   Result Bool
   := do
-  let b ← timing.check.related net clock
-  let b1 ← timing.check.known_difference net access
+  let b ← timing.relation.related net clock
+  let b1 ← timing.relation.known_difference net access
   if (¬ b) || b1
   then ok true
   else
-    let host ← timing.check.CheckHost.new serial_div_mask
+    let host ← timing.relation.CheckHost.new serial_div_mask
     let ((net_read, net_irq), net1) ←
       ceres_netlist.timer.NetTimer.m_cycle net access
     let ((ceres_read, ceres_irq, twice), clock1, _) ←
-      timing.check.ceres_m_cycle clock host access
-    let b2 ← timing.check.same_read net_read ceres_read
-    let b3 ← timing.check.same_interrupt net_irq ceres_irq
-    let b4 ← timing.check.related net1 clock1
+      timing.relation.ceres_m_cycle clock host access
+    let b2 ← timing.relation.same_read net_read ceres_read
+    let b3 ← timing.relation.same_interrupt net_irq ceres_irq
+    let b4 ← timing.relation.related net1 clock1
     ok (((b2 && b3) && (¬ twice)) && b4)
 
 end ceres_core

@@ -1,16 +1,16 @@
 //! IF's bisimulation with the netlist, as one function that Kani proves for
-//! every argument and Aeneas takes to Lean (`lean/`), as `timing::check`
+//! every argument and Aeneas takes to Lean (`lean/`), as `timing::relation`
 //! does for the timer.
 //!
 //! `NetIf` (`ceres_netlist::interrupts`) transcribes `hdl/rtl/interrupts.vhd`
 //! and the latch of the requests and the acknowledge of
-//! `hdl/rtl/sm83_interrupts.vhd`, phase by phase; `netlist_proofs.rs` gives
+//! `hdl/rtl/sm83_interrupts.vhd`, phase by phase; `bisim.rs` gives
 //! the mapping of ceres's T-cycles onto the netlist's phases. The timer's
 //! interrupt is an input of the step on both sides: the netlist's rises at
 //! the A edge, ceres's in the T-cycle in which its timer requests it, the
-//! third (`timing::check::same_interrupt`). So is the STAT line's: the
+//! third (`timing::relation::same_interrupt`). So is the STAT line's: the
 //! netlist's rises by phase, ceres's by T-cycle (`same_stat`), as the line
-//! timing's step gives them (`ppu::display::timing::check`). So Lean can
+//! timing's step gives them (`ppu::display::timing::relation`). So Lean can
 //! wire the timer's step and the line timing's into this one.
 //!
 //! Written as Aeneas takes it, as ceres-netlist is (see its crate
@@ -28,7 +28,7 @@
 )]
 
 use super::{INT_LCD_B, INT_MASK, Interrupts};
-use crate::timing::check::{same_interrupt, same_read};
+use crate::timing::relation::{same_interrupt, same_read};
 use ceres_netlist::interrupts::{A, Access, NetIf, PHASES, TIMER, lowest, t_cycle};
 
 /// IF and IE match.

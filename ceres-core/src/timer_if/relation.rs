@@ -1,6 +1,6 @@
 //! Ceres's timer and IF in one M-cycle, as ceres runs them, T-cycle by
 //! T-cycle, and that this is the timer's step and then IF's
-//! (`timing::check`, `interrupts::check`): Kani proves `in_sequence` for
+//! (`timing::relation`, `interrupts::relation`): Kani proves `in_sequence` for
 //! every argument, and Lean (`lean/`) carries the two blocks' bisimulation,
 //! wired one into the other, over to this M-cycle.
 //!
@@ -17,11 +17,11 @@
 use crate::{
     interrupts::{
         Interrupts,
-        check::{ceres_boundary, ceres_step, ceres_t_cycle, requests, same_ints, with_stat},
+        relation::{ceres_boundary, ceres_step, ceres_t_cycle, requests, same_ints, with_stat},
     },
     timing::{
         Clock,
-        check::{
+        relation::{
             CheckHost, TimerHost, ceres_access, ceres_m_cycle, related, same_clock, same_read,
         },
     },
@@ -113,7 +113,7 @@ pub(crate) fn ceres_m_cycle_joint(
     (timer_read, if_read, taken)
 }
 
-/// From two equal timers related to a netlist's (`timing::check::related`:
+/// From two equal timers related to a netlist's (`timing::relation::related`:
 /// so in a state ceres can be in) and two equal IFs, the M-cycle run T-cycle by
 /// T-cycle gives what the timer's M-cycle and then IF's give, the timer's
 /// request in the T-cycle it came in: the same reads, the same interrupt

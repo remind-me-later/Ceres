@@ -23,7 +23,7 @@
 //! first, and its count stays (so too, in a few such edges, the window's
 //! column, a sprite's slot and the pixel counter; 56 of 1000 such edges differ
 //! here). The proofs
-//! against the netlist take no reset in mode 3 (`check::quiet`), and the
+//! against the netlist take no reset in mode 3 (`relation::quiet`), and the
 //! ROMs' runs turn the LCD off outside it.
 //!
 //! `cargo test -p ceres-netlist --release --test render_edge_free`

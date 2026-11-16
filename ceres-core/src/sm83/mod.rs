@@ -4,18 +4,18 @@
 //! in `crate::cpu_bus`.
 
 mod alu;
+#[cfg(kani)]
+mod bisim;
 mod bus;
-#[cfg(any(kani, feature = "check"))]
-mod check;
 pub(crate) mod conflict;
 #[cfg(test)]
-#[cfg(feature = "check")]
+#[cfg(feature = "verify")]
 mod cosim;
 mod instructions;
 #[cfg(kani)]
-mod netlist_proofs;
-#[cfg(kani)]
 mod proofs;
+#[cfg(any(kani, feature = "verify"))]
+mod relation;
 
 use crate::{
     interrupts::{INT_MASK, INT_VECTOR_BASE},

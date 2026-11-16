@@ -8,9 +8,9 @@ step holds forever, and wires blocks together.
 ## What is proved
 
 Each block's step is one Rust function in ceres-core, `step_agrees`
-(`ceres-core/src/timing/check.rs`, `ceres-core/src/interrupts/check.rs`,
-`ceres-core/src/memory/dma/check.rs`,
-`ceres-core/src/ppu/display/timing/check.rs`): from a pair of states that
+(`ceres-core/src/timing/relation.rs`, `ceres-core/src/interrupts/relation.rs`,
+`ceres-core/src/memory/dma/relation.rs`,
+`ceres-core/src/ppu/display/timing/relation.rs`): from a pair of states that
 `related` matches (ceres's and the netlist's transcription, `ceres-netlist`), an
 M-cycle with any input gives the same outputs on both sides and leaves the pair
 related, unless it is a known difference (a fact of
@@ -19,7 +19,7 @@ E, where ceres's begins (the line timing's at the D edge before it, `h = 0` mod
 8 of ceres's half dots). Kani proves each step true for every argument, every
 field of both states free (`netlist_timer_bisimulation`,
 `netlist_if_bisimulation`, `netlist_dma_bisimulation`, `netlist_lcd_access`),
-and also `check::in_sequence` (`ceres-core/src/check.rs`,
+and also `timer_if::relation::in_sequence` (`ceres-core/src/timer_if/relation.rs`,
 `ceres_timer_and_if_in_sequence`): ceres's M-cycle of the two blocks, run
 T-cycle by T-cycle as ceres runs them, is the timer's step and then IF's. Aeneas
 translates the same functions to Lean (`Ceres/Gen`), where those are the
@@ -50,7 +50,7 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   with LYC 0, its enable on and the flag clear (Kani's `netlist_lcd_on`
   pins that case down).
 - `Ceres/Bisim/Scan.lean`: the OAM scan, cut into one sprite's window
-  (`ceres-core/src/ppu/display/objects/check.rs`): Kani proves the window
+  (`ceres-core/src/ppu/display/objects/relation.rs`): Kani proves the window
   from every related pair (`netlist_scan_step`, `KaniScanStep`), the
   scan's start from the line's end (`netlist_scan_lead_in`) and its end
   (`netlist_scan_tail`), each in seconds; Lean carries the window over
@@ -165,7 +165,7 @@ names, and downloads its built files when that release has them.
 ## Translating the Rust
 
 `Ceres/Gen` is generated, and committed: building the proofs needs no Rust
-tools. After a change to the `check` modules, or to what they call
+tools. After a change to the `relation` modules, or to what they call
 (ceres-core's timer, IF, OAM DMA and line timing, ceres-netlist's
 transcriptions of them), run
 

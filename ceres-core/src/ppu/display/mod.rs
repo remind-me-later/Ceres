@@ -23,11 +23,11 @@ mod bus;
 mod cgb_c;
 mod fetcher;
 mod fifo;
-#[cfg(any(kani, test))]
-mod lock_proofs;
 mod mode3;
 mod objects;
 mod pixels;
+#[cfg(any(kani, test))]
+mod proofs;
 mod stat;
 mod state;
 mod timing;

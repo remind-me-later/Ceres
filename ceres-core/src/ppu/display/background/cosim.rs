@@ -1,14 +1,14 @@
 //! Ceres's mode 3 loop and the netlist's pipeline side by side on whole
 //! lines, concretely
-//! (`cargo test -p ceres-core --features check cosim`).
+//! (`cargo test -p ceres-core --features verify cosim`).
 //!
-//! `check::related` on the lines these walk, in seconds, before Kani takes
-//! every state: each line starts as `check::start_agrees` has it, and steps
-//! dot by dot as `check::step_agrees` does. A failure prints both sides dot
+//! `relation::related` on the lines these walk, in seconds, before Kani takes
+//! every state: each line starts as `relation::start_agrees` has it, and steps
+//! dot by dot as `relation::step_agrees` does. A failure prints both sides dot
 //! by dot.
 
 use {
-    super::check::{
+    super::relation::{
         Before, Ghost, INSIDE, Mode3Loop, before_start, ceres_dot, ceres_first_dot, expected,
         related, signed, start_agrees, start_before, step_agrees,
     },
@@ -48,7 +48,7 @@ struct Walk {
     table: String,
 }
 
-/// The netlist's inputs in mode 3 with nothing written (`check::quiet`).
+/// The netlist's inputs in mode 3 with nothing written (`relation::quiet`).
 const fn inputs(l: &Mode3Loop, clk: bool) -> EdgeInputs {
     let mut lcdc = LCDC_ON;
     if l.objects_enabled {
@@ -107,7 +107,7 @@ const fn step_name(step: FetcherStep) -> &'static str {
 
 impl Walk {
     /// The line before ceres's first dot of the loop (`h = 162`): the
-    /// netlist as `check::before_start` has it, ceres's position at the
+    /// netlist as `relation::before_start` has it, ceres's position at the
     /// lead-in's start, the window armed if it is on.
     fn start(line: &Line) -> Self {
         let mut pace = Pace::default();
@@ -186,7 +186,7 @@ impl Walk {
     }
 
     /// Ceres's first dot of the loop and its two edges, as
-    /// `check::start_agrees` runs them.
+    /// `relation::start_agrees` runs them.
     fn first_dot(&mut self) {
         let snapshot = Before::of(&self.l.pace);
         ceres_first_dot(&mut self.l);
@@ -200,7 +200,7 @@ impl Walk {
         self.row();
     }
 
-    /// A dot, as `check::step_agrees` runs it: `Some` once ceres has drawn
+    /// A dot, as `relation::step_agrees` runs it: `Some` once ceres has drawn
     /// the line, with whether the netlist's mode 3 stopped at the dot's
     /// second edge and not before. While the line goes on, the netlist's
     /// mode 3 must not stop.
@@ -231,7 +231,7 @@ impl Walk {
     }
 
     /// A row of the table: both sides after the dot, and where the netlist
-    /// is not what `check::expected` gives.
+    /// is not what `relation::expected` gives.
     fn row(&mut self) {
         self.dot += 1;
         let (pace, net, g) = (&self.l.pace, &self.net, self.g);
@@ -391,7 +391,7 @@ impl Free {
         }
     }
 
-    /// Inputs as `check::quiet` takes them, with the bus anywhere: a strobe
+    /// Inputs as `relation::quiet` takes them, with the bus anywhere: a strobe
     /// on SCX's address carries `scx`'s low bits.
     fn inputs(&mut self, l: &Mode3Loop, clk: bool, scx: u8) -> EdgeInputs {
         let quiet = inputs(l, clk);
@@ -579,7 +579,7 @@ fn window_start_table() {
     }
 }
 
-/// The lines the walks start are lines `check::start_agrees` takes: its
+/// The lines the walks start are lines `relation::start_agrees` takes: its
 /// preconditions hold (so its claim is not vacuous there), and the first
 /// dot leaves the two sides related, idle with objects or armed at any WX
 /// in the relation's bounds (task 1.3: a line starts armed when WY matched

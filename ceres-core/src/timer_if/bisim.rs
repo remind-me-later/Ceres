@@ -5,13 +5,13 @@
 //!
 //! Each block's proof leaves what comes from the other blocks free, and
 //! cuts the M-cycle at the start of E, where ceres's begins: the timer's
-//! (`timing::check`) and IF's (`interrupts::check`), with every source's
+//! (`timing::relation`) and IF's (`interrupts::relation`), with every source's
 //! rise free and each phase standing for one of ceres's T-cycles.
 //!
 //! Joined, the timer's interrupt is no longer free. On the netlist the timer
 //! raises it at the A edge and IF sees it rise in phase A; on ceres the
 //! timer requests it in IF in a T-cycle of its own, as the machine does
-//! (`check::ceres_m_cycle_joint`). `netlist_timer_and_if` proves the two
+//! (`timer_if::relation::ceres_m_cycle_joint`). `netlist_timer_and_if` proves the two
 //! blocks together: from any pair of states that the two proofs relate, an
 //! M-cycle with any access to the timer or to IF, and any rises of the
 //! other sources, gives the same reads and the same interrupt taken, and
@@ -19,11 +19,11 @@
 //! steps, wired together, and `ceres_timer_and_if_in_sequence`.
 
 use crate::{
-    check::{JointHost, ceres_m_cycle_joint, in_sequence},
-    interrupts::netlist_proofs::{self as if_proof, A, NetIf, TIMER, any_ints},
+    interrupts::bisim::{self as if_proof, A, NetIf, TIMER, any_ints},
+    timer_if::relation::{JointHost, ceres_m_cycle_joint, in_sequence},
     timing::{
-        check::{known_difference, related},
-        netlist_proofs::{self as timer_proof, any_clock},
+        bisim::{self as timer_proof, any_clock},
+        relation::{known_difference, related},
     },
 };
 

@@ -4,7 +4,7 @@ compares Lean's step proof with Kani's (`netlist_timer_bisimulation`).
 
 `Net` is the netlist's timer, `ceres_netlist::timer::NetTimer` line by line;
 `Cer` is ceres's `Clock` on the DMG in single speed, with the fields that
-`timing::check::related` holds fixed left out (no DIV-reset delay, not
+`timing::relation::related` holds fixed left out (no DIV-reset delay, not
 stopped, no APU delay, no late APU bit: none of them changes in an M-cycle
 from a related pair). Plain `BitVec` and `Bool`, and no `Result`: what
 `bv_decide` takes as it is.
@@ -239,7 +239,7 @@ def Cer.mCycle (c : Cer) (acc : Acc) :
   let (irq, twice, c) := s
   (read, irq, twice, c)
 
-/-- `timing::check::related`, on the fields the models keep. -/
+/-- `timing::relation::related`, on the fields the models keep. -/
 def related (n : Net) (c : Cer) : Bool :=
   let sameRegs :=
     (c.div == n.count * 4#16) && (c.tma == n.tma) && (c.tac &&& 7#8 == n.tac)
@@ -255,7 +255,7 @@ def related (n : Net) (c : Cer) : Bool :=
     else (c.reload == 0#8) && (c.irq == 0#8) && (c.tima == n.tima)
   sameRegs && timer
 
-/-- `timing::check::known_difference`. -/
+/-- `timing::relation::known_difference`. -/
 def knownDifference (n : Net) (acc : Acc) : Bool :=
   let now := clockOf n.tac n.tac n.count
   let (tac, count, glitch) : BitVec 8 × BitVec 16 × Bool :=
@@ -276,7 +276,7 @@ def knownDifference (n : Net) (acc : Acc) : Bool :=
       || (n.intTimer && (tma == 0xFF#8) && fallsAtEdge)
   lostTick || unseenOverflow
 
-/-- `timing::check::step_agrees`. -/
+/-- `timing::relation::step_agrees`. -/
 def stepAgrees (n : Net) (c : Cer) (acc : Acc) : Bool :=
   !related n c || knownDifference n acc ||
     let (netRead, netIrq, n) := n.mCycle acc

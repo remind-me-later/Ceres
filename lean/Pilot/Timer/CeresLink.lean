@@ -1,6 +1,6 @@
 /-
 The hand-written ceres timer (`Cer`) is Aeneas's translation of ceres's
-`Clock` as `timing::check` runs it, function by function, on the clocks the
+`Clock` as `timing::relation` runs it, function by function, on the clocks the
 step relates: no DIV-reset delay (`div_cycles = 0`), not stopped, no APU
 delay, no late APU bit (`Pinned`), and a reload countdown of at most 8, which
 keeps the translation's checked arithmetic from failing where the hand model
@@ -14,8 +14,8 @@ open Aeneas Aeneas.Std Result ceres_core
 namespace Pilot.Timer
 
 abbrev Clock := timing.timer.Clock
-abbrev Host := timing.check.CheckHost
-abbrev inst := timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost
+abbrev Host := timing.relation.CheckHost
+abbrev inst := timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost
 
 /-- The clock as the hand model sees it. -/
 def ofC (c : Clock) : Cer :=
@@ -51,16 +51,16 @@ theorem sys_clk_tac_mux (tac : Std.U8) :
 
 /-- The check host's hooks: all but the interrupt's do nothing. -/
 macro "host_simp" : tactic => `(tactic|
-  simp only [inst, timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed,
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step,
+  simp only [inst, timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_mode,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.is_cgb_hardware,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.double_speed,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_div_mask,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.serial_clock_edge,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_m_cycle,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_delayed_envelope_tick,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_envelopes_armed,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.apu_frame_sequencer_step,
     timing.timer.Clock.is_tac_enabled, timing.timer.TAC_ENABLE_B, timing.apu_div_bit,
     sys_clk_tac_mux])
 
@@ -310,11 +310,11 @@ theorem irq_step (i : U8) (host : Host) (hi : host.timer_interrupts.bv < 0xFFFFF
         else host) := by
   obtain ⟨mask, ti⟩ := host
   simp only [
-    timing.check.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt,
+    timing.relation.CheckHost.Insts.Ceres_coreTimingTimerTimerHost.request_timer_interrupt,
     sub8', inc32, lt8, eq8, lit8, bv8, bind_ite, bind_ok, bind_fail] at *
   split_ifs <;>
     (try simp only [ok.injEq, Prod.mk.injEq, eq8, bv8, eq32, bv32, cond_host,
-      cond32, timing.check.CheckHost.mk.injEq]) <;>
+      cond32, timing.relation.CheckHost.mk.injEq]) <;>
     bv_decide
 
 /-- The loop's body on `0..1`: ceres's T-cycle. -/
@@ -333,7 +333,7 @@ theorem body_first (c : Clock) (host : Host) (hd : c.div_cycles = 0#i32)
   simp only [bind_ok, uncurry_apply_pair, lift, set_div, ite_self]
   obtain ⟨mask, ti⟩ := host
   simp only [ok.injEq, ControlFlow.cont.injEq, Prod.mk.injEq, true_and,
-    timing.timer.Clock.mk.injEq, timing.check.CheckHost.mk.injEq, cond_host, Cer.tCycle,
+    timing.timer.Clock.mk.injEq, timing.relation.CheckHost.mk.injEq, cond_host, Cer.tCycle,
     Cer.reloadNext, core.num.U16.wrapping_add_bv_eq, lit16, eq32, cond32, bv32]
   cer_simp
   simp only [hd, and_true]
@@ -362,16 +362,16 @@ theorem ne32_succ (x : U32) : (⟨x.bv + 1#32⟩ : U32) = x ↔ False := by
   · intro h; bv_decide
   · intro h; exact h.elim
 
-/-- `check::ceres_t_cycle`: the hand model's `Cer.count`. -/
+/-- `relation::ceres_t_cycle`: the hand model's `Cer.count`. -/
 theorem t_cycle (c : Clock) (host : Host) (t : U8) (first : Bool × BitVec 8) (twice : Bool)
     (hs : c.stopped = false) (hd : c.div_cycles = 0#i32) (hr : c.tima_reload_pending.bv ≤ 8#8)
     (hi : host.timer_interrupts.bv < 0xFFFFFFFF#32) :
-    timing.check.ceres_t_cycle c host t (optOf first) twice =
+    timing.relation.ceres_t_cycle c host t (optOf first) twice =
       let (first', twice', x) := Cer.count t.bv (first, twice, ofC c)
       ok ((optOf first', twice'), { withC c x with apu_late_bit := none },
         bif (ofC c).tCycle.1 then { host with timer_interrupts := ⟨host.timer_interrupts.bv + 1#32⟩ }
         else host) := by
-  unfold timing.check.ceres_t_cycle
+  unfold timing.relation.ceres_t_cycle
   rw [run1 _ _ hs hd hr hi]
   simp only [bind_ok, uncurry_apply_pair, Cer.count]
   obtain ⟨b, v⟩ := first
@@ -391,11 +391,11 @@ theorem some8 (a b : U8) : (some a = some b) = (a.bv = b.bv) := by
 def readOf' (r : Bool × BitVec 8) : Option U8 :=
   bif r.1 then some ⟨r.2⟩ else none
 
-/-- `check::ceres_access` on a clock with no APU delay: the hand model's
+/-- `relation::ceres_access` on a clock with no APU delay: the hand model's
 access. A DIV write leaves `during_div_write` clear. -/
 theorem access (c : Clock) (host : Host) (acc : ceres_netlist.timer.Access)
     (ha : c.apu_delay = 0#u16) :
-    timing.check.ceres_access inst c host acc =
+    timing.relation.ceres_access inst c host acc =
       let (read, x) := (ofC c).access (accOf acc)
       ok (readOf' read,
         match acc with
@@ -404,7 +404,7 @@ theorem access (c : Clock) (host : Host) (acc : ceres_netlist.timer.Access)
         | _ => withC c x,
         host) := by
   rcases acc with _ | r | ⟨r, ⟨v⟩⟩ <;> (try cases r) <;>
-    simp only [timing.check.ceres_access, accOf, Cer.access, readOf', bind_ok, lift,
+    simp only [timing.relation.ceres_access, accOf, Cer.access, readOf', bind_ok, lift,
       timing.timer.Clock.impl.tima, timing.timer.Clock.impl.tma, timing.timer.Clock.read_tac,
       timing.timer.Clock.write_div, timing.timer.Clock.write_tima, timing.timer.Clock.write_tma,
       timing.timer.Clock.write_tac, timing.timer.TAC_ENABLE_B, timing.timer.TAC_CLOCK, ha,
@@ -429,7 +429,7 @@ theorem access (c : Clock) (host : Host) (acc : ceres_netlist.timer.Access)
 theorem t_cycle0 (c : Clock) (host : Host) (t : U8)
     (hs : c.stopped = false) (hd : c.div_cycles = 0#i32) (hr : c.tima_reload_pending.bv ≤ 8#8)
     (hi : host.timer_interrupts.bv < 0xFFFFFFFF#32) :
-    timing.check.ceres_t_cycle c host t none false =
+    timing.relation.ceres_t_cycle c host t none false =
       let (first', twice', x) := Cer.count t.bv ((false, 0#8), false, ofC c)
       ok ((optOf first', twice'), { withC c x with apu_late_bit := none },
         bif (ofC c).tCycle.1 then { host with timer_interrupts := ⟨host.timer_interrupts.bv + 1#32⟩ }
@@ -450,19 +450,19 @@ macro "side" : tactic => `(tactic| first
      bv_decide))
 
 set_option maxHeartbeats 2000000 in
-/-- `check::ceres_m_cycle` from a clock the step relates, with the host
-`timing::check` makes: the hand model's M-cycle, and the clock after is
+/-- `relation::ceres_m_cycle` from a clock the step relates, with the host
+`timing::relation` makes: the hand model's M-cycle, and the clock after is
 related again (its pinned fields kept). -/
 theorem cer_m_cycle (c : Clock) (mask : U16) (acc : ceres_netlist.timer.Access)
     (hs : c.stopped = false) (hd : c.div_cycles = 0#i32) (ha : c.apu_delay = 0#u16)
     (hr : c.tima_reload_pending.bv ≤ 8#8) :
     let hand := (ofC c).mCycle (accOf acc)
-    ∃ c' h', timing.check.ceres_m_cycle c ⟨mask, 0#u32⟩ acc =
+    ∃ c' h', timing.relation.ceres_m_cycle c ⟨mask, 0#u32⟩ acc =
         ok ((readOf' hand.1, optOf hand.2.1, hand.2.2.1), c', h') ∧
       ofC c' = hand.2.2.2 ∧ c'.stopped = false ∧ c'.div_cycles = 0#i32 ∧ c'.apu_delay = 0#u16 ∧
       c'.apu_late_bit = none := by
   intro hand
-  unfold timing.check.ceres_m_cycle
+  unfold timing.relation.ceres_m_cycle
   rw [access _ _ _ ha]
   rcases acc with _ | r | ⟨r, v⟩ <;> (try cases r) <;>
     simp only [bind_ok, uncurry_apply_pair] <;>

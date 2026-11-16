@@ -1,6 +1,6 @@
 //! The OAM DMA's bisimulation with the netlist, as one function that Kani
 //! proves for every argument and Aeneas takes to Lean (`lean/`), as
-//! `timing::check` does for the timer.
+//! `timing::relation` does for the timer.
 //!
 //! `NetDma` (`ceres_netlist::dma`) transcribes `hdl/rtl/dma.vhd` phase by
 //! phase. Ceres's M-cycle boundary is the start of the netlist's E, as for

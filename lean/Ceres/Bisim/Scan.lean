@@ -6,7 +6,7 @@ open Aeneas Aeneas.Std Result ceres_core.bisim
 # The OAM scan, window by window
 
 Kani proves the scan's three pieces for every argument
-(`ceres-core/src/ppu/display/objects/check.rs`, `netlist_proofs.rs`):
+(`ceres-core/src/ppu/display/objects/relation.rs`, `bisim.rs`):
 
 - `KaniScanLeadIn` (`netlist_scan_lead_in`): from the line's end, the
   scan's first windows leave the netlist's side and ceres's `related` at
@@ -24,7 +24,7 @@ with any Ys, leaves ceres's first ten sprites in the netlist's slots.
 
 namespace ceres_core.scan
 
-open ceres_core.ppu.display.objects.check
+open ceres_core.ppu.display.objects.relation
 
 /-- What Kani proves of a window. -/
 def KaniScanStep : Prop :=

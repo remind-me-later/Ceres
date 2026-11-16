@@ -2,7 +2,7 @@
 //!
 //! Transcribed from `hdl/rtl/interrupts.vhd`, and the latch of the requests
 //! and the acknowledge of `hdl/rtl/sm83_interrupts.vhd`, for ceres-core's
-//! proofs against ceres (its `interrupts/netlist_proofs.rs`) and for the
+//! proofs against ceres (its `interrupts/bisim.rs`) and for the
 //! replay of the model's traces (`tests/replay.rs`), which checks the
 //! transcription.
 //!

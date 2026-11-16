@@ -1,7 +1,7 @@
 //! Ceres's CPU and the netlist's core side by side, an instruction at a
-//! time, concretely (`cargo test -p ceres-core --features check sm83::cosim`).
+//! time, concretely (`cargo test -p ceres-core --features verify sm83::cosim`).
 //!
-//! `check::boundary` on the instructions these run, in seconds, before Kani
+//! `relation::boundary` on the instructions these run, in seconds, before Kani
 //! takes every state: each opcode from random registers, at a random PC in
 //! a memory of random bytes (the same on both sides, with what was
 //! written). Each M-cycle's access (a read, a write or none, with its
@@ -16,7 +16,7 @@
 use {
     super::{
         Bus, Sm83,
-        check::{Access, Net, boundary, entry_begins, entry_from, halt_begins, in_halt, waking},
+        relation::{Access, Net, boundary, entry_begins, entry_from, halt_begins, in_halt, waking},
     },
     ceres_netlist::sm83::{Flags, NetCore, NetRegisters, Register},
     std::collections::BTreeMap,
@@ -435,7 +435,7 @@ fn run(op: u8, prefixed: bool, rng: &mut Rng, tally: &mut Tally) {
         may_halt: false,
     };
     let mut net_memory = memory.clone();
-    // The core settles in every phase, in the passes `check` gives it.
+    // The core settles in every phase, in the passes `relation` gives it.
     let mut settles = true;
     let mut mcycle = |side: &mut Net| {
         let access = side.mcycle(|addr| net_memory.read(addr));

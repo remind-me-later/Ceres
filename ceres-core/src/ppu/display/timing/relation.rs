@@ -1,15 +1,15 @@
 //! The line timing's bisimulation with the netlist, as one function that
 //! Kani proves for every argument and Aeneas takes to Lean (`lean/`), as
-//! `timing::check` does for the timer.
+//! `timing::relation` does for the timer.
 //!
 //! `NetLcd` (`ceres_netlist::lcd_timing`) transcribes `hdl/rtl/lcd_timing.vhd`
-//! edge by edge; `netlist_proofs.rs` gives the mapping of ceres's half dots
+//! edge by edge; `bisim.rs` gives the mapping of ceres's half dots
 //! onto the netlist's edges. Ceres's M-cycle boundary is `h = 0` (mod 8),
 //! the netlist's D edge: the CPU accesses STAT, LY, LYC or LCDC there, and
 //! the M-cycle's eight half dots are the edges E to D. What the step gives
 //! IF is the STAT line's rises: the netlist's by edge, ceres's by T-cycle
 //! (the one at the access counts in the first), which IF tells apart as
-//! `interrupts::check::same_stat` says.
+//! `interrupts::relation::same_stat` says.
 //!
 //! The LCD turned off and on: the netlist's side holds LCDC's latches,
 //! whose bit 7 holds the line timing in reset, as `NetChip` does. Ceres's
@@ -48,9 +48,9 @@ use super::{
     LINE_RESET_H, LINES, LcdTiming, Phases, STAT_ENABLES, VBLANK_H,
 };
 use crate::{
-    interrupts::check::same_stat,
+    interrupts::relation::same_stat,
     ppu::{LCDC_ON_B, STAT_IF_LYC_B, STAT_LYC_B},
-    timing::check::same_read,
+    timing::relation::same_read,
 };
 use ceres_netlist::{lcd_control::NetLcdControl, lcd_timing::NetLcd};
 

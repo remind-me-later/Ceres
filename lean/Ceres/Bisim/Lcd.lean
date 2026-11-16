@@ -5,11 +5,11 @@ open Aeneas Aeneas.Std Result ceres_core ceres_core.bisim ceres_core.timer_if ce
 # The line timing, wired into IF
 
 Kani proves the line timing's M-cycle for every pair of states
-(`netlist_lcd_access` asserts `ppu::display::timing::check::step_agrees`),
+(`netlist_lcd_access` asserts `ppu::display::timing::relation::step_agrees`),
 the hypothesis `KaniLcd`: from related states at an M-cycle's boundary
 (`h = 0`, mod 8), an access to STAT, LY or LYC gives the same read, and the
 STAT line rises alike as IF tells its rises apart, the netlist's by edge,
-ceres's by T-cycle (`interrupts::check::same_stat`). The step reads none of
+ceres's by T-cycle (`interrupts::relation::same_stat`). The step reads none of
 the other blocks' outputs, and IF reads its rises: so it is wired in front
 of the timer and IF, its rises put in IF's input (`Steps.comap`), and the
 OAM DMA after them.
@@ -35,43 +35,43 @@ does not end it.
 namespace ceres_core.lcd
 
 /-- The netlist's line timing and LCDC's latches. -/
-abbrev NetLcd := ppu.display.timing.check.Net
+abbrev NetLcd := ppu.display.timing.relation.Net
 abbrev CeresLcd := ppu.display.timing.LcdTiming
 
 /-- The netlist's M-cycle: the read, and the STAT line's rises by edge. -/
 def netLcd (n : NetLcd) (i : NetIn) : Result ((Option Std.U8 × Array Bool 8#usize) × NetLcd) :=
-  ppu.display.timing.check.net_m_cycle n i.lcd i.mode3End
+  ppu.display.timing.relation.net_m_cycle n i.lcd i.mode3End
 
 /-- Ceres's M-cycle: the read, and the STAT line's rises by T-cycle. -/
 def ceresLcd (c : CeresLcd) (j : CeresIn) :
     Result ((Option Std.U8 × Array Bool 4#usize) × CeresLcd) :=
-  ppu.display.timing.check.ceres_m_cycle c j.lcd j.mode3End
+  ppu.display.timing.relation.ceres_m_cycle c j.lcd j.mode3End
 
 /-- The same read, and the rises alike as IF tells them apart. -/
 def LcdOut (o : Option Std.U8 × Array Bool 8#usize) (p : Option Std.U8 × Array Bool 4#usize) :
     Prop :=
-  o.1 = p.1 ∧ interrupts.check.same_stat o.2 p.2 = ok true
+  o.1 = p.1 ∧ interrupts.relation.same_stat o.2 p.2 = ok true
 
 /-- What the step leaves out: turning the LCD on with LYC 0, its enable on
 and the flag clear, and mode 3 ending where the pixel pipeline does not
 end it. -/
 def LcdK (n : NetLcd) (i : NetIn) : Prop :=
-  ppu.display.timing.check.outside n i.lcd i.mode3End = ok true
+  ppu.display.timing.relation.outside n i.lcd i.mode3End = ok true
 
 /-- What Kani proves. -/
 def KaniLcd : Prop :=
   ∀ net t access mode3End,
-    ppu.display.timing.check.step_agrees net t access mode3End = ok true
+    ppu.display.timing.relation.step_agrees net t access mode3End = ok true
 
 /-- The line timing's M-cycle, from every related pair (Kani's step). -/
 -- @assumes lcd-step-agrees
 theorem lcd_steps (kani : KaniLcd) :
     Steps netLcd ceresLcd SameIn LcdOut LcdK
-      (fun n c => ppu.display.timing.check.related n c = ok true) := by
+      (fun n c => ppu.display.timing.relation.related n c = ok true) := by
   intro n c h i j hij
   obtain ⟨-, -, -, -, hl, -, hm⟩ := hij
   have k := kani n c i.lcd i.mode3End
-  unfold ppu.display.timing.check.step_agrees at k
+  unfold ppu.display.timing.relation.step_agrees at k
   obtain ⟨b, hb, k⟩ := bind_eq_ok k
   rw [h, Result.ok.injEq] at hb
   subst hb
@@ -125,7 +125,7 @@ def BlocksOut (o : ((Option Std.U8 × Array Bool 8#usize) ×
       ((Option Std.U8 × Bool) × (Option Std.U8 × Option Std.U8))) ×
       (Option Std.U8 × Option (Std.U16 × Std.U8) × Bool × Bool))
     (p : ((Option Std.U8 × Array Bool 4#usize) ×
-      (Option Std.U8 × Option Std.U8 × Option Std.U8)) × memory.dma.check.CeresOut) : Prop :=
+      (Option Std.U8 × Option Std.U8 × Option Std.U8)) × memory.dma.relation.CeresOut) : Prop :=
   (LcdOut o.1.1 p.1.1 ∧ JointOut o.1.2 p.1.2) ∧ DmaOut o.2 p.2
 
 /-- The known differences: the line timing's left-out STAT write, or the
@@ -137,10 +137,10 @@ def BlocksK := wireK (wire netLcd (fun s x => wire netTimer netIf s (withStat x)
 /-- Every block's states related. -/
 def BlocksRelated (n : (NetLcd × (NetTimer × NetIf)) × NetDma)
     (c : (CeresLcd × (CeresTimer × CeresIf)) × CeresDma) : Prop :=
-  (ppu.display.timing.check.related n.1.1 c.1.1 = ok true ∧
-    (timing.check.related n.1.2.1 c.1.2.1 = ok true ∧
-      interrupts.check.related n.1.2.2 c.1.2.2 = ok true)) ∧
-  memory.dma.check.related n.2 c.2 = ok true
+  (ppu.display.timing.relation.related n.1.1 c.1.1 = ok true ∧
+    (timing.relation.related n.1.2.1 c.1.2.1 = ok true ∧
+      interrupts.relation.related n.1.2.2 c.1.2.2 = ok true)) ∧
+  memory.dma.relation.related n.2 c.2 = ok true
 
 -- @assumes lcd-step-agrees
 -- @assumes timer-step-agrees

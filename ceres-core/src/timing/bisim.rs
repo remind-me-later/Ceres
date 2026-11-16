@@ -1,8 +1,8 @@
 //! Kani proofs that ceres's timer is the netlist's, on the DMG
-//! (`cargo kani -p ceres-core --harness netlist`): `check::step_agrees`,
+//! (`cargo kani -p ceres-core --harness netlist`): `relation::step_agrees`,
 //! from every pair of states.
 
-use super::{check::step_agrees, timer::Clock};
+use super::{relation::step_agrees, timer::Clock};
 pub(crate) use ceres_netlist::timer::{Access, NetTimer, Reg};
 
 fn any_reg() -> Reg {

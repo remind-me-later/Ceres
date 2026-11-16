@@ -6,13 +6,13 @@
 //! pixels with the objects' (`pixels.rs`), and calls these in the order
 //! SameBoy's mode 3 loop runs them (`mode3.rs`).
 
-#[cfg(any(kani, feature = "check"))]
-pub(crate) mod check;
-#[cfg(test)]
-#[cfg(feature = "check")]
-mod cosim;
 #[cfg(kani)]
-mod netlist_proofs;
+mod bisim;
+#[cfg(test)]
+#[cfg(feature = "verify")]
+mod cosim;
+#[cfg(any(kani, feature = "verify"))]
+pub(crate) mod relation;
 
 use {
     super::{

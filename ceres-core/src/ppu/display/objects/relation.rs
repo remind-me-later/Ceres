@@ -1,10 +1,10 @@
 //! The OAM scan's bisimulation with the netlist, cut into one sprite's
 //! window, as functions that Kani proves for every argument and Aeneas takes
-//! to Lean (`lean/`), as `memory::dma::check` does for the OAM DMA.
+//! to Lean (`lean/`), as `memory::dma::relation` does for the OAM DMA.
 //!
 //! `NetScan` (`ceres_netlist::oam_scan`) and OAM's latches
 //! (`ceres_netlist::oam::NetOamLatches`) step edge by edge on the line
-//! timing's clocks (`netlist_proofs.rs` relates them to ceres's half dot
+//! timing's clocks (`bisim.rs` relates them to ceres's half dot
 //! `h`): `wuvu` rises at `h = 4j - 2`, and the scan's index goes to sprite
 //! `j + 1`; OAM's second latches take the Y the first read in the window
 //! before (sprite `j`'s), and the scan saves sprite `j` at `4j - 1` and `4j`
@@ -20,7 +20,7 @@
 //! pair `related` again, and `tail` (window 39 to mode 3). Kani proves the
 //! three; Lean carries `step` over the windows (`lean/Ceres/Bisim/Scan.lean`).
 //!
-//! As in `netlist_proofs::netlist_scan_selection`: a visible line, LCDC bit
+//! As in `bisim::netlist_scan_selection`: a visible line, LCDC bit
 //! 2 the same throughout, no OAM DMA, the CPU not addressing OAM. Ceres's
 //! side is its search's latches and the first ten sprites it finds on the
 //! line, in index order, which `ObjectSearch::consider` keeps
@@ -75,7 +75,7 @@ pub(crate) struct CeresSide {
 }
 
 /// The line timing's dividers after the edge at half dot `h` of the line
-/// (`netlist_proofs.rs`: `wuvu` is `t & 2`, `wosu` `(t + 1) & 2`, `t`
+/// (`bisim.rs`: `wuvu` is `t & 2`, `wosu` `(t + 1) & 2`, `t`
 /// counted from the line before's start, 912 half dots earlier).
 const fn wuvu(h: i32) -> bool {
     (h + 912) & 2 != 0

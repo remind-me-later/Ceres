@@ -6,7 +6,7 @@
 //! The VRAM and OAM gates (`vram_gate.rs`, `oam_gate.rs`) are rules on
 //! XYMU's level as each phase ends. Ceres keeps the CPU's locks on through
 //! such a pulse, to mode 3's real end (`ceres-core`'s
-//! `ppu::display::lock_proofs`), so it agrees with the netlist there if
+//! `ppu::display::proofs`), so it agrees with the netlist there if
 //! XYMU stays up through the pulse: `locks-with-mode-0-pulse`. Gambatte's
 //! DMG ROMs with a sprite at X 167 (A7) run from the quick boot ROM, and at
 //! each edge with a pulse the test records XYMU after it, and how many edges

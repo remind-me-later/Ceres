@@ -4,10 +4,10 @@
 //! `GB_write_memory`: while a transfer runs, CPU accesses that share a bus with
 //! the DMA source read (or write) whatever the DMA is currently accessing.
 
-#[cfg(any(kani, feature = "check"))]
-pub(crate) mod check;
 #[cfg(kani)]
-mod netlist_proofs;
+mod bisim;
+#[cfg(any(kani, feature = "verify"))]
+pub(crate) mod relation;
 
 use {
     super::{CART_RAM_START, ECHO_B, ECHO_START, OAM_START, VRAM_START, WRAM_START, Wram},

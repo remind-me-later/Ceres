@@ -6,7 +6,7 @@
 //! phase by phase. Ceres's M-cycle boundary is the start of the netlist's E,
 //! as for the timer and IF: the CPU's access is ceres's at that boundary,
 //! and on the netlist it writes in E to G and reads what the bus holds in H
-//! (the core's read, `sm83::check`).
+//! (the core's read, `sm83::relation`).
 //!
 //! The accesses are those the chip decodes itself, whose request does not
 //! leave it (`NetChip::internal_access`): HRAM (FF80 to FFFE), FF50, the

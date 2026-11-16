@@ -8,9 +8,9 @@
 //! where a transcription parts from the model; and the blocks wired
 //! together (`NetChip`), each taking from the others what the model wires
 //! in, where the trace has the clocks. ceres-core's proofs against ceres
-//! (its `timing/netlist_proofs.rs`, `interrupts/netlist_proofs.rs`,
-//! `memory/dma/netlist_proofs.rs`, `ppu/display/timing/netlist_proofs.rs`,
-//! `ppu/display/objects/netlist_proofs.rs`, `netlist_proofs.rs`) rest on
+//! (its `timing/bisim.rs`, `interrupts/bisim.rs`,
+//! `memory/dma/bisim.rs`, `ppu/display/timing/bisim.rs`,
+//! `ppu/display/objects/bisim.rs`, `bisim.rs`) rest on
 //! these transcriptions; this checks them.
 //!
 //! Each block starts from the model's state at a phase boundary. Then every

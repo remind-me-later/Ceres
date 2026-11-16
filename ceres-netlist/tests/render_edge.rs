@@ -4,13 +4,13 @@
 //! it and must reach render's after it.
 //!
 //! It also measures where mode 3 starts (ceres-core's
-//! `background::check::before_start`): on a visible line with the window
+//! `background::relation::before_start`): on a visible line with the window
 //! idle, render's mode 3 rises at `h = 154` (the line timing's half dot,
 //! `h = 904` where vclk rises), and at `h = 162`, the end of the dot before
 //! ceres's mode 3 loop starts, the pipeline is `BEFORE_START`, whatever SCX
 //! is and whatever sprites the scan found (the store's X). And where the
 //! CPU's writes to SCX reach the latch (ceres-core's
-//! `background::check::writes`): the write strobe on SCX's address rises
+//! `background::relation::writes`): the write strobe on SCX's address rises
 //! with the clock at `h = 1 (mod 8)`, after an edge that carries SCX's
 //! address and 0xFF, and stays up three edges.
 //!
@@ -78,7 +78,7 @@ const STROBE_EDGES: u32 = 3;
 const SCX: u16 = 0xFF43;
 
 /// The pipeline at `BEFORE_START_H` (its SCX and inputs aside): ceres-core's
-/// `background::check::before_start`.
+/// `background::relation::before_start`.
 const BEFORE_START: NetPipeline = NetPipeline {
     mode3: true,
     voga: false,

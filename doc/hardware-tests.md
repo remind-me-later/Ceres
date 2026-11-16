@@ -175,7 +175,7 @@ CGB is left to check, since there is no netlist for it.
   and without Gambatte's run-ahead (below).
 - **The netlist:** keeps the request: IF's flag is set after the
   acknowledge has cleared the other one (the proof in
-  `ceres-core/src/interrupts/netlist_proofs.rs`, under its mapping of T-cycles
+  `ceres-core/src/interrupts/bisim.rs`, under its mapping of T-cycles
   to phases).
 - **Ceres today:** keeps the request, as the netlist does, on every model
   (`ack_interrupt` in `ceres-core/src/cpu_bus/mod.rs`). Until 2026-10-26 it
@@ -199,7 +199,7 @@ CGB is left to check, since there is no netlist for it.
   write in that M-cycle lands, and the transfer then overwrites the byte.
 - **Ceres today:** lets the write through, as the netlist does
   (`blocks_oam` in `ceres-core/src/memory/dma/mod.rs`, proved in
-  `memory/dma/netlist_proofs.rs`). Until 2026-10-27 it dropped the CPU's
+  `memory/dma/bisim.rs`). Until 2026-10-27 it dropped the CPU's
   OAM writes from the write to FF46 on, as SameBoy does.
 - **Outcomes:** whether the byte written in that M-cycle shows after a
   transfer that does not reach it (a restart cut short), or in a sprite
@@ -226,7 +226,7 @@ CGB is left to check, since there is no netlist for it.
   restart.
 - **Ceres today:** follows the netlist (`Dma::write` in
   `ceres-core/src/memory/dma/mod.rs`, proved in
-  `memory/dma/netlist_proofs.rs`). Until 2026-10-27 it had Gambatte's rule
+  `memory/dma/bisim.rs`). Until 2026-10-27 it had Gambatte's rule
   (`oamDmaStartPos_`): byte c from the old source, then byte c + 1 from the
   new one, and a second write started the transfer over. In those two
   M-cycles the netlist's run stays on, so the OAM scan keeps comparing
@@ -306,7 +306,7 @@ CGB is left to check, since there is no netlist for it.
   overflow, so the tick is lost; and the overflow flip-flop's input stays at
   0 through the reload, so `FF` to `00` at its end overflows unseen. These
   are the two known differences of the timer's proof
-  (`known_difference` in `ceres-core/src/timing/netlist_proofs.rs`).
+  (`known_difference` in `ceres-core/src/timing/bisim.rs`).
 - **Ceres today:** adds the tick to TMA, and reloads and interrupts on the
   second overflow.
 - **Outcomes:** for each, whether the tick counts and whether the overflow
