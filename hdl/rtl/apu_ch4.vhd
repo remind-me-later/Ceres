@@ -10,7 +10,7 @@
 -- in the 7-bit width (NR43 bit 3), into its eighth too.
 --
 -- @hw die: dmg-schematics, category apu-ch4 (sheets "Channel 4" and "NR41
--- to NR44"); checked against dmg-sim (../check/chip_tb.vhd).
+-- to NR44"); checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

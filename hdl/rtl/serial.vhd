@@ -3,7 +3,7 @@
 -- The serial port: SB (FF01) and SC (FF02), and the pins SIN, SOUT and SCK.
 --
 -- @hw die: dmg-schematics, category serial (sheet "FF01-FF02 serial");
--- checked against dmg-sim (../check/chip_tb.vhd).
+-- checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

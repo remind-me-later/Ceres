@@ -6,7 +6,7 @@
 --
 -- @hw die: dmg-schematics, categories ppu-objctl and ppu-ycomp (sheets
 -- "Sprite control" and "Sprite Y comparator"); checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

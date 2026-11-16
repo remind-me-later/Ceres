@@ -6,7 +6,7 @@
 #
 #   awk -f oracle/runts.awk INSTANCES REPORTS...
 #
-# INSTANCES: lines "entity label entity-of-the-instance" (knowledge/rtl.awk,
+# INSTANCES: lines "entity label entity-of-the-instance" (oracle/rtl.awk,
 # TABLE=instance), tab-separated. A label with two entities is the board's
 # chip (the DMG's first, then the CGB's, ../board/gameboy.vhd): a report
 # under reports/cgb/ is the CGB's, the others the DMG's.

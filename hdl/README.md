@@ -309,11 +309,11 @@ makes the same accesses on both sides, with the same changes but three
 brief counts of TIMA and the first mode 3 after the LCD is turned on, which
 ceres's STAT shows an M-cycle sooner. Where a change between the points of
 sampling matters, a ROM that reads the register in every M-cycle settles
-it through the bus traces: `check/stat_vblank_end.asm` (`make` builds it)
+it through the bus traces: `probes/stat_vblank_end.asm` (`make` builds it)
 does so with STAT across the end of VBlank, and
-`check/lcd_off_line_start.asm` turns the LCD off at each M-cycle around a
+`probes/lcd_off_line_start.asm` turns the LCD off at each M-cycle around a
 line's start and reads IF (see [results.md](results.md)).
-`check/stat_dips.asm` is a test of its own, short enough for dmg-sim: it
+`probes/stat_dips.asm` is a test of its own, short enough for dmg-sim: it
 reads IF across STAT's dips at VBlank's end and start, and passes with what
 the DMG-08 does (its header says how to run it).
 
@@ -384,21 +384,21 @@ and `--no-collapse` do not change it (the last makes it 60% slower).
 
 The model is checked against dmg-sim phase by phase: the probe
 `oracle/probe_phases.sv` records, at the end of every phase, the signals
-that the model has too (under the model's names), and `check/chip_tb.vhd`
+that the model has too (under the model's names), and `board/chip_tb.vhd`
 runs the model of the chip on the same inputs and compares. Only the
 crystal and the pins come from dmg-sim, with what the cartridge, the work
 RAM and the VRAM chip answer. The checks need
 [nvc](https://github.com/nickg/nvc) (1.23 is tested).
 
 ```bash
-BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh   # record, in dmg-sim
+BOOT=fast PHASES=1 TESTS=probes/roms.txt ./run-tests.sh   # record, in dmg-sim
 make check                                               # check the model
 ```
 
-`check/roms.txt` lists the test ROMs the model is checked on. Three of them
-are ours: `check/apu.asm` plays the APU's four channels through most of what
-they do, in 70 ms, `check/cpu.asm` executes every opcode and takes
-interrupts, and `check/sprites.asm` draws sprites whose tiles tell the two
+`probes/roms.txt` lists the test ROMs the model is checked on. Three of them
+are ours: `probes/apu.asm` plays the APU's four channels through most of what
+they do, in 70 ms, `probes/cpu.asm` executes every opcode and takes
+interrupts, and `probes/sprites.asm` draws sprites whose tiles tell the two
 bit planes apart. `make` builds them with [RGBDS](https://rgbds.gbdev.io) (1.0 is
 tested).
 
@@ -460,7 +460,7 @@ modes 0 and 3. Only the CPU's access, the other interrupt sources, the
 acknowledges, OAM's RAM and odd byte and VRAM's data come from the trace,
 which must have render's fields. Over those 267 traces (gbmicrotest's DMA,
 timer, halt, OAM, sprite, SCX and window ROMs, Gambatte's `sprites` and
-`oamdma` ROMs, 12 of Mealybug's `m3_` ROMs, and `check/lcdc.asm`, which
+`oamdma` ROMs, 12 of Mealybug's `m3_` ROMs, and `probes/lcdc.asm`, which
 writes every value to LCDC and reads it back) it finds no difference in
 1.72 billion phases: 360 timer interrupts, 42473 rises of the STAT line
 and 1229 of VBlank reach IF, 363 transfers start on the clocks'
@@ -569,7 +569,7 @@ and the precharged FF where nothing drives. Each matches the byte the core
 takes: 16 million reads on the cartridge bus, 465 thousand of STAT, LY or
 LYC, 230 thousand of HRAM, 142 of the divider and the timer, 17 of IF, 8
 of IE, 117 of the I/O addresses nothing decodes (most of these from
-`check/io_regs.asm`), 362 of the APU's registers, 117 of its unused
+`probes/io_regs.asm`), 362 of the APU's registers, 117 of its unused
 addresses and 208 of wave RAM.
 
 The CPU core (`sm83.vhd` and its parts: the decoders, the sequencer, the
@@ -624,7 +624,7 @@ and its time limit counts from the end of the reset, as the testbench's
 does. Traces from the power-on check it (`FROM=power-on`, and `BOOTROM=`
 for another boot ROM, which `trace-blocks.sh` keeps beside the trace): the
 replay runs the chip from its power-on state on the board's pins against
-them, and finds no difference over `check/io_regs.asm` from the fast boot
+them, and finds no difference over `probes/io_regs.asm` from the fast boot
 ROM, and `poweron_stat_026` and `halt_bug` from dmg-sim's quick boot ROM.
 `ceres-netlist/tests/run.rs` runs the ROMs of `tests.txt` so, with
 dmg-sim's quick boot ROM as `run-tests.sh` does, and all 47 results are
@@ -651,8 +651,8 @@ opens the envelope's latch on the precharged FF and toggles the volume's
 first stage; and the read strobe reaches it before the address, so a read
 of wave RAM ends before the address moves and the bit lines keep the byte
 read. Over the 273 traces the APU matches the model in every flip-flop,
-latch and RAM cell. Almost all of it is `check/apu.asm`'s and
-`check/sound.asm`'s, the other ROMs leave the APU powered off; the second
+latch and RAM cell. Almost all of it is `probes/apu.asm`'s and
+`probes/sound.asm`'s, the other ROMs leave the APU powered off; the second
 lets every channel's length run out, overflows channel 1's sweep and
 updates it, takes envelopes to 15 and 0, plays every duty and wave level,
 shifts channel 4's short LFSR and powers the APU off and on (and on its
@@ -664,8 +664,8 @@ precharged, 1), NR52 the power and the channels' `active` ports, wave RAM
 its bit lines. The closed loop matches the model there as well, in every
 flip-flop and in every read.
 
-`check/ppu_regs.asm`, `check/vram_oam.asm`, `check/bus.asm`,
-`check/io_regs.asm` and `check/sound.asm` read back the PPU's registers,
+`probes/ppu_regs.asm`, `probes/vram_oam.asm`, `probes/bus.asm`,
+`probes/io_regs.asm` and `probes/sound.asm` read back the PPU's registers,
 VRAM, OAM, the bus side, the rest of the I/O and the APU, and check what
 they read: every register's bits
 with the LCD on and off, FF46 during and after OAM DMA, every byte of VRAM
@@ -677,7 +677,7 @@ after a write, and the I/O addresses nothing decodes (FF in all bits, as
 Mooneye's `unused_hwio-GS` has them); the APU's registers with their unused
 and write-only bits, NR52 with the APU off and on, and NR52's channel bits
 as lengths run out and the sweep overflows. They report as
-`check/report.inc` says (Mooneye's registers and `LD B,B`, "Passed" or
+`probes/report.inc` says (Mooneye's registers and `LD B,B`, "Passed" or
 "Failed" on the serial port, a white or black screen), so they run on a
 Game Boy as well; they pass on dmg-sim, the model and ceres
 (`ceres-test-runner/tests/hdl_checks.rs`), and are in `tests.txt`.
@@ -717,10 +717,10 @@ The 513 gbmicrotest ROMs take 24 minutes at six at a time. Each report is
 (Gambatte's suites reuse names). `BOOT=tiny` runs `build/tinyboot.bin` with
 the VRAM zeroed, as `run-gambatte.sh` does, for Mooneye (`TEST=mooneye`,
 2 s), Mealybug (0.4 s) and Gambatte (0.29 s).
-[races.toml](races.toml) gives each race found, and each delay of `rtl/`,
+[races.toml](../verify/knowledge/races.toml) gives each race found, and each delay of `rtl/`,
 a verdict: order, if any delays that keep the order of the signals give
 the same outcome, or width, if the die's physics decides (the `race` of
-[doc/facts.toml](../doc/facts.toml)), with the evidence and the facts that
+[verify/knowledge/facts.toml](../verify/knowledge/facts.toml)), with the evidence and the facts that
 rest on it.
 
 ## The knowledge base
@@ -729,18 +729,18 @@ rest on it.
 `build/knowledge/*.tsv`, generated from the sources each time: the model's
 instances, its signals and the ones that control its storage, its delays
 and its `@hw` tags; the short pulses of the reports of `find-runts.sh`; the
-facts of `doc/facts.toml` and their `@fact` tags across the repository
+facts of `verify/knowledge/facts.toml` and their `@fact` tags across the repository
 (through ceres-test-runner's example `facts`); the verdicts of `races.toml`;
 the rules of `rules.toml` with their `@rule` tags in `rtl/`; and what the
 proofs assume (below). The checks and the queries on them are in Datalog,
-`knowledge/knowledge.dl`, which also says what each table holds;
+`../verify/knowledge/knowledge.dl`, which also says what each table holds;
 [Soufflé](https://souffle-lang.github.io) (2.5 is tested) runs it.
 
 ```sh
-./knowledge.sh list            # the queries and the checks
-./knowledge.sh width-facts     # print a query
-./knowledge.sh check           # run the checks
-./knowledge.sh run mine.dl     # your own rules, with the program's
+../verify/knowledge/knowledge.sh list            # the queries and the checks
+../verify/knowledge/knowledge.sh width-facts     # print a query
+../verify/knowledge/knowledge.sh check           # run the checks
+../verify/knowledge/knowledge.sh run mine.dl     # your own rules, with the program's
 ```
 
 A check is a relation that must be empty: a delay or a short pulse at a
@@ -766,7 +766,7 @@ the same rows too (with lists in their cells sorted by name).
 
 ### Races and facts, through the signals
 
-`knowledge/rtl.awk` also reads `rtl/` as a graph of signals: an edge from
+`oracle/rtl.awk` also reads `rtl/` as a graph of signals: an edge from
 each signal an assignment reads (in its expression, or in the conditions
 of the ifs and cases around it) to the one it assigns, and through the
 port maps, into an instance's inputs and out of its outputs. The CPU's bus
@@ -778,12 +778,12 @@ knowledge base follows the graph recursively, and `knowledge.sh check`
 finds a race and a fact that rest on each other, as `races.toml` says, that
 no path connects either way.
 
-That is coarse inside the PPU, a tight cluster where most of a race's
-signals reach most facts, and sharp across blocks: a link from the timer's
-race to a STAT fact is caught. `./knowledge.sh race-links` gives each link
-and its shortest path (the links are 0 to 2 edges long, most other pairs
-3 to 40), and `./knowledge.sh race-fact-neighbours` the width races and
-facts within an edge of each other that no link joins, to look at.
+That is coarse inside the PPU, a tight cluster where most of a race's signals
+reach most facts, and sharp across blocks: a link from the timer's race to a
+STAT fact is caught. `../verify/knowledge/knowledge.sh race-links` gives each
+link and its shortest path (the links are 0 to 2 edges long, most other pairs 3
+to 40), and `../verify/knowledge/knowledge.sh race-fact-neighbours` the width
+races and facts within an edge of each other that no link joins, to look at.
 
 ### What the proofs assume
 
@@ -791,7 +791,7 @@ ceres-core's proofs against the netlist each take some things as given: a
 transcription of a block of `rtl/` (checked by `netlist_replay`), a
 mapping of ceres's time onto the netlist's (measured on traces), a
 difference the facts record, or a case left out. Each is an entry of
-[../doc/assumptions.toml](../doc/assumptions.toml), with its evidence:
+[../verify/knowledge/assumptions.toml](../verify/knowledge/assumptions.toml), with its evidence:
 proved, replayed, measured, fact or open. A harness names what it rests on
 with `@assumes` tags before its `fn`, and what it proves for the others
 with `@discharges` tags. The knowledge base follows them recursively:
@@ -800,8 +800,8 @@ with `@discharges` tags. The knowledge base follows them recursively:
 what the DMA's assumes, such as the open `dma-one-run-per-m-cycle`.
 
 ```sh
-./knowledge.sh assumptions        # what each proof rests on, and the evidence
-./knowledge.sh open-assumptions   # the open ones, and the proofs resting on each
+../verify/knowledge/knowledge.sh assumptions        # what each proof rests on, and the evidence
+../verify/knowledge/knowledge.sh open-assumptions   # the open ones, and the proofs resting on each
 ```
 
 `knowledge.sh check` finds the tags and fields that name nothing, a
@@ -818,9 +818,9 @@ per harness, the hash of those sources (ceres-core, ceres-netlist and the
 workspace's manifests) with the verdict, the seconds and the solver.
 
 ```sh
-./kani.sh status    # each harness: verified on these sources, stale or new
-./kani.sh run       # run what is not verified, and record it
-./kani.sh faults    # the planted faults: each must make its harness fail
+../verify/kani/kani.sh status    # each harness: verified on these sources, stale or new
+../verify/kani/kani.sh run       # run what is not verified, and record it
+../verify/kani/kani.sh faults    # the planted faults: each must make its harness fail
 ```
 
 The runs go in a second worktree, a snapshot of this one with its
@@ -845,7 +845,7 @@ related state.
 
 ### The rules beyond the die
 
-[rules.toml](rules.toml) lists what the model needs beyond the die's cells
+[rules.toml](../verify/knowledge/rules.toml) lists what the model needs beyond the die's cells
 and wires to do what the hardware does, aiming at the fewest rules that
 explain every behaviour a hardware test shows. The die's connectivity is
 trusted and its delays are not, so an order race needs no rule; the
@@ -854,23 +854,22 @@ RAM's cells, the power-on state, the electrical side) or gets wrong. A rule
 is applied (`rtl/` has it, tagged `@rule <id>`), proposed (ceres does it
 and passes the tests, `rtl/` not yet) or missing (nothing known passes).
 A rule is shown needed the way a race's verdict is: the model without it
-fails a hardware test. `./knowledge.sh rules` lists them.
+fails a hardware test. `../verify/knowledge/knowledge.sh rules` lists them.
 
-A rule names the models it is stated for, as the facts do (the CGB's
-cover its revisions). The CGB follows the DMG where nothing else is known,
-and the knowledge base derives it, recursively: a rule holds on the
-models it names, on their revisions, and on a model that follows one it
-holds on, unless its `not_on` names that model; the evidence then says
-which CGB test or which rule of the CGB's says otherwise.
-`./knowledge.sh followed-rules` lists the rules that hold on a chip only
-so. `rtl/` must agree: a check finds an applied rule that holds on a chip
-whose code does not apply it (the chips that reach the entity of its tag
-through instances, outside the other chip's `REVISION` generate), or that
-the code applies where `not_on` says it does not hold. A race names the
-chips whose model has it: the CGB's keeps most
-of the DMG's code, and with it its races. `MODELS` says which chips
-`knowledge.sh` looks at, by default all of them, as the checks need:
-`MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules` lists the CGB's
-rules that no fact about the CGB shows, the ones it takes from the DMG,
-and `untested-rules` those that no hardware test shows, which rest on
-documents, emulators or a guess.
+A rule names the models it is stated for, as the facts do (the CGB's cover its
+revisions). The CGB follows the DMG where nothing else is known, and the
+knowledge base derives it, recursively: a rule holds on the models it names, on
+their revisions, and on a model that follows one it holds on, unless its
+`not_on` names that model; the evidence then says which CGB test or which rule
+of the CGB's says otherwise. `../verify/knowledge/knowledge.sh followed-rules`
+lists the rules that hold on a chip only so. `rtl/` must agree: a check finds an
+applied rule that holds on a chip whose code does not apply it (the chips that
+reach the entity of its tag through instances, outside the other chip's
+`REVISION` generate), or that the code applies where `not_on` says it does not
+hold. A race names the chips whose model has it: the CGB's keeps most of the
+DMG's code, and with it its races. `MODELS` says which chips `knowledge.sh`
+looks at, by default all of them, as the checks need: `MODELS="cgb cgb-c cgb-e"
+../verify/knowledge/knowledge.sh borrowed-rules` lists the CGB's rules that no
+fact about the CGB shows, the ones it takes from the DMG, and `untested-rules`
+those that no hardware test shows, which rest on documents, emulators or a
+guess.

@@ -26,7 +26,7 @@ none, or where no test looks. Each entry says what to measure, what the
 evidence says, what the netlist and ceres do, the outcomes that would settle
 it, and what it takes: a test ROM on a flash cartridge, a logic analyser on
 the cartridge bus or the LCD connector, or a scope. Each is a fact of
-[facts.toml](facts.toml), which says in a line what it rests on.
+[facts.toml](../verify/knowledge/facts.toml), which says in a line what it rests on.
 
 [dmg-schematics]: https://github.com/msinger/dmg-schematics
 [dmg-sim]: https://github.com/msinger/dmg-sim
@@ -110,7 +110,7 @@ CGB is left to check, since there is no netlist for it.
   the scan read, unless OAM was read since: by a sprite fetch of mode 3,
   which reads the sprite's tile and attributes (while a DMA runs, the
   latches take the DMA's data lines instead, which carry the byte it
-  copies, as both: `hdl/check/dma_fetch.asm`), or by the CPU (`FExx`).
+  copies, as both: `hdl/probes/dma_fetch.asm`), or by the CPU (`FExx`).
   - In `strikethrough`, the latches still hold sprite 39's Y and X from the
     line before, so every entry of the next line matches.
   - In `late_sp39y_2`, the line before the DMA drew sprite 39 itself, and its

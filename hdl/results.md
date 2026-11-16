@@ -51,7 +51,7 @@ they pass. dmg-sim's README lists no gbmicrotest.
 
 The readable model gets the same results. Where these, and the sweeps below,
 part from ceres or from the hardware, the reason is a fact of
-[facts.toml](../doc/facts.toml), named here by its id:
+[facts.toml](../verify/knowledge/facts.toml), named here by its id:
 
 - `halt_op_dupe_delay` and `stat_write_glitch_l154_d` fail on ceres, SameBoy
   and the netlist alike, with the same accesses (`halt-op-dupe-delay`,
@@ -133,7 +133,7 @@ their accesses (TIMA counts from the power-on state), and:
   (`oam-corruption-bug`).
 - The end of VBlank: ceres's STAT shows mode 0 for an M-cycle between mode 1
   and line 0's mode 2, where the model's samples go from 1 to 2. The reads
-  agree: `check/stat_vblank_end.asm` reads STAT in every M-cycle across it,
+  agree: `probes/stat_vblank_end.asm` reads STAT in every M-cycle across it,
   and both sides read the same 400 values. The model's mode 0 falls between
   its points of sampling.
 - The first mode 3 after the LCD is turned on comes an M-cycle sooner on
@@ -517,7 +517,7 @@ the line's end, the only line where the resync moves it (from 895 to 893;
 on every other line ceres's clock is at 893 already). One difference: with
 LYC 0, its enable on and the flag clear, ceres raises the STAT line in the
 M-cycle before the write's, the netlist at H, after its first sample.
-`check/lcd_on_lyc0.asm` shows the CPU cannot see it: both enter the
+`probes/lcd_on_lyc0.asm` shows the CPU cannot see it: both enter the
 handler after the same instruction, as in that M-cycle the CPU is writing
 LCDC. The HBlank source is proved with where mode 3 ends as an input, the
 same on both sides: render's mode 0 rises a half dot after ceres's pixel
@@ -611,7 +611,7 @@ Ceres follows the netlist in all three since 2026-10-29 (facts
   hides OAM: in `late_sp00x_2` and `late_sp39x_2`, `10` in the model, which
   puts every sprite of line 4 on the line, and `A0` in ceres, which put
   none there (the ROMs' results do not depend on that line).
-  `check/dma_fetch.asm` copies bytes that name themselves, with sprites on
+  `probes/dma_fetch.asm` copies bytes that name themselves, with sprites on
   every line: in all 1666 of the model's fetches during its DMAs, the
   latches took the source byte at the DMA's count as the read ended, in
   every phase. The model's latches close two dots after ceres's read, and
@@ -802,18 +802,17 @@ is ceres's, a tile behind from ceres's read of a tile's last byte to the
 netlist's restart for it. With WX at 164 or 165 the line is drawn inside the
 start, and the netlist's mode 3 still stops a dot after ceres's.
 
-The co-simulation asserts `related` at every dot of every such line (WX 7
-to 165, each fine scroll, 0.4 seconds), and of the idle and armed lines
-with objects; a second test takes each pair those lines reach with what a
-harness leaves free at random (the bus, LCDC's other bits, LY, the latches,
-SCX writes). Kani then proves a dot from every related pair:
-`netlist_mode3_window_reached` (the check at WX), `_starting` (the nine
-dots) and `_inside`, about a minute and 2.5 GB each. Its two
-counterexamples were pairs no line reaches: a ninth dot past the line's end
-(with WX at 165 the line is drawn after the eighth), and a window's column
-beyond its five bits. Not proved yet: the window with objects on, how a
-line starts armed (WY's trigger against REJO), WX 0 and 166 (1 to 6 are in since task 1.3), writes
-of WX and of LCDC's window bit, and the pixels.
+The co-simulation asserts `related` at every dot of every such line (WX 7 to
+165, each fine scroll, 0.4 seconds), and of the idle and armed lines with
+objects; a second test takes each pair those lines reach with what a harness
+leaves free at random (the bus, LCDC's other bits, LY, the latches, SCX writes).
+Kani then proves a dot from every related pair: `netlist_mode3_window_reached`
+(the check at WX), `_starting` (the nine dots) and `_inside`, about a minute and
+2.5 GB each. Its two counterexamples were pairs no line reaches: a ninth dot
+past the line's end (with WX at 165 the line is drawn after the eighth), and a
+window's column beyond its five bits. Not proved yet: the window with objects
+on, how a line starts armed (WY's trigger against REJO), WX 0 and 166 (1 to 6
+are in since task 1.3), writes of WX and of LCDC's window bit, and the pixels.
 
 The proofs take every state the relation allows, and the 803 ROMs reach
 only some of them, so `tests/render_edge_free.rs` compares `NetPipeline`
@@ -1143,7 +1142,7 @@ an M-cycle where mode 3 falls at C's or G's edge, and any access where it
 falls at A's; a sweep ROM (SCX 0 to 7 against a write and a read a cycle
 apart) would fill the table.
 
-`check/vram_sweep.asm` is that ROM (`make build/vram_sweep.gb`), and the
+`probes/vram_sweep.asm` is that ROM (`make build/vram_sweep.gb`), and the
 four tallies now run it: it reads and writes VRAM (8010) and OAM (FE9E)
 across mode 3's end, SCX 0 to 3 moving the end a dot at a time through
 the four alignments it can fall on and a NOP sled the access an M-cycle at
@@ -1298,22 +1297,21 @@ board's, not the chip's, and the lockstep oracle compares it above.
 
 ## The model's races
 
-`find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses
-under 10 ns at 35 signals that control storage, and over Mooneye's 54 DMG
-tests, Mealybug's 32 ROMs and Gambatte's 1747 DMG ROMs (from tinyboot, 24
-hours) at 22 more: 57 in all. Each pulse, and each delay
-of `rtl/` (its `after` clauses), was then given a verdict in
-[races.toml](races.toml) by a variant of the model: a pulse filtered where
-it is taken (an inertial delay a little longer than the pulse), a delay set
-to 0 and to twice its value or more. The ROMs that show the pulse (86
-gbmicrotest ROMs for a delay, with Gambatte's 23 `late_sizechange` ROMs for
-LCDC's) ran on the variant, and their bus traces, frames and results were
-compared with the model's. Where a filter also delays the signal, a variant
-that only delays it (a `transport` delay) tells the two apart; for the
-pulses of the second sweep, the 225 ROMs that show them ran on both, with
-the sound channels' outputs compared too.
-`./knowledge.sh check` now finds no delay, and no pulse under 10 ns, without
-a verdict, and no fact on a width race without its race.
+`find-runts.sh` over the 513 gbmicrotest ROMs (24 minutes) found pulses under 10
+ns at 35 signals that control storage, and over Mooneye's 54 DMG tests,
+Mealybug's 32 ROMs and Gambatte's 1747 DMG ROMs (from tinyboot, 24 hours) at 22
+more: 57 in all. Each pulse, and each delay of `rtl/` (its `after` clauses), was
+then given a verdict in [races.toml](../verify/knowledge/races.toml) by a
+variant of the model: a pulse filtered where it is taken (an inertial delay a
+little longer than the pulse), a delay set to 0 and to twice its value or more.
+The ROMs that show the pulse (86 gbmicrotest ROMs for a delay, with Gambatte's
+23 `late_sizechange` ROMs for LCDC's) ran on the variant, and their bus traces,
+frames and results were compared with the model's. Where a filter also delays
+the signal, a variant that only delays it (a `transport` delay) tells the two
+apart; for the pulses of the second sweep, the 225 ROMs that show them ran on
+both, with the sound channels' outputs compared too.
+`../verify/knowledge/knowledge.sh check` now finds no delay, and no pulse under
+10 ns, without a verdict, and no fact on a width race without its race.
 
 | Verdict | Races                                                        |
 | ------- | ------------------------------------------------------------ |
@@ -1344,7 +1342,7 @@ The two STAT races are one rule (`stat-flag-takes-a-flip-flops-dip`). On
 the die the OR of STAT's sources dips at both ends of VBlank: at the end,
 mode 1 raises the mode 2 source through two gates (TOLU, TAPA); at the
 start, mode 1 rises a flip-flop after LY = LYC's flag falls. IF's flag
-takes the second dip and not the first. `check/stat_dips.asm` reads the
+takes the second dip and not the first. `probes/stat_dips.asm` reads the
 flag across both: the model and ceres read 00 and 02, as the
 DMG-08's tests show, and dmg-sim, whose delays come from the layout, 02 and
 02. The timer's clock fits the same line (its pulse of two multiplexers is

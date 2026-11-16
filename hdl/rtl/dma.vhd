@@ -4,7 +4,7 @@
 -- per M-cycle. The source is VRAM (8000 to 9FFF) or the cartridge bus.
 --
 -- @hw die: dmg-schematics, category ppu-dma (sheet "FF46 DMA"); checked
--- against dmg-sim (../check/chip_tb.vhd).
+-- against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

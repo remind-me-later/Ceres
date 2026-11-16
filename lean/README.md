@@ -10,21 +10,20 @@ step holds forever, and wires blocks together.
 Each block's step is one Rust function in ceres-core, `step_agrees`
 (`ceres-core/src/timing/check.rs`, `ceres-core/src/interrupts/check.rs`,
 `ceres-core/src/memory/dma/check.rs`,
-`ceres-core/src/ppu/display/timing/check.rs`):
-from a pair of states that `related` matches (ceres's and the netlist's
-transcription, `ceres-netlist`), an M-cycle with any input gives the same
-outputs on both sides and leaves the pair related, unless it is a known
-difference (a fact of `doc/facts.toml`). The netlist's M-cycles are cut
-at the start of E, where ceres's begins (the line timing's at the D edge
-before it, `h = 0` mod 8 of ceres's half dots). Kani proves each step true
-for every argument, every field of both states free
-(`netlist_timer_bisimulation`, `netlist_if_bisimulation`,
-`netlist_dma_bisimulation`, `netlist_lcd_access`), and also
-`check::in_sequence` (`ceres-core/src/check.rs`,
+`ceres-core/src/ppu/display/timing/check.rs`): from a pair of states that
+`related` matches (ceres's and the netlist's transcription, `ceres-netlist`), an
+M-cycle with any input gives the same outputs on both sides and leaves the pair
+related, unless it is a known difference (a fact of
+`verify/knowledge/facts.toml`). The netlist's M-cycles are cut at the start of
+E, where ceres's begins (the line timing's at the D edge before it, `h = 0` mod
+8 of ceres's half dots). Kani proves each step true for every argument, every
+field of both states free (`netlist_timer_bisimulation`,
+`netlist_if_bisimulation`, `netlist_dma_bisimulation`, `netlist_lcd_access`),
+and also `check::in_sequence` (`ceres-core/src/check.rs`,
 `ceres_timer_and_if_in_sequence`): ceres's M-cycle of the two blocks, run
-T-cycle by T-cycle as ceres runs them, is the timer's step and then IF's.
-Aeneas translates the same functions to Lean (`Ceres/Gen`), where those are
-the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
+T-cycle by T-cycle as ceres runs them, is the timer's step and then IF's. Aeneas
+translates the same functions to Lean (`Ceres/Gen`), where those are the
+hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
 
 - `Ceres/Bisim/Compose.lean`: `Agree`, the greatest relation such that,
   for related inputs, both steps succeed with related outputs and states
@@ -86,13 +85,13 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
 block's claim as a hypothesis rather than a proof. Nothing in it names the
 emulator's types yet.
 
-- `Sketch/Chip.lean`: mode 3's dots wired in front of the M-cycle blocks,
-  the CPU closed around both (`Steps.close`), and `chip_agrees`: the two closed machines
-  agree from every related pair of states, until a run leaves the blocks'
-  scope. Its hypotheses are what is open: mode 3's step (`hM3`, Kani's
+- `Sketch/Chip.lean`: mode 3's dots wired in front of the M-cycle blocks, the
+  CPU closed around both (`Steps.close`), and `chip_agrees`: the two closed
+  machines agree from every related pair of states, until a run leaves the
+  blocks' scope. Its hypotheses are what is open: mode 3's step (`hM3`, Kani's
   within its scope), the M-cycle blocks' (`hPer`, `blocks_steps` once it is
-  plugged in), how an M-cycle's access looks to mode 3 dot by dot (`hDots`),
-  and the SM83's two (`hOut`, `hNext`).
+  plugged in), how an M-cycle's access looks to mode 3 dot by dot (`hDots`), and
+  the SM83's two (`hOut`, `hNext`).
 - `Sketch/Instance.lean`: the outline's M-cycle blocks are the real ones.
   `hPer_real` is `hPer` for `netBlocks` and `ceresBlocks`, from
   `blocks_steps` and Kani's five claims, with mode 3's flags put into the

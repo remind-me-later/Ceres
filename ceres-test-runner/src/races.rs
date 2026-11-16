@@ -1,9 +1,9 @@
-//! The races of the readable model, `hdl/races.toml`.
+//! The races of the readable model, `verify/knowledge/races.toml`.
 //!
 //! Each entry is a race of `hdl/rtl`: a delay (an `after` clause) or a short
 //! pulse that a flip-flop or a latch sees (`hdl/find-runts.sh`), and whether
 //! the outcome hangs on the order of two signals or on the widths of their
-//! paths. The knowledge base (`hdl/knowledge.sh`) checks that every
+//! paths. The knowledge base (`verify/knowledge/knowledge.sh`) checks that every
 //! delay and every short pulse at a control has its entry; [`problems`]
 //! checks the entries against the facts.
 
@@ -14,7 +14,7 @@ use {
     std::{collections::BTreeMap, fs, path::Path},
 };
 
-/// One entry of `hdl/races.toml` (its header says what each field means).
+/// One entry of `verify/knowledge/races.toml` (its header says what each field means).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Mechanism {
@@ -33,9 +33,9 @@ pub struct Mechanism {
 /// The races, by id.
 pub type Races = BTreeMap<String, Mechanism>;
 
-/// Reads `hdl/races.toml`.
+/// Reads `verify/knowledge/races.toml`.
 pub fn load(root: &Path) -> Result<Races> {
-    let path = root.join("hdl").join("races.toml");
+    let path = root.join("verify").join("knowledge").join("races.toml");
     let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }

@@ -15,7 +15,7 @@
 ;   ./run-tests.sh bus            (dmg-sim; MODEL=1: the model)
 ;   TEST=mooneye ./trace-blocks.sh hdl/build/bus.gb 0.1
 ;
-;   rgbasm -I check/ -o bus.o bus.asm && rgblink -o bus.gb bus.o && rgbfix -v -p 0 bus.gb
+;   rgbasm -I probes/ -o bus.o bus.asm && rgblink -o bus.gb bus.o && rgbfix -v -p 0 bus.gb
 
 INCLUDE "report.inc"
 

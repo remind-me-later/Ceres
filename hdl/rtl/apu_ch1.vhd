@@ -11,7 +11,7 @@
 -- each step of its period; a sum above 2047 stops the channel.
 --
 -- @hw die: dmg-schematics, category apu-ch1 (sheets "Channel 1", "NR10 to
--- NR14" and "Sweep"); checked against dmg-sim (../check/chip_tb.vhd).
+-- NR14" and "Sweep"); checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

@@ -134,7 +134,7 @@ Every proof in this file is closed except as noted below. The file takes
 four hypotheses as arguments; none is proved here.
 
 - `hM3`: Kani's mode 3 harnesses (`mode3-end-background`,
-  `mode3-window-armed`, `mode3-window-start` in doc/assumptions.toml).
+  `mode3-window-armed`, `mode3-window-start` in verify/knowledge/assumptions.toml).
   `K3` is the scope they leave out (the known differences of the dot-by-dot
   pipeline). It also stands for the OAM scan's dots, which come before
   mode 3 on each line: `Line.lean` proves the scan and hands its store to

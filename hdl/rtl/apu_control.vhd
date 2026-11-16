@@ -7,7 +7,7 @@
 --
 -- @hw die: dmg-schematics, categories apu-control and apu-analog (sheets
 -- "APU control" and "Analog"); the mixer is dmg-sim's model of the analog
--- part (audio.sv); checked against dmg-sim (../check/chip_tb.vhd).
+-- part (audio.sv); checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

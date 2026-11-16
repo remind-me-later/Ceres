@@ -16,7 +16,7 @@
 ;   ./run-tests.sh io_regs        (dmg-sim; MODEL=1: the model)
 ;   TEST=mooneye ./trace-blocks.sh hdl/build/io_regs.gb 0.1
 ;
-;   rgbasm -I check/ -o io_regs.o io_regs.asm && rgblink -o io_regs.gb io_regs.o && rgbfix -v -p 0 io_regs.gb
+;   rgbasm -I probes/ -o io_regs.o io_regs.asm && rgblink -o io_regs.gb io_regs.o && rgbfix -v -p 0 io_regs.gb
 
 INCLUDE "report.inc"
 

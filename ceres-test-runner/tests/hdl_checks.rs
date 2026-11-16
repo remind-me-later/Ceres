@@ -1,5 +1,5 @@
-//! The check ROMs of `hdl/check` that verify what they read and report as
-//! Mooneye's tests do (`hdl/check/report.inc`): the PPU's registers, VRAM,
+//! The check ROMs of `hdl/probes` that verify what they read and report as
+//! Mooneye's tests do (`hdl/probes/report.inc`): the PPU's registers, VRAM,
 //! OAM, the bus side, the timer, IF, IE, the unused I/O addresses and the
 //! APU read back. They run on the readable model and on a
 //! Game Boy as well; built by `make -C hdl`.

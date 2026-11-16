@@ -18,7 +18,7 @@
 ;
 ; The readable model of the PPU had the planes swapped until commit 43ae47da
 ; (sprite 1 came out as 22222222): the netlist's palette cells pick 2 * A + B,
-; with A latched from the tile's second byte. hdl/check/sprites.asm is the
+; with A latched from the tile's second byte. hdl/probes/sprites.asm is the
 ; same stimulus, for the checks against dmg-sim.
 ;
 ;   make sprite_bit_planes.gb

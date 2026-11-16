@@ -5,7 +5,7 @@
 -- the APU, the serial port and the power-on wait.
 --
 -- @hw die: dmg-schematics, category clocks (sheet "FF04 DIV"); checked
--- against dmg-sim (../check/chip_tb.vhd).
+-- against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

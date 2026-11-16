@@ -7,4 +7,4 @@
 standard = "2008"
 
 [libraries]
-model.files = ["hdl/rtl/*.vhd", "hdl/board/*.vhd", "hdl/check/*.vhd"]
+model.files = ["hdl/rtl/*.vhd", "hdl/board/*.vhd"]

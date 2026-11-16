@@ -1,7 +1,7 @@
 #!/bin/sh
 # Kani's proofs of ceres-core, run and recorded.
 #
-# A harness's verdict holds for the sources it was run on. kani-results.tsv
+# A harness's verdict holds for the sources it was run on. results.tsv
 # keeps, per harness, the hash of those sources with the verdict, the time
 # and the solver, so that a rerun takes only what is not verified yet, and
 # a verdict can be traced to what it was about.
@@ -15,7 +15,7 @@
 #                           given), but those whose program is unchanged,
 #                           and record their verdicts; exits 1 if one fails
 #   kani.sh rerun NAME...   run those harnesses again, verified or not
-#   kani.sh faults [NAME]   the planted faults, kani-faults/*.patch: each
+#   kani.sh faults [NAME]   the planted faults, faults/*.patch: each
 #                           names a harness that must fail with it applied,
 #                           and is recorded as caught or missed; exits 1 if
 #                           one is missed
@@ -36,7 +36,7 @@
 # `run` first compiles every harness (`cargo kani --only-codegen`, under a
 # minute) and hashes each one's goto program in a canonical form, with
 # its attributes and Kani's, CBMC's and the solver's versions
-# (program_hashes, kani-program.pl); a harness whose last verdict passed
+# (program_hashes, program.pl); a harness whose last verdict passed
 # on a program of the same hash keeps it for these sources without running.
 # The program's hash is the verdict's last field. Each planted fault changes
 # its harness's program; a comment, or code a harness does not reach, does
@@ -56,10 +56,10 @@
 
 set -eu
 
-HDL=$(cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(cd -- "$HDL/.." && pwd)
-RESULTS=$HDL/kani-results.tsv
-FAULTS=$HDL/kani-faults
+KANI=$(cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(cd -- "$KANI/../.." && pwd)
+RESULTS=$KANI/results.tsv
+FAULTS=$KANI/faults
 WT=${KANI_WORKTREE:-$ROOT-kani}
 JOBS=${KANI_JOBS:-2}
 SOLO=netlist_sm83_
@@ -136,7 +136,7 @@ record() {
         printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$SOLVER" "${5:--}"
     } | LC_ALL=C sort >"$RESULTS.new"
     {
-        echo "# Kani's verdicts, written by hdl/kani.sh: the harness (or the planted"
+        echo "# Kani's verdicts, written by verify/kani/kani.sh: the harness (or the planted"
         echo "# fault), the hash of the sources it ran on, the verdict, the seconds,"
         echo "# the solver and the hash of the harness's program (see kani.sh)."
         cat "$RESULTS.new"
@@ -205,7 +205,7 @@ kani() {
 # The hash of each harness's program, as the worktree compiles it: "name
 # hash" lines in $LOGS/programs. `cargo kani --only-codegen` compiles every
 # harness to its own goto program; goto-instrument dumps it, and
-# kani-program.pl puts the dump in a canonical form, which ignores the
+# program.pl puts the dump in a canonical form, which ignores the
 # crate-wide numbering of statics and globals and the source locations (see
 # it). The hash takes in the harness's attributes as Kani records them (its
 # unwinding, solver and stubs), Kani's and CBMC's versions and the solver.
@@ -228,7 +228,7 @@ program_hashes() {
     # shellcheck disable=SC2016
     perl -ne 'while (/\{"pretty_name":"([^"]*)".*?"goto_file":"([^"]*)","attributes":(\{.*?\}),"contract"/g) { print "$1\t$2\t$3\n" }' "$meta" |
         while IFS=$tab read -r name goto attributes; do
-            program=$("$gi" --show-goto-functions "${goto%.symtab.out}.out" | perl "$HDL/kani-program.pl") || return 1
+            program=$("$gi" --show-goto-functions "${goto%.symtab.out}.out" | perl "$KANI/program.pl") || return 1
             hash=$(printf '%s\n%s\n%s\n%s\n' "$program" "$attributes" "$version" "$SOLVER" |
                 sha256sum | cut -c1-16)
             printf '%s %s\n' "$name" "$hash"

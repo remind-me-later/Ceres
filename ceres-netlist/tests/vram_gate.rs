@@ -161,7 +161,7 @@ fn vram_accesses_follow_mode3_in_their_phases() {
     for (dir, wanted) in [
         ("external/test-roms/gambatte/vram_m3", "dmg08"),
         ("external/test-roms/gbmicrotest", "vram"),
-        // hdl/check/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
+        // hdl/probes/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
         ("hdl/build", "vram_sweep"),
     ] {
         for entry in fs::read_dir(root.join(dir)).expect("the ROMs' directory") {

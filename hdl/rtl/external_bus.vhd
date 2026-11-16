@@ -11,7 +11,7 @@
 --
 -- @hw die: dmg-schematics, categories bus-adr, bus-data and sys-decode
 -- (sheets "External address buses" and "External data buses"); checked
--- against dmg-sim (../check/chip_tb.vhd).
+-- against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

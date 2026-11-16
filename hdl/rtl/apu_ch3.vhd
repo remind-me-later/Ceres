@@ -12,7 +12,7 @@
 --
 -- @hw die: dmg-schematics, category apu-ch3 (sheets "Channel 3", "NR30 to
 -- NR34" and "Wave RAM"), and the cell wave_ram (dmg-sim's simplified
--- SRAM); checked against dmg-sim (../check/chip_tb.vhd).
+-- SRAM); checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

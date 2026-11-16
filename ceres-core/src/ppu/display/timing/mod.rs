@@ -475,7 +475,7 @@ impl PpuCore {
     /// here: the clock runs on for those half dots, and an interrupt that
     /// rises in them is requested (in the netlist a line-end pulse 2 half
     /// dots after the write still requests line 0x45's mode 2 interrupt:
-    /// the reset follows it by 156 ns; `hdl/check/lcd_off_line_start.asm`).
+    /// the reset follows it by 156 ns; `hdl/probes/lcd_off_line_start.asm`).
     pub(in crate::ppu) const fn timing_lcd_off(&mut self, ints: &mut Interrupts) {
         let mut late = LCD_OFF_LATE;
         while late > 0 {

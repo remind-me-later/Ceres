@@ -1,50 +1,51 @@
 #!/bin/sh
 # The knowledge base: what the repository knows about the hardware, the
 # readable model and ceres, as tables built from the sources, and the
-# checks and queries on them, in Datalog (knowledge/knowledge.dl, run by
+# checks and queries on them, in Datalog (knowledge.dl, run by
 # Soufflé; it says what each table holds).
 #
-#   knowledge.sh                build the tables, build/knowledge/*.tsv
+#   knowledge.sh                build the tables, hdl/build/knowledge/*.tsv
 #   knowledge.sh check          build them, and run the checks: relations of
-#                               knowledge/knowledge.dl, each of which must
+#                               knowledge.dl, each of which must
 #                               be empty (exits 1 if one is not)
 #   knowledge.sh NAME           build them, and print the query NAME
 #   knowledge.sh list           the queries and the checks, with what each
 #                               finds
 #   knowledge.sh run FILE       build them, and run the rules of FILE (.dl)
-#                               with knowledge/knowledge.dl's: what FILE
+#                               with knowledge.dl's: what FILE
 #                               outputs to stdout (`.output r(IO=stdout)`)
 #
-# The sources: rtl/ and board/ (knowledge/rtl.awk, oracle/controls.awk),
-# doc/facts.toml, hdl/races.toml, hdl/rules.toml and doc/assumptions.toml
-# with the `@fact`, `@rule`, `@assumes` and `@discharges` tags (the example
-# facts of ceres-test-runner), and the reports of find-runts.sh in
-# build/runts/reports. MODELS are the chips to look at, as doc/facts.toml
-# names them: by default all that rtl/ has (dmg cgb cgb-c cgb-e), which the
+# The sources: hdl/rtl/ and hdl/board/ (hdl/oracle/rtl.awk and
+# controls.awk), facts.toml, races.toml, rules.toml and assumptions.toml
+# here, with the `@fact`, `@rule`, `@assumes` and `@discharges` tags
+# (the example facts of ceres-test-runner), and the reports of find-runts.sh in
+# hdl/build/runts/reports. MODELS are the chips to look at, as facts.toml
+# names them: by default all that hdl/rtl/ has (dmg cgb cgb-c cgb-e), which the
 # checks need; MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules lists
 # what the CGB's model takes from the DMG's.
 
 set -eu
 
-HDL=$(cd -- "$(dirname -- "$0")" && pwd)
-ROOT=$(cd -- "$HDL/.." && pwd)
+KNOWLEDGE=$(cd -- "$(dirname -- "$0")" && pwd)
+ROOT=$(cd -- "$KNOWLEDGE/../.." && pwd)
+HDL=$ROOT/hdl
 MODELS=${MODELS:-dmg cgb cgb-c cgb-e}
 TABLES=$HDL/build/knowledge
-PROGRAM=$HDL/knowledge/knowledge.dl
+PROGRAM=$KNOWLEDGE/knowledge.dl
 TAB=$(printf '\t')
 
 build() {
 	mkdir -p "$TABLES"
 	cd "$HDL"
-	awk -v TABLE=instance -f knowledge/rtl.awk rtl/*.vhd board/*.vhd >"$TABLES/instance.tsv"
+	awk -v TABLE=instance -f oracle/rtl.awk rtl/*.vhd board/*.vhd >"$TABLES/instance.tsv"
 	awk -f oracle/controls.awk rtl/*.vhd | sort -u |
 		awk '{ print $1 "\t" $2 "\t" $3 }' >"$TABLES/control.tsv"
-	awk -v TABLE=delay -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/delay.tsv"
-	awk -v TABLE=signal -f knowledge/rtl.awk rtl/*.vhd | sort -u >"$TABLES/signal.tsv"
-	awk -v TABLE=hw -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/hw_tag.tsv"
-	awk -v TABLE=rule -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/rule_tag.tsv"
+	awk -v TABLE=delay -f oracle/rtl.awk rtl/*.vhd >"$TABLES/delay.tsv"
+	awk -v TABLE=signal -f oracle/rtl.awk rtl/*.vhd | sort -u >"$TABLES/signal.tsv"
+	awk -v TABLE=hw -f oracle/rtl.awk rtl/*.vhd >"$TABLES/hw_tag.tsv"
+	awk -v TABLE=rule -f oracle/rtl.awk rtl/*.vhd >"$TABLES/rule_tag.tsv"
 	for table in port portmap flow anchor; do
-		awk -v TABLE=$table -f knowledge/rtl.awk rtl/*.vhd >"$TABLES/$table.tsv"
+		awk -v TABLE=$table -f oracle/rtl.awk rtl/*.vhd >"$TABLES/$table.tsv"
 	done
 	mkdir -p build/runts/reports
 	find build/runts/reports -name '*.txt' -exec awk -f oracle/runts.awk "$TABLES/instance.tsv" {} + |

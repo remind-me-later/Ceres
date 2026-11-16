@@ -1,12 +1,12 @@
 // The knowledge base, in Datalog (Soufflé): what the repository knows
 // about the hardware, the readable model and ceres, read from the tables
-// ../knowledge.sh builds from the sources (build/knowledge/*.tsv), the
+// knowledge.sh builds from the sources (hdl/build/knowledge/*.tsv), the
 // checks that must find nothing, and the queries. Every table is generated;
-// the hand-written judgement lives in doc/facts.toml (the facts),
-// hdl/races.toml (the races' verdicts), hdl/rules.toml (the rules) and
-// doc/assumptions.toml (what the proofs assume). Each check and each query
-// is a relation, written to its own file; ../knowledge.sh check fails if a
-// check is not empty, and ../knowledge.sh NAME prints a query.
+// the hand-written judgement lives in verify/knowledge/facts.toml (the facts),
+// verify/knowledge/races.toml (the races' verdicts), verify/knowledge/rules.toml (the rules) and
+// verify/knowledge/assumptions.toml (what the proofs assume). Each check and each query
+// is a relation, written to its own file; knowledge.sh check fails if a
+// check is not empty, and knowledge.sh NAME prints a query.
 //
 //   souffle -F build/knowledge -D OUT knowledge/knowledge.dl
 
@@ -44,7 +44,7 @@
 .decl runt(rom: symbol, entity: symbol, signal: symbol, path: symbol, pulses: number,
            shortest_ns: float, first_ms: float, level: symbol)
 
-// The facts (doc/facts.toml; its header says what the fields mean), their
+// The facts (verify/knowledge/facts.toml; its header says what the fields mean), their
 // models, tests, open questions and needs, and their `@fact` tags in the
 // code and the documents.
 .decl fact(id: symbol, title: symbol, netlist: symbol, hardware: symbol,
@@ -55,7 +55,7 @@
 .decl fact_need(fact: symbol, need: symbol)
 .decl fact_tag(fact: symbol, file: symbol, line: number)
 
-// The races' verdicts (hdl/races.toml): order or width and the evidence;
+// The races' verdicts (verify/knowledge/races.toml): order or width and the evidence;
 // the models whose readable model has each; the facts that rest on each;
 // the delays (signal tco: all the flip-flops') and the signals with short
 // pulses that each covers (a vector's name covers every bit).
@@ -65,7 +65,7 @@
 .decl race_delay(race: symbol, entity: symbol, signal: symbol)
 .decl race_signal(race: symbol, entity: symbol, signal: symbol)
 
-// The rules the model needs beyond the die's connectivity (hdl/rules.toml):
+// The rules the model needs beyond the die's connectivity (verify/knowledge/rules.toml):
 // kind (delay, outcome, logic, ram, state, analogue, unknown), status
 // (applied, proposed, missing) and the evidence; the models each is for,
 // the facts it explains, the width races it settles, and the `@rule` tags
@@ -79,7 +79,7 @@
 .decl rule_race(rule: symbol, race: symbol)
 .decl rule_tag(rule: symbol, file: symbol, line: number, entity: symbol, branch: symbol)
 
-// What the proofs against the netlist assume (doc/assumptions.toml): the
+// What the proofs against the netlist assume (verify/knowledge/assumptions.toml): the
 // evidence (proved, typed, replayed, measured, fact or open) and how; the facts
 // each rests on and the assumptions it takes as given in turn; ceres-core's
 // Kani harnesses, and their tags: what each assumes, and what it
@@ -128,10 +128,10 @@
 .input harness_tag(IO=file, filename="harness_tag.tsv")
 .input tree_model(IO=file, filename="tree_model.tsv")
 
-// The models, as doc/facts.toml names them, and how they stand to each
+// The models, as verify/knowledge/facts.toml names them, and how they stand to each
 // other: the CGB-C and the CGB-E are revisions of the CGB, and what is
 // said of the CGB is said of them. The CGB follows the DMG where nothing
-// says otherwise (hdl/rules.toml's header), and the MGB and the SGB do,
+// says otherwise (verify/knowledge/rules.toml's header), and the MGB and the SGB do,
 // as they have the DMG-CPU's logic.
 .decl model(model: symbol)
 model("dmg"). model("mgb"). model("sgb"). model("cgb"). model("cgb-c"). model("cgb-e").
@@ -383,7 +383,7 @@ fact_with_race_here(f) :- race_fact(r, f), race_here(r).
 width_facts_without_race(f, title) :-
     fact_here(f), fact(f, title, n, _, _, "width", _), n != "none", !fact_with_race_here(f).
 
-// The tags and the fields of doc/assumptions.toml that name nothing: an
+// The tags and the fields of verify/knowledge/assumptions.toml that name nothing: an
 // assumption, a fact.
 .decl assumptions_naming_nothing(place: symbol, names: symbol)
 .decl assumption_id(id: symbol)
@@ -392,9 +392,9 @@ assumption_id(a) :- assumption(a, _, _, _).
 fact_id(f) :- fact(f, _, _, _, _, _, _).
 assumptions_naming_nothing(cat(file, ":", to_string(line)), a) :-
     harness_tag(_, _, a, file, line), !assumption_id(a).
-assumptions_naming_nothing(cat("doc/assumptions.toml [", a, "] rests_on"), b) :-
+assumptions_naming_nothing(cat("verify/knowledge/assumptions.toml [", a, "] rests_on"), b) :-
     assumption_rests(a, b), !assumption_id(b).
-assumptions_naming_nothing(cat("doc/assumptions.toml [", a, "] facts"), f) :-
+assumptions_naming_nothing(cat("verify/knowledge/assumptions.toml [", a, "] facts"), f) :-
     assumption_fact(a, f), !fact_id(f).
 
 // The tags on what is not a Kani harness, and the harnesses against the
@@ -460,10 +460,10 @@ fact_placed(f) :- fact_at(f, _, _).
 races_not_reaching_their_facts(r, f) :-
     race_fact(r, f), race_placed(r), fact_placed(f), !connected(r, f).
 
-// The checks' names and what each finds, for ../knowledge.sh.
+// The checks' names and what each finds, for knowledge.sh.
 .decl check(name: symbol, title: symbol)
 check("assumptions-naming-nothing",
-      "The tags of the proofs and the fields of doc/assumptions.toml that name no assumption or fact.").
+      "The tags of the proofs and the fields of verify/knowledge/assumptions.toml that name no assumption or fact.").
 check("assumptions-without-evidence",
       "The assumptions whose evidence does not hold, and those nothing uses.").
 check("harnesses-stating-nothing",
@@ -557,7 +557,7 @@ status_rank("applied", 0).
 status_rank("proposed", 1).
 status_rank("missing", 2).
 
-// The queries, for ../knowledge.sh NAME. A first column named rank orders
+// The queries, for knowledge.sh NAME. A first column named rank orders
 // the rows (then the others do, from the left), and is not printed.
 .decl query(name: symbol, title: symbol)
 query("assumptions",

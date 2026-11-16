@@ -38,7 +38,7 @@ OUT=$HDL/build/runts
 # The instances and the controls of rtl/ (written whole, for the runs of a
 # sweep that read them meanwhile).
 tables() {
-	(cd "$HDL" && awk -v TABLE=instance -f knowledge/rtl.awk rtl/*.vhd board/*.vhd) >"$OUT/instances.tsv.$$"
+	(cd "$HDL" && awk -v TABLE=instance -f oracle/rtl.awk rtl/*.vhd board/*.vhd) >"$OUT/instances.tsv.$$"
 	(cd "$HDL" && awk -f oracle/controls.awk rtl/*.vhd) | sort -u >"$OUT/controls.txt.$$"
 	mv "$OUT/instances.tsv.$$" "$OUT/instances.tsv"
 	mv "$OUT/controls.txt.$$" "$OUT/controls.txt"

@@ -21,7 +21,7 @@
 ;   ./run-tests.sh sound          (dmg-sim; MODEL=1: the model)
 ;   TEST=mooneye ./trace-blocks.sh hdl/build/sound.gb 0.26
 ;
-;   rgbasm -I check/ -o sound.o sound.asm && rgblink -o sound.gb sound.o && rgbfix -v -p 0 sound.gb
+;   rgbasm -I probes/ -o sound.o sound.asm && rgblink -o sound.gb sound.o && rgbfix -v -p 0 sound.gb
 
 INCLUDE "report.inc"
 

@@ -12,7 +12,7 @@
 # Fields:
 #
 # - title: the rule, in a line.
-# - models: the models it is stated for, as doc/facts.toml names them (a
+# - models: the models it is stated for, as verify/knowledge/facts.toml names them (a
 #   CGB's covers its revisions). The CGB follows the DMG where nothing says
 #   otherwise (as the MGB and the SGB do): a rule stated for the DMG holds
 #   on the CGB too, unless not_on names it. knowledge.sh followed-rules
@@ -29,7 +29,7 @@
 #   (ceres does it and passes the tests; rtl/ does not have it yet) or
 #   missing (nothing known passes the tests).
 # - races (optional): the width races of races.toml it settles.
-# - facts: the facts of doc/facts.toml it explains.
+# - facts: the facts of verify/knowledge/facts.toml it explains.
 # - evidence: what shows the rule, and that it is needed.
 #
 # knowledge.sh check lists the facts that need a rule and have none (where

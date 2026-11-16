@@ -20,10 +20,10 @@
 #   yet: the proofs leave the case out).
 # - how: how it was replayed or measured, or what leaves it open (all but
 #   proved).
-# - facts (optional): the facts of doc/facts.toml it rests on (fact).
+# - facts (optional): the facts of verify/knowledge/facts.toml it rests on (fact).
 # - rests_on (optional): the assumptions it takes as given in turn.
 #
-# The knowledge base (hdl/knowledge.sh, knowledge/knowledge.dl) follows
+# The knowledge base (verify/knowledge/knowledge.sh, knowledge/knowledge.dl) follows
 # them from harness to harness: an assumption that a harness discharges
 # brings in what that harness rests on. `knowledge.sh check` finds the tags
 # and fields that name nothing, the netlist harnesses that state nothing,
@@ -36,7 +36,7 @@
 [readable-model-is-dmg-sim]
 title = "The readable model (hdl/rtl) does what dmg-sim, the DMG-CPU B's netlist, does"
 evidence = "measured"
-how = "make check: check/chip_tb.vhd compares the model with dmg-sim's recorded signals, phase by phase, for every test in build/runs (hdl/README.md)."
+how = "make check: board/chip_tb.vhd compares the model with dmg-sim's recorded signals, phase by phase, for every test in build/runs (hdl/README.md)."
 
 [transcription-timer]
 title = "NetTimer is divider.vhd and timer.vhd, phase by phase"
@@ -200,7 +200,7 @@ how = "The traces of 169 gbmicrotest LCD ROMs, against ceres's clock at each res
 [scan-latches-equal-at-start]
 title = "OAM's latches hold the same Y in the netlist and in ceres as a scan starts: the line before's last read or sprite fetch"
 evidence = "measured"
-how = "hdl/check/dma_fetch.asm: all 1666 sprite fetches during a DMA take the same byte; Gambatte's late_sp scans agree with the model in every scan."
+how = "hdl/probes/dma_fetch.asm: all 1666 sprite fetches during a DMA take the same byte; Gambatte's late_sp scans agree with the model in every scan."
 rests_on = ["readable-model-is-dmg-sim"]
 
 # Differences the facts record, and what the CPU cannot see
@@ -220,7 +220,7 @@ facts = ["timer-enable-race"]
 [lcd-on-lyc0-invisible]
 title = "With LYC 0, its enable on and the flag clear, ceres raises the STAT line an M-cycle before the netlist as the LCD is turned on, which the CPU cannot see"
 evidence = "measured"
-how = "hdl/check/lcd_on_lyc0.asm enters the handler after the same instruction on the model and on ceres."
+how = "hdl/probes/lcd_on_lyc0.asm enters the handler after the same instruction on the model and on ceres."
 
 # What the proofs prove for each other
 
@@ -278,7 +278,7 @@ how = "add_object_from_index hands the match to ObjectSearch::consider, which ta
 [locks-with-mode-0-pulse]
 title = "On a line where a sprite at X 167 pulses mode 0 before mode 3 ends, ceres's accesses to VRAM and OAM come out as the netlist's, as on the other lines"
 evidence = "measured"
-how = "Ceres's locks fall 2 units before HBlankStart on every line (ppu::display::lock_proofs; 256 of its test's 73,728 lines pulse); its timing unit takes the pulse as mode 3's end, so the gate tests set such lines apart. On NetChip (ceres-netlist's tests/mode0_pulse.rs: Gambatte's 10 DMG ROMs with a sprite at X 167, 124 pulses) render's mode 3 latch (XYMU) stays up through every pulse and falls 13, 35 or 109 edges later. hdl/check/vram_sweep.asm reads and writes VRAM and OAM across mode 3's end on such lines, SCX 0 to 3 (every alignment of the fall) and ten M-cycles of delay; the lockstep oracle runs it on ceres and NetChip side by side: all 208,693 accesses the same, the writes read back."
+how = "Ceres's locks fall 2 units before HBlankStart on every line (ppu::display::lock_proofs; 256 of its test's 73,728 lines pulse); its timing unit takes the pulse as mode 3's end, so the gate tests set such lines apart. On NetChip (ceres-netlist's tests/mode0_pulse.rs: Gambatte's 10 DMG ROMs with a sprite at X 167, 124 pulses) render's mode 3 latch (XYMU) stays up through every pulse and falls 13, 35 or 109 edges later. hdl/probes/vram_sweep.asm reads and writes VRAM and OAM across mode 3's end on such lines, SCX 0 to 3 (every alignment of the fall) and ten M-cycles of delay; the lockstep oracle runs it on ceres and NetChip side by side: all 208,693 accesses the same, the writes read back."
 facts = ["sprite-at-167-mode-0-pulse"]
 
 [locks-with-wx-166-glitch]

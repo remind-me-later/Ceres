@@ -44,7 +44,7 @@
 //! once, the netlist at H, after its first sample. `netlist_lcd_on` proves
 //! that this is the only difference as the LCD is turned on. The CPU
 //! cannot see it: in that M-cycle it is writing LCDC, and takes neither IF
-//! nor an interrupt (`hdl/check/lcd_on_lyc0.asm` enters the handler at the
+//! nor an interrupt (`hdl/probes/lcd_on_lyc0.asm` enters the handler at the
 //! same instruction on both).
 //!
 //! The HBlank source: render's mode 0, which rises as mode 3 ends and falls

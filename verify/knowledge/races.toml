@@ -11,12 +11,12 @@
 # - race: order if the signals are far enough apart that any delays keeping
 #   their order give the same outcome; width if a pulse of almost no width,
 #   or two paths of almost one delay, decide it: there the die's physics
-#   decides, and it can vary by unit and revision (doc/facts.toml's race).
+#   decides, and it can vary by unit and revision (verify/knowledge/facts.toml's race).
 # - delays: the delays it covers, as entity.signal (the signal an `after`
 #   assigns), or tco for every flip-flop's.
 # - signals: the signals with short pulses it covers, as entity.signal (a
 #   vector's name covers its bits).
-# - facts (needed for a width race): the facts of doc/facts.toml that rest
+# - facts (needed for a width race): the facts of verify/knowledge/facts.toml that rest
 #   on it.
 # - evidence: what shows the verdict.
 #

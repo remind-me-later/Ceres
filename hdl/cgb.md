@@ -28,11 +28,11 @@ source:
 - **guess**: nothing says; the model keeps the DMG's way where it can
   (unknown CGB behaviour follows the DMG's).
 
-Each difference is a rule of [rules.toml](rules.toml) for the CGB, tagged
-`@rule <id>` where `rtl/` applies it, and named under its table below.
-`MODELS="cgb cgb-c cgb-e" ./knowledge.sh untested-rules` lists those that
-no hardware test shows, and `borrowed-rules` those the CGB takes from the
-DMG.
+Each difference is a rule of [rules.toml](../verify/knowledge/rules.toml) for
+the CGB, tagged `@rule <id>` where `rtl/` applies it, and named under its table
+below. `MODELS="cgb cgb-c cgb-e" ../verify/knowledge/knowledge.sh
+untested-rules` lists those that no hardware test shows, and `borrowed-rules`
+those the CGB takes from the DMG.
 
 The CGB's revision is the same generic: `CGB_E` (the CGB's board's
 default) or `CGB_C`. Where the two differ, the blocks say so.

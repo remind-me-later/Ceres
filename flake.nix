@@ -33,9 +33,10 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
 
-      # The version hdl/kani.sh's verdicts are run with. Change it with the
-      # verdicts: `cargo install --locked kani-verifier --version <it>` and
-      # `cargo kani setup`, then `hdl/kani.sh rerun` what it should.
+      # The version verify/kani/kani.sh's verdicts are run with. Change it
+      # with the verdicts: `cargo install --locked kani-verifier --version
+      # <it>` and `cargo kani setup`, then `verify/kani/kani.sh rerun` what it
+      # should.
       kaniVersion = "0.68.0";
 
       # rumdl and tombi at the versions .github/workflows/lint.yml pins, from
@@ -113,7 +114,7 @@
           gawk
           bc
           parallel
-          # kani.sh's kept verdicts (kani-program.pl).
+          # kani.sh's kept verdicts (verify/kani/program.pl).
           perl
           imagemagick
           zlib

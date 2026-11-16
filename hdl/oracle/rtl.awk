@@ -1,31 +1,31 @@
 # Tables of the readable model's sources, for the knowledge database
-# (../knowledge.sh), as tab-separated lines:
+# (verify/knowledge/knowledge.sh), as tab-separated lines:
 #
-#   awk -v TABLE=instance -f knowledge/rtl.awk rtl/*.vhd board/*.vhd
+#   awk -v TABLE=instance -f oracle/rtl.awk rtl/*.vhd board/*.vhd
 #       the entity, an instance's label in it, the instance's entity
-#   awk -v TABLE=delay -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=delay -f oracle/rtl.awk rtl/*.vhd
 #       the file, the line, the entity, the signal assigned and its delays
 #       (the `after` clauses, apart by spaces; tco is a flip-flop's)
-#   awk -v TABLE=signal -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=signal -f oracle/rtl.awk rtl/*.vhd
 #       the entity, and a signal or port declared in it
-#   awk -v TABLE=hw -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=hw -f oracle/rtl.awk rtl/*.vhd
 #       the file, the line, the entity, the kind of `@hw` tag (die,
 #       measured, inferred) and what it says
-#   awk -v TABLE=rule -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=rule -f oracle/rtl.awk rtl/*.vhd
 #       a rule of rules.toml that an `@rule` tag names, the file, the line,
 #       the entity, and the chips the code it is in is for: all, or the
 #       DMG's (dmg) or the CGB's (cgb) of an `if REVISION = DMG_B generate`
 #       or `if REVISION /= DMG_B generate` and its `else generate`
-#   awk -v TABLE=port -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=port -f oracle/rtl.awk rtl/*.vhd
 #       the entity, a port of it and its direction (in, out, inout, buffer)
-#   awk -v TABLE=portmap -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=portmap -f oracle/rtl.awk rtl/*.vhd
 #       the entity, an instance's label in it, the instance's entity, a
 #       port of the instance and a signal of the entity in its actual
-#   awk -v TABLE=flow -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=flow -f oracle/rtl.awk rtl/*.vhd
 #       the entity, a signal (or variable) read in an assignment, and the
 #       one assigned: in the expression, in the conditions of the ifs and
 #       cases around it, in a `with ... select`
-#   awk -v TABLE=anchor -f knowledge/rtl.awk rtl/*.vhd
+#   awk -v TABLE=anchor -f oracle/rtl.awk rtl/*.vhd
 #       the kind of tag (fact or rule), its id, the entity, and a signal
 #       that the statement after the tag assigns (all of a process's, if a
 #       process follows), for the tags in an architecture

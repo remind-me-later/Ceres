@@ -5,7 +5,7 @@
 -- cartridge's header shows through at 0100 to 01FF).
 --
 -- @hw die: dmg-schematics, category bootrom (the DMG's 256 bytes at 0000 to
--- 00FF); checked against dmg-sim (../check/chip_tb.vhd).
+-- 00FF); checked against dmg-sim (../board/chip_tb.vhd).
 -- @hw inferred: the CGB's second range, from the size of its boot ROM and
 -- SameBoy's and Pan Docs' memory maps.
 

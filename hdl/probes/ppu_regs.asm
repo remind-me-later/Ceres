@@ -9,7 +9,7 @@
 ;   ./run-tests.sh ppu_regs       (dmg-sim; MODEL=1: the model)
 ;   TEST=mooneye ./trace-blocks.sh hdl/build/ppu_regs.gb 0.3
 ;
-;   rgbasm -I check/ -o ppu_regs.o ppu_regs.asm && rgblink -o ppu_regs.gb ppu_regs.o && rgbfix -v -p 0 ppu_regs.gb
+;   rgbasm -I probes/ -o ppu_regs.o ppu_regs.asm && rgblink -o ppu_regs.gb ppu_regs.o && rgbfix -v -p 0 ppu_regs.gb
 
 INCLUDE "report.inc"
 

@@ -230,7 +230,7 @@ pub(crate) const fn related(net: &NetTimer, clock: &Clock) -> bool {
     same_regs & timer
 }
 
-/// Where ceres parts from the netlist: each is a fact of `doc/facts.toml`.
+/// Where ceres parts from the netlist: each is a fact of `verify/knowledge/facts.toml`.
 pub(crate) const fn known_difference(net: &NetTimer, access: Access) -> bool {
     // 1. @fact tima-reload-tick
     //    A tick between an overflow and the end of the reload is lost: TIMA

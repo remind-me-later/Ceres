@@ -396,7 +396,7 @@ fn roms(root: &Path) -> Vec<PathBuf> {
             "intr_2_oam_ok_timing",
             &[][..],
         ),
-        // hdl/check/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
+        // hdl/probes/vram_sweep.asm (`make -C hdl build/vram_sweep.gb`).
         ("hdl/build", "vram_sweep", &[][..]),
     ] {
         for entry in fs::read_dir(root.join(dir)).expect("the ROMs' directory") {

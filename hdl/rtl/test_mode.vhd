@@ -4,7 +4,7 @@
 -- Boy both pins are low, and FF60 cannot be written.
 --
 -- @hw die: dmg-schematics, category test; checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

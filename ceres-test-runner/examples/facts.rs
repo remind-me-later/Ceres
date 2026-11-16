@@ -1,10 +1,10 @@
-//! Prints the lists that the facts of `doc/facts.toml` give: the open
+//! Prints the lists that the facts of `verify/knowledge/facts.toml` give: the open
 //! questions and what settling them takes, where ceres departs from the
 //! netlist and what that rests on, the races, and where the code tags each
 //! fact. `tsv DIR` writes the facts, their tags, the races of
-//! `hdl/races.toml`, the rules of `hdl/rules.toml`, and the assumptions of
-//! the proofs (`doc/assumptions.toml`) with ceres-core's harnesses and their
-//! tags, as tables, for the knowledge base (`hdl/knowledge.sh`).
+//! `verify/knowledge/races.toml`, the rules of `verify/knowledge/rules.toml`, and the assumptions of
+//! the proofs (`verify/knowledge/assumptions.toml`) with ceres-core's harnesses and their
+//! tags, as tables, for the knowledge base (`verify/knowledge/knowledge.sh`).
 //!
 //! Usage: `cargo run -p ceres-test-runner --example facts -- [open|netlist|races|tags|tsv DIR]`
 //! (the first four without an argument).
@@ -21,7 +21,7 @@ const USAGE: &str = "usage: facts [open|netlist|races|tags|tsv DIR]";
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let root = repo_root();
-    let facts = load(&root).expect("doc/facts.toml");
+    let facts = load(&root).expect("verify/knowledge/facts.toml");
     match args.first().map(String::as_str) {
         None => {
             open(&facts);
@@ -182,7 +182,7 @@ fn tsv(facts: &Facts, dir: &Path) {
 
 /// The races and the signals and delays each covers, as tables.
 fn race_tables(dir: &Path) {
-    let races = races::load(&repo_root()).expect("hdl/races.toml");
+    let races = races::load(&repo_root()).expect("verify/knowledge/races.toml");
     table(
         dir,
         "race",
@@ -229,7 +229,7 @@ fn race_tables(dir: &Path) {
 
 /// The rules and the facts and races each explains, as tables.
 fn rule_tables(dir: &Path) {
-    let rules = rules::load(&repo_root()).expect("hdl/rules.toml");
+    let rules = rules::load(&repo_root()).expect("verify/knowledge/rules.toml");
     table(
         dir,
         "rule",
@@ -275,7 +275,7 @@ fn rule_tables(dir: &Path) {
 /// their tags, as tables.
 fn assumption_tables(dir: &Path) {
     let root = repo_root();
-    let assumptions = assumptions::load(&root).expect("doc/assumptions.toml");
+    let assumptions = assumptions::load(&root).expect("verify/knowledge/assumptions.toml");
     table(
         dir,
         "assumption",

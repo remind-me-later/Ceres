@@ -3,7 +3,7 @@
 -- Clocks and resets (the schematic sheet "Clocks and reset").
 --
 -- @hw die: dmg-schematics, category clocks; checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- (../board/chip_tb.vhd).
 --
 -- The DMG's crystal runs at 4 MiHz, and is the chip's clock. The CGB's runs
 -- at 8 MiHz. Halved, it is the 4 MiHz clock of the

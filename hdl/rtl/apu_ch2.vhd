@@ -11,7 +11,7 @@
 -- ticks of 64 Hz.
 --
 -- @hw die: dmg-schematics, category apu-ch2 (sheets "Channel 2" and "NR21
--- to NR24"); checked against dmg-sim (../check/chip_tb.vhd).
+-- to NR24"); checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

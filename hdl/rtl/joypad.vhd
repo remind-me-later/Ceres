@@ -4,7 +4,7 @@
 --
 -- @hw die: dmg-schematics, category joypad (sheet "FF00 JOYP"), and the
 -- bits of FF00 that only test mode uses (category test); checked against
--- dmg-sim (../check/chip_tb.vhd).
+-- dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

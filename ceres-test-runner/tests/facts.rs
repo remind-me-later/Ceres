@@ -1,4 +1,4 @@
-//! The facts list, `doc/facts.toml`, holds together with the repository
+//! The facts list, `verify/knowledge/facts.toml`, holds together with the repository
 //! (see `ceres_test_runner::facts`).
 
 use ceres_test_runner::facts::{load, problems, repo_root};
@@ -6,7 +6,7 @@ use ceres_test_runner::facts::{load, problems, repo_root};
 #[test]
 fn facts_hold_together() {
     let root = repo_root();
-    let facts = load(&root).expect("doc/facts.toml");
+    let facts = load(&root).expect("verify/knowledge/facts.toml");
     let problems = problems(&root, &facts).expect("the repository");
     assert!(problems.is_empty(), "\n{}", problems.join("\n"));
 }
@@ -14,7 +14,8 @@ fn facts_hold_together() {
 #[test]
 fn assumptions_parse() {
     let root = repo_root();
-    let assumptions = ceres_test_runner::assumptions::load(&root).expect("doc/assumptions.toml");
+    let assumptions =
+        ceres_test_runner::assumptions::load(&root).expect("verify/knowledge/assumptions.toml");
     assert!(!assumptions.is_empty(), "no assumptions");
     ceres_test_runner::assumptions::scan(&root).expect("ceres-core's sources");
 }
@@ -22,8 +23,8 @@ fn assumptions_parse() {
 #[test]
 fn races_hold_together() {
     let root = repo_root();
-    let facts = load(&root).expect("doc/facts.toml");
-    let races = ceres_test_runner::races::load(&root).expect("hdl/races.toml");
+    let facts = load(&root).expect("verify/knowledge/facts.toml");
+    let races = ceres_test_runner::races::load(&root).expect("verify/knowledge/races.toml");
     let problems = ceres_test_runner::races::problems(&races, &facts);
     assert!(problems.is_empty(), "\n{}", problems.join("\n"));
 }
@@ -31,9 +32,9 @@ fn races_hold_together() {
 #[test]
 fn rules_hold_together() {
     let root = repo_root();
-    let facts = load(&root).expect("doc/facts.toml");
-    let races = ceres_test_runner::races::load(&root).expect("hdl/races.toml");
-    let rules = ceres_test_runner::rules::load(&root).expect("hdl/rules.toml");
+    let facts = load(&root).expect("verify/knowledge/facts.toml");
+    let races = ceres_test_runner::races::load(&root).expect("verify/knowledge/races.toml");
+    let rules = ceres_test_runner::rules::load(&root).expect("verify/knowledge/rules.toml");
     let problems = ceres_test_runner::rules::problems(&rules, &facts, &races);
     assert!(problems.is_empty(), "\n{}", problems.join("\n"));
 }

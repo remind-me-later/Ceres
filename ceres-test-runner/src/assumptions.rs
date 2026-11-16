@@ -1,4 +1,4 @@
-//! What the proofs against the netlist assume, `doc/assumptions.toml`, and
+//! What the proofs against the netlist assume, `verify/knowledge/assumptions.toml`, and
 //! the `@assumes` and `@discharges` tags of the proofs.
 //!
 //! The proofs are ceres-core's Kani harnesses and the Lean theorems in
@@ -8,7 +8,7 @@
 //! readable model, a mapping of ceres's time onto the netlist's, a
 //! difference the facts record, or a case it leaves out. A harness names
 //! what it assumes, and what it proves for the others, with a tag in the
-//! comment before its `fn`. The knowledge base (`hdl/knowledge/knowledge.dl`)
+//! comment before its `fn`. The knowledge base (`verify/knowledge/knowledge.dl`)
 //! follows them from harness to harness: an assumption that a harness
 //! discharges brings in what that harness rests on.
 
@@ -55,7 +55,7 @@ impl Evidence {
     }
 }
 
-/// One entry of `doc/assumptions.toml` (its header says what each field
+/// One entry of `verify/knowledge/assumptions.toml` (its header says what each field
 /// means).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -72,9 +72,12 @@ pub struct Assumption {
 /// The assumptions, by id.
 pub type Assumptions = BTreeMap<String, Assumption>;
 
-/// Reads `doc/assumptions.toml`.
+/// Reads `verify/knowledge/assumptions.toml`.
 pub fn load(root: &Path) -> Result<Assumptions> {
-    let path = root.join("doc").join("assumptions.toml");
+    let path = root
+        .join("verify")
+        .join("knowledge")
+        .join("assumptions.toml");
     let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }

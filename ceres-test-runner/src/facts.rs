@@ -1,4 +1,4 @@
-//! The facts list, `doc/facts.toml`.
+//! The facts list, `verify/knowledge/facts.toml`.
 //!
 //! It lists the behaviours of the hardware whose evidence is missing or
 //! contradictory, where ceres departs from the DMG-CPU B's netlist, or whose
@@ -189,7 +189,7 @@ impl Need {
     }
 }
 
-/// One entry of `doc/facts.toml` (its header says what each field means).
+/// One entry of `verify/knowledge/facts.toml` (its header says what each field means).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Fact {
@@ -225,9 +225,9 @@ pub fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-/// Reads `doc/facts.toml`.
+/// Reads `verify/knowledge/facts.toml`.
 pub fn load(root: &Path) -> Result<Facts> {
-    let path = root.join("doc").join("facts.toml");
+    let path = root.join("verify").join("knowledge").join("facts.toml");
     let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }

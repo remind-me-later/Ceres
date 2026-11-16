@@ -6,7 +6,7 @@
 -- that the CPU sees.
 --
 -- @hw die: dmg-schematics, category ppu-vram (sheet "VRAM interface");
--- checked against dmg-sim (../check/chip_tb.vhd).
+-- checked against dmg-sim (../board/chip_tb.vhd).
 -- @hw inferred: the CGB's VRAM has two banks of 8 KiB, and its chip keeps
 -- them inside (the DMG's pins become wires to it). MA13 is the bank: VBK's
 -- for the CPU and for OAM DMA, the fetcher's for the PPU. VBK takes writes

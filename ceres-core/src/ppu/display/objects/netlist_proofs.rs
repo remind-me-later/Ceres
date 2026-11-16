@@ -35,7 +35,7 @@
 //! is outside the proof); the CPU addressing OAM during the scan; what the
 //! latches hold as the scan starts, which the sprite fetch of the line
 //! before sets (during a DMA, the DMA's byte: measured with
-//! `hdl/check/dma_fetch.asm`); the scan of line 0 after the LCD turns on;
+//! `hdl/probes/dma_fetch.asm`); the scan of line 0 after the LCD turns on;
 //! and the order of the sprites for the fetch (the sprite store's and
 //! render's).
 

@@ -90,22 +90,22 @@ $(TINYBOOT_CGB): boot/tinyboot_cgb.asm
 	rm -f $(BUILD)/tinyboot_cgb.o
 
 # The stimuli of the APU, the CPU core and the PPU's sprites, for the checks too
-# (check/apu.asm, check/cpu.asm, check/sprites.asm), of STAT at the end
+# (probes/apu.asm, probes/cpu.asm, probes/sprites.asm), of STAT at the end
 # of VBlank, of the LCD turned off as a line begins and of the window on line
-# 0, for compare-ceres.sh (check/stat_vblank_end.asm,
-# check/lcd_off_line_start.asm, check/window_line0_sprite.asm), and of IF's
-# STAT flag at VBlank's end and start, for run-tests.sh (check/stat_dips.asm),
+# 0, for compare-ceres.sh (probes/stat_vblank_end.asm,
+# probes/lcd_off_line_start.asm, probes/window_line0_sprite.asm), and of IF's
+# STAT flag at VBlank's end and start, for run-tests.sh (probes/stat_dips.asm),
 # of the LCD turned on with LYC 0, for compare-ceres.sh
-# (check/lcd_on_lyc0.asm), and of the sprite fetch during OAM DMA and of
-# LCDC's writes and reads, for trace-blocks.sh (check/dma_fetch.asm,
-# check/lcdc.asm), and of the PPU's registers', VRAM's and OAM's reads,
+# (probes/lcd_on_lyc0.asm), and of the sprite fetch during OAM DMA and of
+# LCDC's writes and reads, for trace-blocks.sh (probes/dma_fetch.asm,
+# probes/lcdc.asm), and of the PPU's registers', VRAM's and OAM's reads,
 # and of the bus side's, the timer's, IF's, IE's, the unused I/O
 # addresses' and the APU's, which check themselves and report as
-# check/report.inc says, on the model and on a Game Boy (check/ppu_regs.asm,
-# check/vram_oam.asm, check/bus.asm, check/io_regs.asm, check/sound.asm).
-$(BUILD)/%.gb: check/%.asm check/report.inc
+# probes/report.inc says, on the model and on a Game Boy (probes/ppu_regs.asm,
+# probes/vram_oam.asm, probes/bus.asm, probes/io_regs.asm, probes/sound.asm).
+$(BUILD)/%.gb: probes/%.asm probes/report.inc
 	mkdir -p $(BUILD)
-	rgbasm -I check/ -o $(BUILD)/$*.o $<
+	rgbasm -I probes/ -o $(BUILD)/$*.o $<
 	rgblink -o $@ $(BUILD)/$*.o
 	rgbfix -v -p 0 $@
 
@@ -145,7 +145,7 @@ MODEL  := rtl/clocking.vhd rtl/revisions.vhd rtl/clocks.vhd rtl/divider.vhd rtl/
           rtl/sm83_registers.vhd rtl/sm83_idu.vhd rtl/sm83_alu.vhd rtl/sm83.vhd \
           board/keeper.vhd rtl/dmg_cpu_b.vhd rtl/cgb_cpu.vhd
 BOARD  := board/cartridge.vhd board/gameboy.vhd board/gameboy_tb.vhd
-CHECKS := check/oracle.vhd check/chip_tb.vhd
+CHECKS := board/oracle.vhd board/chip_tb.vhd
 TBS    := chip_tb
 WORK   := $(BUILD)/model
 NVC    := nvc --std=2008 -H 64m --work=$(abspath $(WORK))/work

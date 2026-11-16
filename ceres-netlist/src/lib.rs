@@ -9,7 +9,7 @@
 //! through them, phase by phase, and finds where one parts from the model;
 //! ceres-core's Kani proofs (its `netlist_proofs.rs` files, which use this
 //! crate under `cfg(kani)` only) prove ceres's blocks alike to them. What the
-//! proofs take as given is in `doc/assumptions.toml`.
+//! proofs take as given is in `verify/knowledge/assumptions.toml`.
 //!
 //! The crate is written so that Aeneas (through Charon) can take it to Lean
 //! for proofs: booleans combine with `&` and `|`, not `&&` and `||` (each

@@ -13,7 +13,7 @@
 -- @hw die: dmg-schematics, categories ppu-cycles, ppu-bgscroll,
 -- ppu-window, ppu-bgfifo, ppu-objfifo, ppu-mux, ppu-pal, the sprite fetch
 -- of ppu-ycomp, the sprite shifters of ppu-xcomp, and the pixel counter of
--- ppu-stat; checked against dmg-sim (../check/chip_tb.vhd).
+-- ppu-stat; checked against dmg-sim (../board/chip_tb.vhd).
 --
 -- The CGB adds the colours (@hw inferred, each where it is; REVISION picks
 -- the chip, and the DMG's code is the netlist's):

@@ -5,7 +5,7 @@
 -- CPU core.
 --
 -- @hw die: dmg-schematics, category int (sheet "FF0F interrupts"); checked
--- against dmg-sim (../check/chip_tb.vhd).
+-- against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

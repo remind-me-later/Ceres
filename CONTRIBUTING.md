@@ -124,16 +124,16 @@ cargo run --release --package ceres-test-runner --example gambatte_runner -- bot
 
 #### The facts list
 
-`doc/facts.toml` lists the behaviours of the hardware whose evidence is
-missing or contradictory, where ceres departs from the DMG-CPU B's netlist,
-or whose outcome hangs on a race, with the test ROMs and the open questions
-of `doc/hardware-tests.md` that each rests on; its header says what each
-field means. Code that implements a fact says so in a comment, `@fact <id>`.
-The test `facts` checks that the list holds together: that a departure from
-the netlist rests on a hardware test or an open question, that the ROMs, the
-open questions and the tagged facts exist, and that every open question is a
-fact's. When a change departs from the netlist, settles a question or adds
-one, change the list with it.
+`verify/knowledge/facts.toml` lists the behaviours of the hardware whose
+evidence is missing or contradictory, where ceres departs from the DMG-CPU B's
+netlist, or whose outcome hangs on a race, with the test ROMs and the open
+questions of `doc/hardware-tests.md` that each rests on; its header says what
+each field means. Code that implements a fact says so in a comment, `@fact
+<id>`. The test `facts` checks that the list holds together: that a departure
+from the netlist rests on a hardware test or an open question, that the ROMs,
+the open questions and the tagged facts exist, and that every open question is a
+fact's. When a change departs from the netlist, settles a question or adds one,
+change the list with it.
 
 ```bash
 cargo test --package ceres-test-runner --test facts
@@ -236,6 +236,6 @@ dmg-sim submodule or Icarus, run `make smoke` and the test ROMs again.
 it, check it against dmg-sim with [nvc](https://github.com/nickg/nvc):
 
 ```bash
-BOOT=fast PHASES=1 TESTS=check/roms.txt ./run-tests.sh   # record, once
+BOOT=fast PHASES=1 TESTS=probes/roms.txt ./run-tests.sh   # record, once
 make check                                               # check the model
 ```

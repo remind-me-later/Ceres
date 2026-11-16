@@ -6,7 +6,7 @@
 --
 -- @hw die: dmg-schematics, categories ppu-lcd and ppu-stat (sheets "LCD"
 -- and "FF41 STAT, FF44 LY, FF45 LYC"); checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- (../board/chip_tb.vhd).
 --
 -- The CGB keeps the DMG's counters and sources, and moves some of what the
 -- CPU sees of them, and when its writes take effect, by a few half dots
@@ -444,7 +444,7 @@ begin
 	-- through two gates (TOLU, TAPA), here in one expression, so that the OR
 	-- does not drop for a delta cycle between them and set the flag again,
 	-- as on the DMG (Gambatte's m2irq_ly00_lcdstat30: no interrupt; dmg-sim
-	-- takes the dip, ../check/stat_dips.asm). At VBlank's start, LY = LYC's
+	-- takes the dip, ../probes/stat_dips.asm). At VBlank's start, LY = LYC's
 	-- flag falls a flip-flop before mode 1 rises: the OR drops for that
 	-- time, and its rise sets the flag again, as on the DMG (Gambatte's
 	-- lycint143_m1irq_2: an interrupt).

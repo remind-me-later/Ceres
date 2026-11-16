@@ -3,7 +3,7 @@
 -- The timer: TIMA (FF05), TMA (FF06) and TAC (FF07).
 --
 -- @hw die: dmg-schematics, category timer (sheet "FF05-FF07 timer");
--- checked against dmg-sim (../check/chip_tb.vhd).
+-- checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

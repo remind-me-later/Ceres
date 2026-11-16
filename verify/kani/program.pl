@@ -1,9 +1,9 @@
 #!/usr/bin/env perl
 # A harness's goto program, as `goto-instrument --show-goto-functions`
-# dumps it, in a canonical form (hdl/kani.sh hashes it): two compilations of
+# dumps it, in a canonical form (verify/kani/kani.sh hashes it): two compilations of
 # the same program give the same text, whatever else changed in the crate.
 #
-#   goto-instrument --show-goto-functions HARNESS.out | kani-program.pl
+#   goto-instrument --show-goto-functions HARNESS.out | program.pl
 #
 # rustc numbers the crate's static allocations and Kani its globals across
 # the whole crate (`AllocId(N, ...)`, `ceres_core::global::N`), so an edit

@@ -13,7 +13,7 @@
 ;   ./run-tests.sh vram_oam       (dmg-sim; MODEL=1: the model)
 ;   TEST=mooneye ./trace-blocks.sh hdl/build/vram_oam.gb 0.1
 ;
-;   rgbasm -I check/ -o vram_oam.o vram_oam.asm && rgblink -o vram_oam.gb vram_oam.o && rgbfix -v -p 0 vram_oam.gb
+;   rgbasm -I probes/ -o vram_oam.o vram_oam.asm && rgblink -o vram_oam.gb vram_oam.o && rgbfix -v -p 0 vram_oam.gb
 
 INCLUDE "report.inc"
 

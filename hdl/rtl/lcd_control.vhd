@@ -4,7 +4,7 @@
 --
 -- @hw die: dmg-schematics, categories ppu-control and ppu-decode (sheet
 -- "PPU decode & video control"); checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

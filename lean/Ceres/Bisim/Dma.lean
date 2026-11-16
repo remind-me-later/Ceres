@@ -10,7 +10,7 @@ hypothesis `KaniDma`. The DMA takes its own access and none of the timer's
 or IF's outputs, so it is wired after them (`Steps.wire`), looking only at
 the inputs (`Steps.weaken_in`). Ceres's side of the pair is the timer's and
 IF's M-cycle as ceres runs them, then the DMA's run of the M-cycle's four
-T-cycles, which is how `Gb::run_dma` runs it (`doc/assumptions.toml`:
+T-cycles, which is how `Gb::run_dma` runs it (`verify/knowledge/assumptions.toml`:
 dma-one-run-per-m-cycle).
 -/
 

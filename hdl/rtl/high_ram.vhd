@@ -3,7 +3,7 @@
 -- High RAM: 127 bytes at FF80 to FFFE.
 --
 -- @hw die: dmg-schematics, category hram; checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

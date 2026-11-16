@@ -8,7 +8,7 @@
 --
 -- @hw die: dmg-schematics, category ppu-oam (sheet "OAM"), the latches of
 -- ppu-ycomp and ppu-xcomp, and the RAM cells oam_a and oam_b (dmg-sim's
--- simplified SRAM); checked against dmg-sim (../check/chip_tb.vhd).
+-- simplified SRAM); checked against dmg-sim (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

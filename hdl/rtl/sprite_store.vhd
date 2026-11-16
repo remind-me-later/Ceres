@@ -7,7 +7,7 @@
 -- @hw die: dmg-schematics, categories ppu-objreg, ppu-xcomp and ppu-xprio
 -- (sheets "Sprite store", "Sprite X matchers" and "Sprite X priority"),
 -- and the index register of ppu-oam; checked against dmg-sim
--- (../check/chip_tb.vhd).
+-- (../board/chip_tb.vhd).
 
 library ieee;
 use ieee.std_logic_1164.all;

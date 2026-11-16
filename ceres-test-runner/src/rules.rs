@@ -1,9 +1,9 @@
-//! The rules of the readable model, `hdl/rules.toml`.
+//! The rules of the readable model, `verify/knowledge/rules.toml`.
 //!
 //! Each entry is a rule that `hdl/rtl` needs beyond the die's connectivity
 //! to do what the hardware does: the outcome of a width race, a gate or a
 //! latch the die does not show, what a RAM's cells or the analogue side do,
-//! the power-on state, for the models it names. The knowledge base (`hdl/knowledge.sh`) checks
+//! the power-on state, for the models it names. The knowledge base (`verify/knowledge/knowledge.sh`) checks
 //! that every fact that needs a rule has one; [`problems`] checks the
 //! entries against the facts and the races.
 
@@ -75,7 +75,7 @@ impl Status {
     }
 }
 
-/// One entry of `hdl/rules.toml` (its header says what each field means).
+/// One entry of `verify/knowledge/rules.toml` (its header says what each field means).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Rule {
@@ -96,9 +96,9 @@ pub struct Rule {
 /// The rules, by id.
 pub type Rules = BTreeMap<String, Rule>;
 
-/// Reads `hdl/rules.toml`.
+/// Reads `verify/knowledge/rules.toml`.
 pub fn load(root: &Path) -> Result<Rules> {
-    let path = root.join("hdl").join("rules.toml");
+    let path = root.join("verify").join("knowledge").join("rules.toml");
     let text = fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
     toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
 }

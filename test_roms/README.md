@@ -77,7 +77,7 @@ lines.
 - **LCDC bit 2 written at the end of a sprite fetch** (the glitch of the
   write forced a bit of the address of the VRAM bus for 1 ns in the model):
   it shows on the pins only, never in a picture, so it is covered by the
-  checks against dmg-sim (`hdl/check/roms.txt`), not by a ROM that shows a
+  checks against dmg-sim (`hdl/probes/roms.txt`), not by a ROM that shows a
   picture.
 - **A window that starts a pixel late** in `m3_window_timing` and
   `m3_window_timing_wx_0`, and the end of a line of
