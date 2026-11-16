@@ -278,7 +278,7 @@ pub(crate) fn ceres_first_dot(l: &mut Mode3Loop) {
 
 /// The first dot from the netlist's state before it, and ceres's after the
 /// line before (its position back at the lead-in's start, and no blank pixel
-/// inserted: the window was idle), with the mixer's SCX in the dot before
+/// inserted; the window idle or armed), with the mixer's SCX in the dot before
 /// (`last_scx`) and in this one: both related.
 pub(crate) fn start_agrees(
     l: &mut Mode3Loop,
@@ -287,17 +287,7 @@ pub(crate) fn start_agrees(
     rising: EdgeInputs,
     falling: EdgeInputs,
 ) -> bool {
-    let before = !net.inputs.clk
-        & !l.window_enabled
-        & quiet(&net.inputs, l)
-        & latch_holds(net)
-        & (*net == before_start(net))
-        & (l.pace.bg.position == pos(-16))
-        & !l.pace.bg.insert_blank
-        & store_holds(net)
-        & window_agrees(l, net, Ghost::at_rest(&l.pace.bg))
-        & starting_objects(l, net);
-    if !(before
+    if !(start_before(l, net)
         & rising.clk
         & !falling.clk
         & quiet(&rising, l)
@@ -315,6 +305,23 @@ pub(crate) fn start_agrees(
         ..Ghost::at_rest(&l.pace.bg)
     };
     related(l, net, rest.after(snapshot, &l.pace))
+}
+
+/// The two sides before the loop's first dot, as `start_agrees` takes
+/// them: the netlist as `before_start` has it, ceres's position back at the
+/// lead-in's start with no blank pixel inserted, the store holding ceres's
+/// objects, and the window off or armed on both sides (`window_agrees`: the
+/// line starts armed when WY matched in the frame on both, task 1.3).
+pub(crate) fn start_before(l: &Mode3Loop, net: &NetPipeline) -> bool {
+    !net.inputs.clk
+        & quiet(&net.inputs, l)
+        & latch_holds(net)
+        & (*net == before_start(net))
+        & (l.pace.bg.position == pos(-16))
+        & !l.pace.bg.insert_blank
+        & store_holds(net)
+        & window_agrees(l, net, Ghost::at_rest(&l.pace.bg))
+        & starting_objects(l, net)
 }
 
 /// The WX the armed window takes. Below 2 the window starts in the lead-in,

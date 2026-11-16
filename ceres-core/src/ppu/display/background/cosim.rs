@@ -10,7 +10,7 @@
 use {
     super::check::{
         Before, Ghost, INSIDE, Mode3Loop, before_start, ceres_dot, ceres_first_dot, expected,
-        related, signed, step_agrees,
+        related, signed, start_agrees, start_before, step_agrees,
     },
     crate::ppu::display::{
         Pace,
@@ -574,5 +574,47 @@ fn window_start_table() {
             println!("{row}");
         }
         println!();
+    }
+}
+
+/// The lines the walks start are lines `check::start_agrees` takes: its
+/// preconditions hold (so its claim is not vacuous there), and the first
+/// dot leaves the two sides related, idle with objects or armed at any WX
+/// in the relation's bounds (task 1.3: a line starts armed when WY matched
+/// in the frame on both sides).
+#[test]
+fn lines_start_as_start_agrees_takes_them() {
+    let mut lines = Vec::new();
+    for scx in 0..8 {
+        for objects in [&[][..], &[8][..], &[20, 20][..], &[8, 16, 17, 100, 166][..]] {
+            lines.push(Line {
+                scx,
+                wx: None,
+                objects,
+            });
+        }
+        for wx in 2..=165 {
+            lines.push(Line {
+                scx,
+                wx: Some(wx),
+                objects: &[],
+            });
+        }
+    }
+    for line in &lines {
+        let mut w = Walk::start(line);
+        let what = format!(
+            "SCX {}, WX {:?}, objects {:?}",
+            line.scx, line.wx, line.objects
+        );
+        assert!(
+            start_before(&w.l, &w.net),
+            "{what}: the start is not as start_agrees takes it"
+        );
+        let (rising, falling) = (inputs(&w.l, true), inputs(&w.l, false));
+        assert!(
+            start_agrees(&mut w.l, &mut w.net, line.scx, rising, falling),
+            "{what}"
+        );
     }
 }

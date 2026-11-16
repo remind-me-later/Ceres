@@ -51,6 +51,18 @@ const fn window_idle(r: &NetRender) -> bool {
         && !r.sovy
 }
 
+/// The window is armed and not started on the line: LCDC's bit 5 set, WY
+/// matched in the frame (REJO), no WX match, not in it.
+const fn window_armed(r: &NetRender) -> bool {
+    (r.inputs.lcdc & 0x20 != 0)
+        && r.wy_latch
+        && !r.in_window
+        && !r.pyco
+        && !r.nunu
+        && !r.rydy
+        && !r.sovy
+}
+
 /// The line timing's half dot at which vclk rises (after its edge).
 const LINE_END_H: u32 = 904;
 const LINE_H: u32 = 912;
@@ -138,6 +150,8 @@ struct Found {
     in_mode3: u64,
     first: Option<String>,
     starts: u64,
+    /// Of them, with the window armed.
+    armed_starts: u64,
     first_start: Option<String>,
     strobes: u64,
     first_strobe: Option<String>,
@@ -167,6 +181,7 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
         in_mode3: 0,
         first: None,
         starts: 0,
+        armed_starts: 0,
         first_start: None,
         strobes: 0,
         first_strobe: None,
@@ -213,7 +228,7 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
             }
             (None, _, _) => None,
         };
-        if !before.mode3 && after.mode3 && window_idle(after) {
+        if !before.mode3 && after.mode3 && (window_idle(after) || window_armed(after)) {
             rose_at = h;
         }
         if let (Some(BEFORE_START_H), Some(rose)) = (h, rose_at) {
@@ -226,10 +241,18 @@ fn check(rom: Vec<u8>, boot: Vec<u8>, edges: u64, name: &str) -> Found {
             pipeline.xs = BEFORE_START.xs;
             pipeline.inputs = BEFORE_START.inputs;
             let quiet = !after.inputs.ppu_reset && !after.inputs.stop_scan && !after.inputs.clk;
-            if quiet && window_idle(after) && run.chip.lcd.ly < 144 {
+            // Armed, the window's latches are the frame's (WY's match):
+            // `before_start` takes them from the line before, as here.
+            let armed = window_armed(after);
+            let expected = NetPipeline {
+                sary: pipeline.sary,
+                wy_latch: pipeline.wy_latch,
+                ..BEFORE_START
+            };
+            if quiet && (window_idle(after) || armed) && run.chip.lcd.ly < 144 {
                 found.starts += 1;
-                if (rose != MODE3_RISE_H || pipeline != BEFORE_START) && found.first_start.is_none()
-                {
+                found.armed_starts += u64::from(armed);
+                if (rose != MODE3_RISE_H || pipeline != expected) && found.first_start.is_none() {
                     found.first_start = Some(format!(
                         "edge {} ly {}: mode 3 rose at h = {rose}\n  pipeline {:?}",
                         run.edge,
@@ -371,13 +394,14 @@ fn pipeline_follows_render() {
     let mut differ = 0;
     for (_, found) in &results {
         eprintln!(
-            "{}: {} edges compared, {} in mode 3, {} with the window, {} sprites fetched, {} starts, {} SCX writes{}{}{}",
+            "{}: {} edges compared, {} in mode 3, {} with the window, {} sprites fetched, {} starts ({} armed), {} SCX writes{}{}{}",
             found.rom,
             found.compared,
             found.in_mode3,
             found.windows,
             found.sprites,
             found.starts,
+            found.armed_starts,
             found.strobes,
             if found.first.is_some() {
                 ", DIFFERS"

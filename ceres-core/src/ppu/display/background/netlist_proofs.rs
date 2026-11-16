@@ -71,8 +71,9 @@
 //! `HBlankStart`.
 //!
 //! What it does not cover yet: the window's start with the objects on, the
-//! pixels the window draws, how it is armed at a line's start (WY's match,
-//! and a line's start with the window armed), WX 0, 1 and 166, and
+//! pixels the window draws, how it is armed (ceres's WY match against the
+//! netlist's latch: a line that starts armed is covered), WX 0, 1 and 166,
+//! and
 //! writes of WX and LCDC's window bit (the loop stops ceres's window as a
 //! tile's fetch starts with the bit clear, `Pace::window_before_fetch`);
 //! objects at X 0 to 7 (they match in the lead-in), an object's mode 0 pulse
