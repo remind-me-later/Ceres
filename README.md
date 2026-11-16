@@ -110,9 +110,12 @@ upstream.
 - [Debugger](doc/debugger.md): a console debugger in the style of SameBoy's.
 - [Tracing](doc/tracing.md): a per-instruction trace in Gameboy Doctor's
   format, to diff against other emulators.
-- [Facts](verify/knowledge/facts.toml): what is known about the hardware where the
-  evidence is missing or contradictory, where ceres departs from the
-  DMG-CPU B's netlist, or where a race decides, and what each rests on.
+- [Verification](doc/verification.md): how the oracle, the readable model,
+  the transcriptions, the co-simulations, the Kani proofs and the Lean proofs
+  fit together.
+- [Facts](verify/knowledge/facts.toml): what is known about the hardware
+  where the evidence is missing or contradictory, where ceres departs from
+  the DMG-CPU B's netlist, or where a race decides, and what each rests on.
 - [Hardware tests](doc/hardware-tests.md): what is left to measure on a
   real DMG or CGB.
 
@@ -125,6 +128,7 @@ upstream.
 - `ceres-winit` contains the `winit` frontend.
 - `ceres-egui` contains the `egui` frontend.
 - `ceres-gtk` contains the `gtk` frontend.
+- `ceres-test-runner` runs the test ROMs on ceres.
 - `ceres-netlist` contains Rust transcriptions of the blocks of the readable
   netlist model (`hdl/rtl`), which ceres-core's Kani proofs hold ceres to,
   checked against the model's traces (see
@@ -132,6 +136,13 @@ upstream.
 - `hdl` runs test ROMs on dmg-sim, the gate-level simulation of the DMG-CPU B
   netlist, as the reference for how the hardware behaves (see
   [hdl/README.md](hdl/README.md)).
+- `verify/kani` runs ceres-core's Kani proofs and keeps their verdicts (see
+  [verify/kani/README.md](verify/kani/README.md)); ceres-core's blocks hold
+  their step relations (`relation.rs`), co-simulations (`cosim.rs`) and
+  proofs (`bisim.rs`, `proofs.rs`).
+- `verify/knowledge` is the knowledge base: the facts, the races, the rules
+  and what the proofs assume, with the crate `ceres-knowledge` that checks
+  them (see [verify/knowledge/README.md](verify/knowledge/README.md)).
 - `lean` contains Lean proofs, built on the Kani proofs, that ceres's
   blocks are bisimilar to those transcriptions (see
   [lean/README.md](lean/README.md)).
