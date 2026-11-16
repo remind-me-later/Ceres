@@ -4,13 +4,15 @@ open Aeneas Aeneas.Std Result
 /-!
 # A block stepped several times
 
-A block proved a dot at a time (mode 3's pipeline) meets blocks proved an
-M-cycle at a time: `iterate` runs a step over a list of inputs, and
-`Steps.iterate` carries the one-step claim over to the run.
+A block proved a step at a time meets blocks proved over a longer span:
+`iterate` runs a step over a list of inputs, and `Steps.iterate` carries
+the one-step claim over to the run. The OAM scan, proved a sprite's window
+at a time (`Scan.lean`), runs over a line's windows so; in the chip's
+outline (`lean/Sketch`), mode 3's pipeline, proved a dot at a time, runs
+over an M-cycle's dots.
 -/
 
-namespace ceres_core.sketch
-open ceres_core.bisim
+namespace ceres_core.bisim
 
 /-- A block's step over a list of inputs, in order: the outputs, and the
 last state. -/
@@ -52,9 +54,9 @@ theorem Steps.iterate {Sn Sc In Ic On Oc : Type}
       obtain ⟨-, rfl⟩ := h2
       exact hK
     · refine Or.inr ⟨o :: os, n'', p :: ps, c'', ?_, ?_, List.Forall₂.cons ho hos, hr2⟩
-      · unfold ceres_core.sketch.iterate
+      · unfold ceres_core.bisim.iterate
         simp [hn, hn2]
-      · unfold ceres_core.sketch.iterate
+      · unfold ceres_core.bisim.iterate
         simp [hc, hc2]
 
-end ceres_core.sketch
+end ceres_core.bisim

@@ -121,7 +121,7 @@ const fn net_edge(net: &mut NetSide, h: i32, line: Line, y: u8) {
 }
 
 /// Ceres's read of the next sprite, whose Y is `y`.
-const fn ceres_read(ceres: &mut CeresSide, line: Line, y: u8) {
+pub(crate) const fn ceres_read(ceres: &mut CeresSide, line: Line, y: u8) {
     let (seen, _) = ceres.latches.latch(Some((y, 0)));
     if on_line(seen, line.ly, line.tall) & (ceres.found < MAX_OBJECTS_PER_LINE) {
         ceres.first[ceres.found] = Some(ceres.read);
@@ -130,14 +130,20 @@ const fn ceres_read(ceres: &mut CeresSide, line: Line, y: u8) {
     ceres.read += 1;
 }
 
-/// The netlist's window `j` (edges `4j - 2` to `4j + 1`), OAM giving sprite
-/// `j + 1`'s Y, then ceres's read of it.
-pub(crate) const fn step(net: &mut NetSide, ceres: &mut CeresSide, line: Line, j: u8, y: u8) {
+/// The netlist's window `j`: its edges `4j - 2` to `4j + 1`, OAM giving
+/// sprite `j + 1`'s Y.
+pub(crate) const fn net_window(net: &mut NetSide, line: Line, j: u8, y: u8) {
     let h = 4 * j as i32 - 2;
     net_edge(net, h, line, y);
     net_edge(net, h + 1, line, y);
     net_edge(net, h + 2, line, y);
     net_edge(net, h + 3, line, y);
+}
+
+/// The netlist's window `j`, then ceres's read of sprite `j + 1`: the two
+/// sides' steps, which Lean also takes apart (`Ceres/Bisim/Scan.lean`).
+pub(crate) const fn step(net: &mut NetSide, ceres: &mut CeresSide, line: Line, j: u8, y: u8) {
+    net_window(net, line, j, y);
     ceres_read(ceres, line, y);
 }
 

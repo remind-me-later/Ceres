@@ -2967,14 +2967,12 @@ def ppu.display.objects.check.ceres_read
   let i1 ← ceres.read + 1#u8
   ok { latches := ol, read := i1, first := a, found := i }
 
-/-- [ceres_core::ppu::display::objects::check::step]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 135:0-142:1 -/
-def ppu.display.objects.check.step
+/-- [ceres_core::ppu::display::objects::check::net_window]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 135:0-141:1 -/
+def ppu.display.objects.check.net_window
   (net : ppu.display.objects.check.NetSide)
-  (ceres : ppu.display.objects.check.CeresSide)
   (line : ppu.display.objects.check.Line) (j : Std.U8) (y : Std.U8) :
-  Result (ppu.display.objects.check.NetSide ×
-    ppu.display.objects.check.CeresSide)
+  Result ppu.display.objects.check.NetSide
   := do
   let i ← lift (UScalar.hcast .I32 j)
   let i1 ← 4#i32 * i
@@ -2985,12 +2983,23 @@ def ppu.display.objects.check.step
   let i3 ← h + 2#i32
   let net3 ← ppu.display.objects.check.net_edge net2 i3 line y
   let i4 ← h + 3#i32
-  let net4 ← ppu.display.objects.check.net_edge net3 i4 line y
+  ppu.display.objects.check.net_edge net3 i4 line y
+
+/-- [ceres_core::ppu::display::objects::check::step]:
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 145:0-148:1 -/
+def ppu.display.objects.check.step
+  (net : ppu.display.objects.check.NetSide)
+  (ceres : ppu.display.objects.check.CeresSide)
+  (line : ppu.display.objects.check.Line) (j : Std.U8) (y : Std.U8) :
+  Result (ppu.display.objects.check.NetSide ×
+    ppu.display.objects.check.CeresSide)
+  := do
+  let net1 ← ppu.display.objects.check.net_window net line j y
   let ceres1 ← ppu.display.objects.check.ceres_read ceres line y
-  ok (net4, ceres1)
+  ok (net1, ceres1)
 
 /-- [ceres_core::ppu::display::objects::check::same_slot]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 146:0-152:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 152:0-158:1 -/
 def ppu.display.objects.check.same_slot
   (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
   match a with
@@ -3002,7 +3011,7 @@ def ppu.display.objects.check.same_slot
               | some y => ok (x = y)
 
 /-- [ceres_core::ppu::display::objects::check::slots_are]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 159:4-163:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 165:4-169:5 -/
 @[rust_loop_body]
 def ppu.display.objects.check.slots_are_loop.body
   (net : ppu.display.objects.check.NetSide) (n : Std.Usize)
@@ -3025,7 +3034,7 @@ def ppu.display.objects.check.slots_are_loop.body
   else ok (done ok1)
 
 /-- [ceres_core::ppu::display::objects::check::slots_are]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 159:4-163:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 165:4-169:5 -/
 @[rust_loop]
 def ppu.display.objects.check.slots_are_loop
   (net : ppu.display.objects.check.NetSide)
@@ -3039,7 +3048,7 @@ def ppu.display.objects.check.slots_are_loop
     (ceres, ok1, i)
 
 /-- [ceres_core::ppu::display::objects::check::slots_are]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 156:0-165:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 162:0-171:1 -/
 @[reducible]
 def ppu.display.objects.check.slots_are
   (net : ppu.display.objects.check.NetSide)
@@ -3049,7 +3058,7 @@ def ppu.display.objects.check.slots_are
   ppu.display.objects.check.slots_are_loop net ceres n true 0#usize
 
 /-- [ceres_core::ppu::display::objects::check::unpack]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 190:0-195:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 196:0-201:1 -/
 def ppu.display.objects.check.unpack
   (slot : Option Std.U8) : Result (Bool × Std.U8) := do
   match slot with
@@ -3057,7 +3066,7 @@ def ppu.display.objects.check.unpack
   | some index => ok (true, index)
 
 /-- [ceres_core::ppu::display::objects::check::list_is_sound]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 173:4-184:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 179:4-190:5 -/
 @[rust_loop_body]
 def ppu.display.objects.check.list_is_sound_loop.body
   (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
@@ -3078,7 +3087,7 @@ def ppu.display.objects.check.list_is_sound_loop.body
   else ok (done ok1)
 
 /-- [ceres_core::ppu::display::objects::check::list_is_sound]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 173:4-184:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 179:4-190:5 -/
 @[rust_loop]
 def ppu.display.objects.check.list_is_sound_loop
   (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
@@ -3091,7 +3100,7 @@ def ppu.display.objects.check.list_is_sound_loop
     (ok1, last, i2)
 
 /-- [ceres_core::ppu::display::objects::check::list_is_sound]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 169:0-186:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 175:0-192:1 -/
 @[reducible]
 def ppu.display.objects.check.list_is_sound
   (ceres : ppu.display.objects.check.CeresSide) : Result Bool := do
@@ -3100,7 +3109,7 @@ def ppu.display.objects.check.list_is_sound
     (-1)#i32 0#usize
 
 /-- [ceres_core::ppu::display::objects::check::related]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 204:0-235:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 210:0-241:1 -/
 def ppu.display.objects.check.related
   (net : ppu.display.objects.check.NetSide)
   (ceres : ppu.display.objects.check.CeresSide)
@@ -3135,7 +3144,7 @@ def ppu.display.objects.check.related
     ppu.display.objects.MAX_OBJECTS_PER_LINE)) = ((ceres.found = i4) && b)))
 
 /-- [ceres_core::ppu::display::objects::check::step_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 239:0-246:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 245:0-252:1 -/
 def ppu.display.objects.check.step_agrees
   (net : ppu.display.objects.check.NetSide)
   (ceres : ppu.display.objects.check.CeresSide)
@@ -3151,7 +3160,7 @@ def ppu.display.objects.check.step_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::objects::check::NO_SPRITES]
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 250:0-250:98 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 256:0-256:98 -/
 @[global_simps, irreducible]
 def ppu.display.objects.check.NO_SPRITES : Array (Option Std.U8) 10#usize :=
   Array.make 10#usize [
@@ -3159,7 +3168,7 @@ def ppu.display.objects.check.NO_SPRITES : Array (Option Std.U8) 10#usize :=
     ]
 
 /-- [ceres_core::ppu::display::objects::check::net_at_line_end]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 255:0-275:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 261:0-281:1 -/
 def ppu.display.objects.check.net_at_line_end
   (count : Std.U8) (not_saving : Bool) (held : Std.U8) :
   Result ppu.display.objects.check.NetSide
@@ -3184,7 +3193,7 @@ def ppu.display.objects.check.net_at_line_end
     }
 
 /-- [ceres_core::ppu::display::objects::check::ceres_at_line_end]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 278:0-285:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 284:0-291:1 -/
 def ppu.display.objects.check.ceres_at_line_end
   (held : Std.U8) : Result ppu.display.objects.check.CeresSide := do
   ok
@@ -3196,7 +3205,7 @@ def ppu.display.objects.check.ceres_at_line_end
     }
 
 /-- [ceres_core::ppu::display::objects::check::lead_in]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 291:0-309:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 297:0-315:1 -/
 def ppu.display.objects.check.lead_in
   (net : ppu.display.objects.check.NetSide)
   (ceres : ppu.display.objects.check.CeresSide)
@@ -3227,7 +3236,7 @@ def ppu.display.objects.check.lead_in
   ok (net13, ceres3)
 
 /-- [ceres_core::ppu::display::objects::check::lead_in_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 313:0-327:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 319:0-333:1 -/
 def ppu.display.objects.check.lead_in_agrees
   (count : Std.U8) (not_saving : Bool) (held : Std.U8)
   (line : ppu.display.objects.check.Line) (ys : Array Std.U8 4#usize) :
@@ -3242,7 +3251,7 @@ def ppu.display.objects.check.lead_in_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::objects::check::tail]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 333:4-336:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 339:4-342:5 -/
 @[rust_loop_body]
 def ppu.display.objects.check.tail_loop.body
   (line : ppu.display.objects.check.Line) (y39 : Std.U8)
@@ -3258,7 +3267,7 @@ def ppu.display.objects.check.tail_loop.body
   else ok (done net)
 
 /-- [ceres_core::ppu::display::objects::check::tail]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 333:4-336:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 339:4-342:5 -/
 @[rust_loop]
 def ppu.display.objects.check.tail_loop
   (net : ppu.display.objects.check.NetSide)
@@ -3271,7 +3280,7 @@ def ppu.display.objects.check.tail_loop
     (net, h)
 
 /-- [ceres_core::ppu::display::objects::check::tail]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 331:0-337:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 337:0-343:1 -/
 @[reducible]
 def ppu.display.objects.check.tail
   (net : ppu.display.objects.check.NetSide)
@@ -3281,7 +3290,7 @@ def ppu.display.objects.check.tail
   ppu.display.objects.check.tail_loop net line y39 154#i32
 
 /-- [ceres_core::ppu::display::objects::check::tail_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 342:0-360:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 348:0-366:1 -/
 def ppu.display.objects.check.tail_agrees
   (net : ppu.display.objects.check.NetSide)
   (ceres : ppu.display.objects.check.CeresSide)
@@ -3300,7 +3309,7 @@ def ppu.display.objects.check.tail_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::objects::check::scan]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 376:4-379:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 382:4-385:5 -/
 @[rust_loop_body]
 def ppu.display.objects.check.scan_loop.body
   (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize)
@@ -3321,7 +3330,7 @@ def ppu.display.objects.check.scan_loop.body
   else ok (done (net, ceres))
 
 /-- [ceres_core::ppu::display::objects::check::scan]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 376:4-379:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 382:4-385:5 -/
 @[rust_loop]
 def ppu.display.objects.check.scan_loop
   (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize)
@@ -3336,7 +3345,7 @@ def ppu.display.objects.check.scan_loop
     (net, ceres, j)
 
 /-- [ceres_core::ppu::display::objects::check::scan]:
-    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 365:0-384:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/check.rs', lines 371:0-390:1 -/
 def ppu.display.objects.check.scan
   (count : Std.U8) (not_saving : Bool) (held : Std.U8)
   (line : ppu.display.objects.check.Line) (ys : Array Std.U8 40#usize) :

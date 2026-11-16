@@ -58,8 +58,13 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   windows 2 to 38 (`scan_loop_related`, by induction, with Aeneas's `step`
   tactic) and puts the three together: a whole scan of a visible line,
   with any Ys, leaves ceres's first ten sprites in the netlist's slots, and
-  the scan stopped (`scan_agrees`). It is not wired into the chip's outline
-  yet, where the sprite store is part of mode 3's hypothesis.
+  the scan stopped (`scan_agrees`). The window is also a block in the
+  framework's form (`scan_steps`, the netlist's window and ceres's read
+  apart, a window past 38 a known difference), and `Steps.iterate` runs it
+  over windows (`scan_windows`).
+- `Ceres/Bisim/Iterate.lean`: `Steps.iterate`, a block that steps one input
+  at a time steps over a list of them (the scan over a line's windows; in
+  the outline, mode 3's pipeline over an M-cycle's dots).
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).
@@ -71,9 +76,6 @@ the hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
 block's claim as a hypothesis rather than a proof. Nothing in it names the
 emulator's types yet.
 
-- `Sketch/Iterate.lean`: `Steps.iterate`, a block that steps one input at a
-  time steps over a list of them (mode 3's pipeline, proved a dot at a time,
-  over an M-cycle's dots).
 - `Sketch/Close.lean`: `Steps.close`, a block closed with a driver that
   gives its input from its own state and takes its output back (the CPU and
   the blocks on its bus, the loop cut at the CPU's state).
@@ -92,6 +94,13 @@ emulator's types yet.
   `2d` and `2d + 1` and mode 3 ends at the second (the real input names a
   half dot, and an end at an even one is a known difference there), and
   mode 3 ends at most once in an M-cycle (the real input holds one).
+- `Sketch/Line.lean`: a line's start, the OAM scan before mode 3. The scan
+  is the real, proved one (`scan_agrees`), and mode 3's start a hypothesis
+  (`hStart`: from the scan's end, ceres's first ten sprites in the
+  netlist's slots, mode 3's states are related; Kani's
+  `netlist_mode3_start` for the pipeline): `scan_then_mode3`. A line's dots
+  are not yet routed between the two blocks in `chip_agrees`, whose `hM3`
+  still stands for the scan's dots too.
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
   axioms, with no `sorry`.
 

@@ -1,4 +1,4 @@
-import Ceres.Bisim.Compose
+import Ceres.Bisim.Iterate
 import Ceres.Gen.Funs
 open Aeneas Aeneas.Std Result ceres_core.bisim
 
@@ -158,5 +158,72 @@ theorem scan_agrees (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : Kan
     as ⟨net2, ceres2, hq⟩
   step with tail_saves kTail hq as ⟨net3, h3, h4⟩
   exact ⟨h3, h4⟩
+
+/-! ## The scan as a block
+
+The same window as the framework's blocks are stated (`Steps`,
+`Compose.lean`): the netlist's side and ceres's step apart, the netlist's
+carrying the window's index, ceres's its read, each window's input the Y
+OAM gives (the same on both sides), no output. The relation is `related`
+at the netlist's window, from window 2 on; a window past 38 is outside
+Kani's step (the tail's), a known difference. `Steps.iterate` carries it
+over the windows. -/
+
+/-- A spec's value, as an equation. -/
+theorem spec_ok_exists {α} {m : Result α} {p : α → Prop} (h : WP.spec m p) :
+    ∃ x, m = ok x ∧ p x := by
+  cases m with
+  | ret x => exact ⟨x, rfl, (WP.spec_ok x).1 h⟩
+  | vis e k => exact absurd h (by simp [WP.spec_vis])
+  | div => exact absurd h (by simp [WP.spec_div])
+
+/-- The netlist's window, with its index. -/
+def scanNet (line : Line) (s : NetSide × U8) (y : U8) : Result (Unit × (NetSide × U8)) := do
+  let n ← net_window s.1 line s.2 y
+  let j ← s.2 + 1#u8
+  ok ((), (n, j))
+
+/-- Ceres's read of the window's sprite. -/
+def scanCer (line : Line) (c : CeresSide) (y : U8) : Result (Unit × CeresSide) := do
+  let c' ← ceres_read c line y
+  ok ((), c')
+
+/-- The pair is related at the netlist's window, from window 2 on. -/
+def ScanRelated (line : Line) (s : NetSide × U8) (c : CeresSide) : Prop :=
+  related s.1 c line s.2 = ok true ∧ 2 ≤ s.2.val
+
+/-- Past window 38: the tail's, not the step's. -/
+def ScanK (s : NetSide × U8) (_ : U8) : Prop := 38 < s.2.val
+
+/-- The scan's window, as a block. -/
+-- @assumes scan-step-agrees
+theorem scan_steps (kani : KaniScanStep) (line : Line) :
+    Steps (scanNet line) (scanCer line) (fun y y' => y = y') (fun _ _ => True) ScanK
+      (ScanRelated line) := by
+  rintro ⟨net, j⟩ ceres ⟨hr, h2⟩ y y' rfl
+  by_cases h38 : 38 < j.val
+  · exact Or.inl h38
+  right
+  obtain ⟨⟨net', ceres'⟩, hs, hpost⟩ := spec_ok_exists (window kani (y := y) hr h2 (by simp only at h38 h2 ⊢; omega))
+  unfold step at hs
+  obtain ⟨n1, hn1, hs⟩ := bind_eq_ok hs
+  obtain ⟨c1, hc1, hs⟩ := bind_eq_ok hs
+  simp only [Result.ok.injEq, Prod.mk.injEq] at hs
+  obtain ⟨rfl, rfl⟩ := hs
+  obtain ⟨j', hj', hjv⟩ := spec_ok_exists (U8.add_spec (x := j) (y := 1#u8) (by scalar_tac))
+  refine ⟨(), (n1, j'), (), c1, ?_, ?_, trivial, ?_, ?_⟩
+  · simp only [scanNet, hn1, hj', bind_ok]
+  · simp only [scanCer, hc1, bind_ok]
+  · exact hpost j' (by simpa using hjv)
+  · simp only at hjv ⊢
+    scalar_tac
+
+/-- The scan over a run of windows: from a pair related at a window, a
+run's windows agree, or one of them is past 38. -/
+theorem scan_windows (kani : KaniScanStep) (line : Line) :
+    Steps (iterate (scanNet line)) (iterate (scanCer line))
+      (List.Forall₂ fun y y' => y = y') (List.Forall₂ fun _ _ => True)
+      (iterateK (scanNet line) ScanK) (ScanRelated line) :=
+  (scan_steps kani line).iterate
 
 end ceres_core.scan

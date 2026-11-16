@@ -1,4 +1,4 @@
-import Sketch.Iterate
+import Ceres.Bisim.Iterate
 import Sketch.Close
 open Aeneas Aeneas.Std Result
 
@@ -136,7 +136,10 @@ four hypotheses as arguments; none is proved here.
 - `hM3`: Kani's mode 3 harnesses (`mode3-end-background`,
   `mode3-window-armed`, `mode3-window-start` in doc/assumptions.toml).
   `K3` is the scope they leave out (the known differences of the dot-by-dot
-  pipeline).
+  pipeline). It also stands for the OAM scan's dots, which come before
+  mode 3 on each line: `Line.lean` proves the scan and hands its store to
+  mode 3's start (`scan_then_mode3`, with mode 3's start as a hypothesis),
+  but the dots are not yet routed between the two blocks here.
 - `hPer`: the Lean theorem `ceres_core.lcd.blocks_steps`
   (lean/Ceres/Bisim/Lcd.lean), to be instantiated with the M-cycle blocks.
 - `hDots`: the clock relation between an M-cycle and its dots, which is not
@@ -145,8 +148,8 @@ four hypotheses as arguments; none is proved here.
   yet.
 
 No proof in this file uses `sorry`. `ppu_steps`, `chip_steps` and
-`chip_agrees` rest on `Steps.iterate` (Iterate.lean) and `Steps.close`
-(Close.lean), which contain no `sorry` either.
+`chip_agrees` rest on `Steps.iterate` (`Ceres/Bisim/Iterate.lean`) and
+`Steps.close` (Close.lean), which contain no `sorry` either.
 -/
 
 end ceres_core.sketch
