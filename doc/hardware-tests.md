@@ -694,7 +694,7 @@ their sources, in `hdl/README.md` ("Die images").
 
 ## What to get
 
-`cargo run -p ceres-test-runner --example facts -- open` lists the open
+`cargo run -p ceres-knowledge -- open` lists the open
 questions with what each needs, and counts how many each piece of hardware
 would settle: a flash cartridge almost all of them, a DMG-CPU B and a C
 most of the DMG's, a CGB-C and a CGB-E the CGB's; a logic analyser on the

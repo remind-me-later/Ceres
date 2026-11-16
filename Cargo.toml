@@ -8,6 +8,7 @@ members = [
   "ceres-std",
   "ceres-test-runner",
   "ceres-winit",
+  "verify/knowledge",
 ]
 default-members = ["ceres-gtk"]
 

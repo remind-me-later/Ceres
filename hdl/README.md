@@ -730,7 +730,7 @@ rest on it.
 instances, its signals and the ones that control its storage, its delays
 and its `@hw` tags; the short pulses of the reports of `find-runts.sh`; the
 facts of `verify/knowledge/facts.toml` and their `@fact` tags across the repository
-(through ceres-test-runner's example `facts`); the verdicts of `races.toml`;
+(through ceres-knowledge); the verdicts of `races.toml`;
 the rules of `rules.toml` with their `@rule` tags in `rtl/`; and what the
 proofs assume (below). The checks and the queries on them are in Datalog,
 `../verify/knowledge/knowledge.dl`, which also says what each table holds;

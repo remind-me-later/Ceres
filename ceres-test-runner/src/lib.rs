@@ -7,12 +7,8 @@
 //! that sweep a directory compare their failures with a list in `tests/`
 //! (see [`check_known_failures`]).
 
-pub mod assumptions;
 pub mod checks;
-pub mod facts;
 pub mod gambatte;
-pub mod races;
-pub mod rules;
 
 use anyhow::{Context as _, Result};
 use ceres_core::{AudioCallback, Button, Gb, GbBuilder, Model, Sample};

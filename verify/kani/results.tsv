@@ -1,4 +1,4 @@
-# Kani's verdicts, written by hdl/kani.sh: the harness (or the planted
+# Kani's verdicts, written by verify/kani/kani.sh: the harness (or the planted
 # fault), the hash of the sources it ran on, the verdict, the seconds,
 # the solver and the hash of the harness's program (see kani.sh).
 fault/adc-half-carry-without-carry	bdce79605f2cd000	caught	0	cadical	-
@@ -14,10 +14,8 @@ fault/vram-read-lock-late	bdce79605f2cd000	caught	0	cadical	-
 fault/window-fetch-never-ends	bdce79605f2cd000	caught	0	cadical	-
 fault/window-starts-late	bdce79605f2cd000	caught	0	cadical	-
 interrupts::bisim::netlist_if_bisimulation	5800fd397c1671e2	pass	2	cadical	e96b12f2cadffa77
-memory::dma::bisim::netlist_dma_bisimulation	5800fd397c1671e2	pass	1	cadical	e24a601f8b79b7c9
 memory::bisim::netlist_bus_side	5800fd397c1671e2	pass	5	cadical	97be30a2925bba9e
-timer_if::bisim::ceres_timer_and_if_in_sequence	5800fd397c1671e2	pass	2	cadical	5fb3cc8c304b9f82
-timer_if::bisim::netlist_timer_and_if	5800fd397c1671e2	pass	3	cadical	7ffb5df3b3985d7a
+memory::dma::bisim::netlist_dma_bisimulation	5800fd397c1671e2	pass	1	cadical	e24a601f8b79b7c9
 ppu::display::background::bisim::netlist_mode3_armed_attributes	5800fd397c1671e2	pass	216	cadical	f0137548c06d9687
 ppu::display::background::bisim::netlist_mode3_armed_fetch	5800fd397c1671e2	pass	257	cadical	611311e9acce884a
 ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	5800fd397c1671e2	pass	220	cadical	8084dd83ed63026b
@@ -40,9 +38,6 @@ ppu::display::background::bisim::netlist_mode3_start	5800fd397c1671e2	pass	214	c
 ppu::display::background::bisim::netlist_mode3_window_inside	5800fd397c1671e2	pass	93	cadical	b86006bb7ff939f1
 ppu::display::background::bisim::netlist_mode3_window_reached	5800fd397c1671e2	pass	113	cadical	0cd3e5d0fa011f16
 ppu::display::background::bisim::netlist_mode3_window_starting	5800fd397c1671e2	pass	111	cadical	2d2b350f171ebca7
-ppu::display::proofs::cpu_locks_at_mode3_end	5800fd397c1671e2	pass	3	cadical	8df0db787bcb5878
-ppu::display::proofs::cpu_locks_at_scan_end	5800fd397c1671e2	pass	6	cadical	b13b31eaafe73f06
-ppu::display::proofs::cpu_locks_in_first_line	5800fd397c1671e2	pass	6	cadical	3b577ed201a06a86
 ppu::display::objects::bisim::netlist_scan_consider	5800fd397c1671e2	pass	32	cadical	52e200fcc3c16558
 ppu::display::objects::bisim::netlist_scan_dma	5800fd397c1671e2	pass	257	cadical	647b29283e3a956e
 ppu::display::objects::bisim::netlist_scan_lead_in	5800fd397c1671e2	pass	1	cadical	7964595acbe3a572
@@ -50,6 +45,9 @@ ppu::display::objects::bisim::netlist_scan_selection	5800fd397c1671e2	pass	121	c
 ppu::display::objects::bisim::netlist_scan_step	5800fd397c1671e2	pass	4	cadical	ca2f8640f95f5345
 ppu::display::objects::bisim::netlist_scan_tail	5800fd397c1671e2	pass	3	cadical	b8390127c7b423c4
 ppu::display::objects::bisim::netlist_scan_y_match	5800fd397c1671e2	pass	0	cadical	057b9cb19a2328d5
+ppu::display::proofs::cpu_locks_at_mode3_end	5800fd397c1671e2	pass	3	cadical	8df0db787bcb5878
+ppu::display::proofs::cpu_locks_at_scan_end	5800fd397c1671e2	pass	6	cadical	b13b31eaafe73f06
+ppu::display::proofs::cpu_locks_in_first_line	5800fd397c1671e2	pass	6	cadical	3b577ed201a06a86
 ppu::display::timing::bisim::netlist_lcd_access	5800fd397c1671e2	pass	13	cadical	2aae466fdae445e4
 ppu::display::timing::bisim::netlist_lcd_on	5800fd397c1671e2	pass	3	cadical	dd74cdae87ee4e23
 sm83::bisim::instructions::netlist_sm83_a_and_flags	5800fd397c1671e2	pass	45	cadical	c9cabe83390f8264
@@ -63,13 +61,9 @@ sm83::bisim::instructions::netlist_sm83_call_6	5800fd397c1671e2	pass	158	cadical
 sm83::bisim::instructions::netlist_sm83_cb_bit_hl	5800fd397c1671e2	pass	89	cadical	0b55121c68d2fe2e
 sm83::bisim::instructions::netlist_sm83_cb_hl	5800fd397c1671e2	pass	115	cadical	d738e91b485e0c98
 sm83::bisim::instructions::netlist_sm83_cb_r	5800fd397c1671e2	pass	70	cadical	2f0ba11327a6def0
-sm83::bisim::interrupts::netlist_sm83_halt	5800fd397c1671e2	pass	38	cadical	05585dd2c23448a0
-sm83::bisim::interrupts::netlist_sm83_halted	5800fd397c1671e2	pass	20	cadical	98fc02aa6d590009
-sm83::bisim::interrupts::netlist_sm83_halted_from_halt	5800fd397c1671e2	pass	23	cadical	1ac0c04d21e19d15
 sm83::bisim::instructions::netlist_sm83_hl_mem	5800fd397c1671e2	pass	85	cadical	551c007ebaf104d3
 sm83::bisim::instructions::netlist_sm83_inc_dec_r	5800fd397c1671e2	pass	43	cadical	7834e11e77f266b3
 sm83::bisim::instructions::netlist_sm83_inc_dec_rr	5800fd397c1671e2	pass	61	cadical	597aa696e45ace1f
-sm83::bisim::interrupts::netlist_sm83_interrupt_entry	5800fd397c1671e2	pass	102	cadical	73d1024fd3c6d2ee
 sm83::bisim::instructions::netlist_sm83_jp_3	5800fd397c1671e2	pass	88	cadical	b02ebb634beb4682
 sm83::bisim::instructions::netlist_sm83_jp_4	5800fd397c1671e2	pass	108	cadical	36d7f28a5596f64a
 sm83::bisim::instructions::netlist_sm83_jr_2	5800fd397c1671e2	pass	61	cadical	befcb674d64d12f7
@@ -93,6 +87,11 @@ sm83::bisim::instructions::netlist_sm83_ret_cc_2	5800fd397c1671e2	pass	64	cadica
 sm83::bisim::instructions::netlist_sm83_ret_cc_5	5800fd397c1671e2	pass	136	cadical	570742cb9e335bf6
 sm83::bisim::instructions::netlist_sm83_ret_reti	5800fd397c1671e2	pass	107	cadical	bfe9ea2bc9a31965
 sm83::bisim::instructions::netlist_sm83_rst	5800fd397c1671e2	pass	106	cadical	8e02757471f2bcae
+sm83::bisim::interrupts::netlist_sm83_halt	5800fd397c1671e2	pass	38	cadical	05585dd2c23448a0
+sm83::bisim::interrupts::netlist_sm83_halted	5800fd397c1671e2	pass	20	cadical	98fc02aa6d590009
+sm83::bisim::interrupts::netlist_sm83_halted_from_halt	5800fd397c1671e2	pass	23	cadical	1ac0c04d21e19d15
+sm83::bisim::interrupts::netlist_sm83_interrupt_entry	5800fd397c1671e2	pass	102	cadical	73d1024fd3c6d2ee
+sm83::bisim::interrupts::netlist_sm83_wake	5800fd397c1671e2	pass	25	cadical	7994e3ce5404d5f5
 sm83::bisim::settles::netlist_sm83_settles_after_edges_a	5800fd397c1671e2	pass	12	cadical	4c4d04a836011f47
 sm83::bisim::settles::netlist_sm83_settles_after_edges_b	5800fd397c1671e2	pass	12	cadical	39f426a14568bbdc
 sm83::bisim::settles::netlist_sm83_settles_after_edges_c	5800fd397c1671e2	pass	11	cadical	ecadb76971abe67a
@@ -113,21 +112,22 @@ sm83::bisim::settles::netlist_sm83_settles_repeating_c	5800fd397c1671e2	pass	13	
 sm83::bisim::settles::netlist_sm83_settles_repeating_d	5800fd397c1671e2	pass	13	cadical	684bcbfd556aee12
 sm83::bisim::settles::netlist_sm83_settles_repeating_f	5800fd397c1671e2	pass	12	cadical	f6e371c643582c41
 sm83::bisim::settles::netlist_sm83_settles_repeating_h	5800fd397c1671e2	pass	15	cadical	4a774e32e38948f9
-sm83::bisim::interrupts::netlist_sm83_wake	5800fd397c1671e2	pass	25	cadical	7994e3ce5404d5f5
-sm83::proofs::add_hl_rr	5800fd397c1671e2	pass	3	cadical	ad8c807d51dea780
-sm83::proofs::alu_a_d8	5800fd397c1671e2	pass	3	cadical	5235f21a33795afc
-sm83::proofs::alu_a_r	5800fd397c1671e2	pass	4	cadical	e06d80417d9b5422
-sm83::proofs::any_opcode_keeps_f_low_nibble_zero	5800fd397c1671e2	pass	3	cadical	eeeb887fe5fa14bf
-sm83::proofs::cb	5800fd397c1671e2	pass	1	cadical	af44cb972a3dc09c
-sm83::proofs::daa_after_bcd_arithmetic	5800fd397c1671e2	pass	1	cadical	da0daff3731d3592
-sm83::proofs::inc_dec_r	5800fd397c1671e2	pass	3	cadical	50e33c8fab9e89b0
-sm83::proofs::ld_r_d8	5800fd397c1671e2	pass	3	cadical	ff6d447492b52509
-sm83::proofs::ld_r_r	5800fd397c1671e2	pass	3	cadical	7345da522b0a8e4d
-sm83::proofs::set_af_clears_f_low_nibble	5800fd397c1671e2	pass	0	cadical	80ac9f361d01c8b0
-sm83::proofs::sp_plus_e	5800fd397c1671e2	pass	3	cadical	1fb248da81d0f52e
+sm83::proofs::add_hl_rr	c003ef8a24b3ccc9	pass	3	cadical	ad8c807d51dea780
+sm83::proofs::alu_a_d8	c003ef8a24b3ccc9	pass	3	cadical	5235f21a33795afc
+sm83::proofs::alu_a_r	c003ef8a24b3ccc9	pass	4	cadical	e06d80417d9b5422
+sm83::proofs::any_opcode_keeps_f_low_nibble_zero	c003ef8a24b3ccc9	pass	3	cadical	eeeb887fe5fa14bf
+sm83::proofs::cb	c003ef8a24b3ccc9	pass	1	cadical	af44cb972a3dc09c
+sm83::proofs::daa_after_bcd_arithmetic	c003ef8a24b3ccc9	pass	1	cadical	da0daff3731d3592
+sm83::proofs::inc_dec_r	c003ef8a24b3ccc9	pass	3	cadical	50e33c8fab9e89b0
+sm83::proofs::ld_r_d8	c003ef8a24b3ccc9	pass	3	cadical	ff6d447492b52509
+sm83::proofs::ld_r_r	c003ef8a24b3ccc9	pass	3	cadical	7345da522b0a8e4d
+sm83::proofs::set_af_clears_f_low_nibble	c003ef8a24b3ccc9	pass	0	cadical	80ac9f361d01c8b0
+sm83::proofs::sp_plus_e	c003ef8a24b3ccc9	pass	3	cadical	1fb248da81d0f52e
+timer_if::bisim::ceres_timer_and_if_in_sequence	5800fd397c1671e2	pass	2	cadical	5fb3cc8c304b9f82
+timer_if::bisim::netlist_timer_and_if	5800fd397c1671e2	pass	3	cadical	7ffb5df3b3985d7a
 timing::bisim::netlist_timer_bisimulation	5800fd397c1671e2	pass	2	cadical	9b8450c2a6ab50f8
-timing::proofs::div_write_falling_edge_increments_tima	5800fd397c1671e2	pass	0	cadical	b756a4108a8603f0
-timing::proofs::tima_reads_zero_then_tma	5800fd397c1671e2	pass	0	cadical	a699c3c1d452f897
-timing::proofs::tima_write_cancels_reload	5800fd397c1671e2	pass	1	cadical	9b54f225abf1b8b4
-timing::proofs::tima_writes_ignored_after_reload	5800fd397c1671e2	pass	1	cadical	e428f6052b15359b
-timing::proofs::timer_interrupt_after_3_or_4	5800fd397c1671e2	pass	0	cadical	bea74726d8ec8f2d
+timing::proofs::div_write_falling_edge_increments_tima	c003ef8a24b3ccc9	pass	0	cadical	b756a4108a8603f0
+timing::proofs::tima_reads_zero_then_tma	c003ef8a24b3ccc9	pass	0	cadical	a699c3c1d452f897
+timing::proofs::tima_write_cancels_reload	c003ef8a24b3ccc9	pass	1	cadical	9b54f225abf1b8b4
+timing::proofs::tima_writes_ignored_after_reload	c003ef8a24b3ccc9	pass	1	cadical	e428f6052b15359b
+timing::proofs::timer_interrupt_after_3_or_4	c003ef8a24b3ccc9	pass	0	cadical	bea74726d8ec8f2d

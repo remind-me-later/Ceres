@@ -18,10 +18,10 @@
 # The sources: hdl/rtl/ and hdl/board/ (hdl/oracle/rtl.awk and
 # controls.awk), facts.toml, races.toml, rules.toml and assumptions.toml
 # here, with the `@fact`, `@rule`, `@assumes` and `@discharges` tags
-# (the example facts of ceres-test-runner), and the reports of find-runts.sh in
+# (read by ceres-knowledge, src/), and the reports of find-runts.sh in
 # hdl/build/runts/reports. MODELS are the chips to look at, as facts.toml
-# names them: by default all that hdl/rtl/ has (dmg cgb cgb-c cgb-e), which the
-# checks need; MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules lists
+# names them: by default all that hdl/rtl/ has (dmg cgb cgb-c cgb-e), which
+# the checks need; MODELS="cgb cgb-c cgb-e" ./knowledge.sh borrowed-rules lists
 # what the CGB's model takes from the DMG's.
 
 set -eu
@@ -50,7 +50,7 @@ build() {
 	mkdir -p build/runts/reports
 	find build/runts/reports -name '*.txt' -exec awk -f oracle/runts.awk "$TABLES/instance.tsv" {} + |
 		awk -F '\t' -v OFS='\t' '{ $6 = $6 / 1e6; $7 = $7 / 1e12; print }' >"$TABLES/runt.tsv"
-	cargo run -q --manifest-path "$ROOT/Cargo.toml" -p ceres-test-runner --example facts -- tsv "$TABLES"
+	cargo run -q --manifest-path "$ROOT/Cargo.toml" -p ceres-knowledge -- tsv "$TABLES"
 	printf '%s\n' $MODELS >"$TABLES/tree_model.tsv"
 }
 

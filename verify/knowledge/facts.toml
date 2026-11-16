@@ -28,12 +28,12 @@
 #   photographed), the units (dmg-b, dmg-c, cgb-c, cgb-e) or several-units.
 # - note (optional): what the fields do not say.
 #
-# The test `facts` of ceres-test-runner checks that a departure from the
+# The test `facts` of ceres-knowledge checks that a departure from the
 # netlist rests on a hardware test or an open question, that ceres failing
 # a hardware test has an open question, that the ROMs and the anchors
 # exist, that every open question of those documents is a fact's, and that
-# every tag names a fact. `cargo run -p ceres-test-runner --example facts`
-# prints the open questions, the departures from the netlist and the races.
+# every tag names a fact. `cargo run -p ceres-knowledge` prints the open
+# questions, the departures from the netlist and the races.
 
 # The OAM scan and OAM DMA
 

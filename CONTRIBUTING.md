@@ -136,10 +136,10 @@ fact's. When a change departs from the netlist, settles a question or adds one,
 change the list with it.
 
 ```bash
-cargo test --package ceres-test-runner --test facts
+cargo test --package ceres-knowledge --test facts
 # The open questions and what settling them takes, the departures from the
 # netlist, the races, and where the code tags each fact
-cargo run --package ceres-test-runner --example facts
+cargo run --package ceres-knowledge
 ```
 
 #### The A/V hash

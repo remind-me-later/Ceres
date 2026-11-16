@@ -222,7 +222,7 @@ pub type Facts = BTreeMap<String, Fact>;
 /// The repository's root.
 #[must_use]
 pub fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("..").join("..")
 }
 
 /// Reads `verify/knowledge/facts.toml`.
@@ -233,13 +233,14 @@ pub fn load(root: &Path) -> Result<Facts> {
 }
 
 /// The directories searched for `@fact` tags, and the ones skipped in them.
-const TAGGED: [&str; 6] = [
+const TAGGED: [&str; 7] = [
     "ceres-core",
     "ceres-netlist",
     "ceres-std",
     "ceres-test-runner",
     "hdl",
     "doc",
+    "verify",
 ];
 const UNTAGGED: [&str; 4] = ["target", "build", "external", ".git"];
 const TAGGED_EXTENSIONS: [&str; 6] = ["rs", "vhd", "asm", "sh", "md", "txt"];

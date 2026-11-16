@@ -1,7 +1,7 @@
 //! The facts list, `verify/knowledge/facts.toml`, holds together with the repository
-//! (see `ceres_test_runner::facts`).
+//! (see `ceres_knowledge::facts`).
 
-use ceres_test_runner::facts::{load, problems, repo_root};
+use ceres_knowledge::facts::{load, problems, repo_root};
 
 #[test]
 fn facts_hold_together() {
@@ -15,17 +15,17 @@ fn facts_hold_together() {
 fn assumptions_parse() {
     let root = repo_root();
     let assumptions =
-        ceres_test_runner::assumptions::load(&root).expect("verify/knowledge/assumptions.toml");
+        ceres_knowledge::assumptions::load(&root).expect("verify/knowledge/assumptions.toml");
     assert!(!assumptions.is_empty(), "no assumptions");
-    ceres_test_runner::assumptions::scan(&root).expect("ceres-core's sources");
+    ceres_knowledge::assumptions::scan(&root).expect("ceres-core's sources");
 }
 
 #[test]
 fn races_hold_together() {
     let root = repo_root();
     let facts = load(&root).expect("verify/knowledge/facts.toml");
-    let races = ceres_test_runner::races::load(&root).expect("verify/knowledge/races.toml");
-    let problems = ceres_test_runner::races::problems(&races, &facts);
+    let races = ceres_knowledge::races::load(&root).expect("verify/knowledge/races.toml");
+    let problems = ceres_knowledge::races::problems(&races, &facts);
     assert!(problems.is_empty(), "\n{}", problems.join("\n"));
 }
 
@@ -33,8 +33,8 @@ fn races_hold_together() {
 fn rules_hold_together() {
     let root = repo_root();
     let facts = load(&root).expect("verify/knowledge/facts.toml");
-    let races = ceres_test_runner::races::load(&root).expect("verify/knowledge/races.toml");
-    let rules = ceres_test_runner::rules::load(&root).expect("verify/knowledge/rules.toml");
-    let problems = ceres_test_runner::rules::problems(&rules, &facts, &races);
+    let races = ceres_knowledge::races::load(&root).expect("verify/knowledge/races.toml");
+    let rules = ceres_knowledge::rules::load(&root).expect("verify/knowledge/rules.toml");
+    let problems = ceres_knowledge::rules::problems(&rules, &facts, &races);
     assert!(problems.is_empty(), "\n{}", problems.join("\n"));
 }

@@ -1,15 +1,15 @@
-//! Prints the lists that the facts of `verify/knowledge/facts.toml` give: the open
+//! Prints the lists that the facts of `facts.toml` give: the open
 //! questions and what settling them takes, where ceres departs from the
 //! netlist and what that rests on, the races, and where the code tags each
-//! fact. `tsv DIR` writes the facts, their tags, the races of
-//! `verify/knowledge/races.toml`, the rules of `verify/knowledge/rules.toml`, and the assumptions of
-//! the proofs (`verify/knowledge/assumptions.toml`) with ceres-core's harnesses and their
-//! tags, as tables, for the knowledge base (`verify/knowledge/knowledge.sh`).
+//! fact. `tsv DIR` writes the facts, their tags, the races of `races.toml`,
+//! the rules of `rules.toml`, and the assumptions of the proofs
+//! (`assumptions.toml`) with ceres-core's harnesses and their tags, as
+//! tables, for the knowledge base (`knowledge.sh`).
 //!
-//! Usage: `cargo run -p ceres-test-runner --example facts -- [open|netlist|races|tags|tsv DIR]`
+//! Usage: `cargo run -p ceres-knowledge -- [open|netlist|races|tags|tsv DIR]`
 //! (the first four without an argument).
 
-use ceres_test_runner::{
+use ceres_knowledge::{
     assumptions,
     facts::{Emulators, Facts, Hardware, Need, Netlist, Race, load, repo_root, tags},
     races, rules,
@@ -145,7 +145,7 @@ fn tsv(facts: &Facts, dir: &Path) {
             ]
         }),
     );
-    let each = |list: fn(&ceres_test_runner::facts::Fact) -> Vec<String>| {
+    let each = |list: fn(&ceres_knowledge::facts::Fact) -> Vec<String>| {
         facts
             .iter()
             .flat_map(move |(id, f)| list(f).into_iter().map(move |v| vec![id.clone(), v]))

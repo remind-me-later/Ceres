@@ -1,0 +1,21 @@
+[package]
+name = "ceres-knowledge"
+description = "Reads and checks the knowledge base's sources, and writes its tables"
+version.workspace = true
+edition.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+toml = "1.1"
+
+[lints.clippy]
+doc_markdown = { level = "allow", priority = 1 }
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+nursery = "warn"
+pedantic = "warn"

@@ -699,6 +699,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ceres-knowledge"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "ceres-netlist"
 version = "0.1.0"
 
@@ -731,8 +740,6 @@ dependencies = [
  "ceres-core",
  "ceres-netlist",
  "image",
- "serde",
- "toml",
 ]
 
 [[package]]
