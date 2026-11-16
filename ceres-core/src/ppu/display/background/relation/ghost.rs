@@ -151,6 +151,12 @@ pub(super) const fn fetching(pace: &Pace) -> bool {
 /// SCX in the last dot (`mixer_scx`) and the dot before (`latched`, which
 /// the netlist's latch holds), and the ghost.
 pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
+    // At WX 0 ceres's check fires in the line's first dot, before the
+    // lead-in could run again, and the lead-in does not run again in the
+    // window (`lead_in_matches`).
+    if l.window_enabled & (l.wx == 0) & g.rerun {
+        return false;
+    }
     match window_phase(l, g) {
         WindowPhase::Starting { dot, fine } => {
             return window_starting_ok(l, latched, g, dot, fine);
@@ -199,9 +205,10 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         & ghost_ok(&l.pace, g)
         & fetch_age_ok(&l.pace, g)
         & objects_ok(l, g)
-        // Armed at WX 0, ceres's check fires in the line's first dot, or
-        // matched SCX and reaches WX in its second (`window_delay_ok`).
-        & (!l.window_enabled | (l.wx != 0) | (p == LAST_DISCARDED - 1))
+        // Armed at WX 0, ceres's check fires in the line's first dot
+        // (`window_delay_ok`), or matched SCX and reaches WX in its second,
+        // its first pixel popped.
+        & (!l.window_enabled | (l.wx != 0) | (p == LAST_DISCARDED - 1) & (len == FULL - 1))
 }
 
 /// The lead-in from its start (at -16, the FIFO full) at position `p` with
@@ -232,6 +239,8 @@ pub(super) fn window_delay_ok(l: &Mode3Loop, g: Ghost) -> bool {
         & matches_step(bg.step, FetcherStep::GetTileT1)
         & !bg.insert_blank
         & !l.pace.window.being_fetched
+        // The check reset the window's column before the loop slept.
+        & (l.pace.window.tile_x == 0)
         & (l.mixer_scx & 7 != 0)
         & (g == Ghost {
             since_push: 2,

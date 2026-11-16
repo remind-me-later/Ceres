@@ -169,6 +169,13 @@ const fn start_position(wx: u8, dot: u8) -> i16 {
     wx as i16 - WX_AHEAD + drawn as i16
 }
 
+/// Ceres's position `dot` dots after its check fired at the lead-in's start
+/// at WX 0, SCX not matched yet: held there through the window's first
+/// fetch, then a pixel a dot from the seventh, as at WX's.
+const fn lead_position(dot: u8) -> i16 {
+    LEAD_IN + dot.saturating_sub(6) as i16
+}
+
 /// At WX 0 ceres's check fired at the lead-in's start (SCX's low bits not
 /// 0): its position is short of WX's, the lead-in to run in the window.
 pub(super) const fn in_lead(l: &Mode3Loop, dot: u8) -> bool {
@@ -243,7 +250,7 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
     let len = bg.fifo.len();
     let lead = in_lead(l, dot);
     let held = if lead {
-        LEAD_IN
+        lead_position(dot)
     } else {
         start_position(l.wx, dot)
     };
@@ -257,16 +264,21 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
         (len == 14 - dot)
             & matches_step(bg.step, step_for(len))
             & if lead & (dot >= 7) {
-                // Not back at its start yet: eight pixels from the seventh dot.
-                !g.rerun & lead_in_ok(p, len, latched, l.mixer_scx, false)
+                // Eight pixels from the seventh dot.
+                lead_in_ok(p, len, latched, l.mixer_scx, false)
             } else {
                 p == held
             }
             & (pace.window.being_fetched == (dot == 6))
             & (pace.window.tile_x == 1)
     };
+    // At WX 0 the netlist's fine scroll compares in dot 2 the SCX ceres's
+    // check fired with (`pending_compares`): it matches with SCX 0, and in
+    // the lead-in it does not.
+    let matched = (l.wx != 0) | (dot != 1) | ((latched.trailing_zeros() >= 3) != lead);
     // With WX at 165 the line is drawn after the eighth dot.
     shape
+        & matched
         & (p <= i16::from(PX_WIDTH))
         & (fine <= 7)
         & !bg.insert_blank
@@ -292,7 +304,16 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     // Ceres's window matches WX again at -7, the tile pushed.
     let blank = (p == LAST_DISCARDED - 1) & (len == FULL) & (l.wx == 0);
     let lead_in = if l.wx == 0 {
-        (p >= LEAD_IN) & lead_in_ok(p, counted_len(l), latched, l.mixer_scx, g.rerun)
+        // The lead-in's first round pops a pixel a dot from the start's
+        // sixth (`lead_position`): four are gone by its tenth.
+        let first_left = (p + i16::from(len) > 0) | (len <= FULL - (INSIDE - 6));
+        // A tile pushed at -7 starts with the blank: no pixel of it popped
+        // at -7.
+        let unblanked = (p == LAST_DISCARDED) & (len == FULL - 1);
+        (p >= lead_position(INSIDE))
+            & first_left
+            & !unblanked
+            & lead_in_ok(p, counted_len(l), latched, l.mixer_scx, g.rerun)
     } else {
         p + 3 >= i16::from(l.wx)
     };
