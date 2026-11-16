@@ -11,8 +11,8 @@ the interrupt taken). `close` is that loop, cut at the CPU's state, and
 claims over to the closed machine.
 -/
 
-namespace ceres_core.sketch
-open ceres_core.bisim
+namespace ceres_core.bisim
+
 
 /-- A block `b` driven by a machine with state `Sd`: the driver's state and
 the outside input `x` give the block's input (`out`), the block steps, and
@@ -46,9 +46,9 @@ theorem Steps.close {Sdn Sdc Sbn Sbc Xn Xc In Ic On Oc : Type}
   · exact Or.inl k
   · obtain ⟨dn', dc', hnn, hnc, hd'⟩ := hNext dn dc x y o p hd hxy ho
     refine Or.inr ⟨o, (dn', bn'), p, (dc', bc'), ?_, ?_, ho, hd', hb'⟩
-    · unfold ceres_core.sketch.close
+    · unfold ceres_core.bisim.close
       simp [hn, hnn]
-    · unfold ceres_core.sketch.close
+    · unfold ceres_core.bisim.close
       simp [hc, hnc]
 
-end ceres_core.sketch
+end ceres_core.bisim

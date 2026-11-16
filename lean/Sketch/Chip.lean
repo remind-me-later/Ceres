@@ -1,5 +1,5 @@
 import Ceres.Bisim.Iterate
-import Sketch.Close
+import Ceres.Bisim.Close
 open Aeneas Aeneas.Std Result
 
 /-!
@@ -149,7 +149,7 @@ four hypotheses as arguments; none is proved here.
 
 No proof in this file uses `sorry`. `ppu_steps`, `chip_steps` and
 `chip_agrees` rest on `Steps.iterate` (`Ceres/Bisim/Iterate.lean`) and
-`Steps.close` (Close.lean), which contain no `sorry` either.
+`Steps.close` (`Ceres/Bisim/Close.lean`), which contain no `sorry` either.
 -/
 
 end ceres_core.sketch

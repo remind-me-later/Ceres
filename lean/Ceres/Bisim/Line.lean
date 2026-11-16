@@ -1,11 +1,10 @@
 import Ceres.Bisim.Scan
-import Sketch.Chip
 open Aeneas Aeneas.Std Result
 
 /-!
 # A line's start: the OAM scan, then mode 3
 
-`Chip.lean` takes mode 3's pipeline as one block stepped a dot at a time,
+`Sketch/Chip.lean` takes mode 3's pipeline as one block stepped a dot at a time,
 its claim `hM3` a hypothesis over every dot, with its relation `R3` holding
 from the start. A line does not start in mode 3: the OAM scan runs first,
 over the line's first 80 dots, and mode 3 starts from the sprites the scan
@@ -21,8 +20,8 @@ not do yet is route a line's dots between the two blocks inside
 `chip_agrees`: its `hM3` still stands for the scan's dots as well.
 -/
 
-namespace ceres_core.sketch
-open ceres_core.bisim ceres_core.scan ceres_core.ppu.display.objects.check
+namespace ceres_core.scan
+open ceres_core.bisim ceres_core.ppu.display.objects.check
 
 /-- A line's start: from the line before's end, the scan, and mode 3's
 states, made from the store the scan left (`startN`, `startC`), related. -/
@@ -37,4 +36,4 @@ theorem scan_then_mode3 {M3n M3c : Type} (R3 : M3n → M3c → Prop)
   WP.spec_mono (scan_agrees kStep kLead kTail count ns held line ys hc hl)
     (fun x h => hStart x.1 x.2 h.1 h.2)
 
-end ceres_core.sketch
+end ceres_core.scan
