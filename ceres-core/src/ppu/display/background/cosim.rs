@@ -445,7 +445,9 @@ impl Walk {
         self.net.sary = free.flag();
         self.net.win_y = free.byte();
         self.l.pace.bg.fractional = free.flag();
-        if self.g.window != 0 {
+        // The window's first dot takes the rerun (its pixel in the first
+        // round or not); from the second on, nothing does.
+        if self.g.window > 1 {
             self.g.rerun = free.flag();
         }
         let quiet = inputs(&self.l, false);

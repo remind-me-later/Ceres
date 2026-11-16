@@ -212,7 +212,9 @@ pub(super) const fn shifted(bg: &Background, extra: u8) -> (i16, u8) {
 /// after ceres's push the slot fetched).
 pub(crate) const fn expected(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetPipeline {
     match window_phase(l, g) {
-        WindowPhase::Starting { dot, fine } => return window_starting(l, net, dot, fine),
+        WindowPhase::Starting { dot, fine } => {
+            return window_starting(l, net, dot, fine, g.rerun);
+        }
         WindowPhase::Inside => return window_inside(l, net),
         WindowPhase::Off | WindowPhase::Armed => {}
     }

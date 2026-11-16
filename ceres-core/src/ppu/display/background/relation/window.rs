@@ -57,6 +57,7 @@ pub(super) const fn window_starting(
     net: &NetPipeline,
     dot: u8,
     fine: u8,
+    rerun: bool,
 ) -> NetPipeline {
     let pace = &l.pace;
     let position = signed(pace.bg.position);
@@ -72,8 +73,9 @@ pub(super) const fn window_starting(
         ..*net
     };
     // The pixel the netlist draws in dot 1 is in the line's first round (the
-    // junk row) when the window starts in the lead-in (WX 1).
-    let first = position + 1 + len_at(fine) as i16 <= 0;
+    // junk row) when the window starts in the lead-in (WX 1), unless the
+    // round is run again (`Ghost::rerun`), as `expected` has it.
+    let first = (position + 1 + len_at(fine) as i16 <= 0) & !rerun;
     if dot == 1 {
         pipeline_at(position + 1, len_at(fine), first, net)
     } else if dot == 2 {
