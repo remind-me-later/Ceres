@@ -36,7 +36,7 @@
 [readable-model-is-dmg-sim]
 title = "The readable model (hdl/rtl) does what dmg-sim, the DMG-CPU B's netlist, does"
 evidence = "measured"
-how = "make check: board/chip_tb.vhd compares the model with dmg-sim's recorded signals, phase by phase, for every test in build/runs (hdl/README.md)."
+how = "make check: board/chip_tb.vhd compares the model with dmg-sim's recorded signals, phase by phase, for every test in build/runs (ceres-netlist/README.md)."
 
 [transcription-timer]
 title = "NetTimer is divider.vhd and timer.vhd, phase by phase"
@@ -95,7 +95,7 @@ rests_on = ["readable-model-is-dmg-sim"]
 [transcription-bus]
 title = "NetBus is external_bus.vhd, high_ram.vhd, boot_rom.vhd, joypad.vhd and serial.vhd, phase by phase, and NetBoard the board's work RAM and cartridge"
 evidence = "replayed"
-how = "netlist_replay over the 269 traces with the bus side's fields (hdl/README.md): no difference, with 16 million reads on the cartridge bus, 400 thousand writes of HRAM and 189 serial transfers."
+how = "netlist_replay over the 269 traces with the bus side's fields (ceres-netlist/README.md): no difference, with 16 million reads on the cartridge bus, 400 thousand writes of HRAM and 189 serial transfers."
 rests_on = ["readable-model-is-dmg-sim"]
 
 [dmg-undecoded-io]
