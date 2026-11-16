@@ -280,7 +280,11 @@ impl Pace {
                 self.window.tile_x = 0;
                 self.window.saved = hw.then(|| (self.bg.fifo, self.bg.step, fetcher.clone()));
                 self.bg.fifo.clear();
-                if wx == 0 && mixer_scx & 7 != 0 && !hw {
+                // At WX 0 the window waits a dot for SCX's discard, which
+                // runs in it, unless SCX already matched (-7): the netlist
+                // starts it as with SCX 0 then, though SCX's low bits
+                // changed (the relation's `in_lead`).
+                if wx == 0 && mixer_scx & 7 != 0 && !hw && position != pos(-7) {
                     self.sleep_in_line(State::Mode3WindowDelay, 1);
                     return true;
                 } else if wx == 166 {
