@@ -55,12 +55,12 @@
 # not as passed. A harness keeps its verdict only with its covers recorded
 # for its program (goto-instrument's --show-properties lists those it has).
 #
-# A run is one `cargo kani` with KANI_JOBS harnesses at a time (2), under
-# a memory cap where systemd-run is there (KANI_MEMORY, 9G; no swap), on
-# KANI_CORES if given (taskset's list), with KANI_SOLVER (cadical). The
-# harnesses that need the cap to themselves (SOLO: the CPU's against the
-# netlist's core, up to 7.4 GB, and the mode 3 pairs reach 8.3) run after
-# the others, one at a time.
+# A run is one `cargo kani` per harness, KANI_JOBS at a time (2), under
+# a memory cap they share where systemd-run is there (KANI_MEMORY, 9G; no
+# swap), on KANI_CORES if given (taskset's list), with KANI_SOLVER
+# (cadical). The harnesses that need the cap to themselves (SOLO: the
+# CPU's against the netlist's core, up to 7.4 GB, and the mode 3 pairs
+# reach 8.3) run after the others, one at a time.
 # Without Kani's concrete playback: it multiplies a harness's memory, and
 # only a failing harness needs it, for its counterexample:
 #
@@ -232,25 +232,36 @@ verdicts() {
 kani() {
     at_once=${1:-$JOBS}
     log=$LOGS/run${2:-}.log
+    one=$LOGS/one${2:-}
     mkdir -p "$LOGS"
-    set --
-    while read -r name; do
-        set -- "$@" --harness "$name"
-    done
-    [ $# -gt 0 ] || return 0
+    rm -rf "$one"
+    mkdir "$one"
+    cat >"$one/names"
+    [ -s "$one/names" ] || return 0
     # Each harness's results, its covers' statuses among them, in a file
     # of its name.
     rm -rf "$WT/result_output_dir"
-    set -- cargo kani -p ceres-core "$@" --exact -j "$at_once" \
-        --output-format terse -Z unstable-options --output-into-files --solver "$SOLVER"
+    # One `cargo kani` per harness, $at_once at a time: Kani's driver keeps
+    # the results of every harness it ran, the covers' traces among them,
+    # until it ends, and the mode 3 harnesses' took it past 6 GB.
+    # shellcheck disable=SC2016
+    set -- xargs -P "$at_once" -I '{}' sh -c \
+        'cargo kani -p ceres-core --harness "$1" --exact -j 1 --output-format terse \
+            -Z unstable-options --output-into-files --solver "$2" >"$3/$1.log" 2>&1' \
+        sh '{}' "$SOLVER" "$one"
     if [ -n "${KANI_CORES:-}" ]; then
         set -- taskset -c "$KANI_CORES" "$@"
     fi
     if command -v systemd-run >/dev/null; then
         set -- systemd-run --user --scope -q -p "MemoryMax=$MEMORY" -p MemorySwapMax=0 "$@"
     fi
-    (cd "$WT" && nice "$@" >"$log" 2>&1) || true
-    verdicts "$log"
+    (cd "$WT" && nice "$@" <"$one/names" >"$log" 2>&1) || true
+    while read -r name; do
+        [ ! -f "$one/$name.log" ] || cat "$one/$name.log"
+    done <"$one/names" >>"$log"
+    while read -r name; do
+        [ ! -f "$one/$name.log" ] || verdicts "$one/$name.log"
+    done <"$one/names"
 }
 
 # The hash of each harness's program, as the worktree compiles it: "name
