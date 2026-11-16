@@ -43,7 +43,7 @@
 //! The `netlist_mode3_armed_*` harnesses prove the same dots with the window
 //! armed (`mode3-window-armed`): LCDC's bit 5 set, WY matched in the frame on
 //! both sides (ceres's `wy_triggered`, the netlist's REJO), WX held between
-//! 7 and 165, and ceres's window check short of it. Both stay related, the
+//! 2 and 165, and ceres's window check short of it. Both stay related, the
 //! netlist's window waiting (no WX match, not in it), until ceres's check
 //! reaches WX: the window starts in the next dot.
 //!
@@ -72,7 +72,7 @@
 //!
 //! What it does not cover yet: the window's start with the objects on, the
 //! pixels the window draws, how it is armed at a line's start (WY's match,
-//! and a line's start with the window armed), WX outside 7 to 165, and
+//! and a line's start with the window armed), WX 0, 1 and 166, and
 //! writes of WX and LCDC's window bit (the loop stops ceres's window as a
 //! tile's fetch starts with the bit clear, `Pace::window_before_fetch`);
 //! objects at X 0 to 7 (they match in the lead-in), an object's mode 0 pulse

@@ -317,9 +317,10 @@ pub(crate) fn start_agrees(
     related(l, net, rest.after(snapshot, &l.pace))
 }
 
-/// The WX the armed window takes: it starts at a pixel of the line, past
-/// the lead-in.
-const FIRST_WX: u8 = 7;
+/// The WX the armed window takes. Below 2 the window starts in the lead-in,
+/// and the two sides part in its start (WX 0 and 1, task 1.3); at 166 the
+/// WX 166 glitch ends mode 3 early (`locks-with-wx-166-glitch`).
+const FIRST_WX: u8 = 2;
 
 const LAST_WX: u8 = 165;
 
