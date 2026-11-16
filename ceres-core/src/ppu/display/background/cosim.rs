@@ -318,7 +318,7 @@ fn idle_lines_stay_related() {
 #[test]
 fn armed_lines_stay_related_up_to_wx() {
     for scx in 0..8 {
-        for wx in [2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16, 17, 50, 100, 159, 165] {
+        for wx in [1, 2, 3, 4, 5, 6, 7, 8, 9, 14, 15, 16, 17, 50, 100, 159, 165] {
             let mut w = Walk::start(&Line {
                 scx,
                 wx: Some(wx),
@@ -339,7 +339,7 @@ fn armed_lines_stay_related_up_to_wx() {
 #[test]
 fn window_lines_stay_related() {
     for scx in 0..8 {
-        for wx in 2..=165 {
+        for wx in 1..=165 {
             let mut w = Walk::start(&Line {
                 scx,
                 wx: Some(wx),
@@ -525,7 +525,9 @@ impl Walk {
 #[test]
 fn window_dots_with_free_inputs() {
     let mut free = Free(0x9E37_79B9_7F4A_7C15);
-    for wx in [2, 3, 4, 5, 6, 7, 20, 21, 22, 23, 24, 25, 26, 27, 164, 165] {
+    for wx in [
+        1, 2, 3, 4, 5, 6, 7, 20, 21, 22, 23, 24, 25, 26, 27, 164, 165,
+    ] {
         for scx in [0, 3, 5] {
             let line = Line {
                 scx,
@@ -593,7 +595,7 @@ fn lines_start_as_start_agrees_takes_them() {
                 objects,
             });
         }
-        for wx in 2..=165 {
+        for wx in 1..=165 {
             lines.push(Line {
                 scx,
                 wx: Some(wx),

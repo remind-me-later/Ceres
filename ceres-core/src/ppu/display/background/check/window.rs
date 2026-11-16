@@ -71,8 +71,11 @@ pub(super) const fn window_starting(
         win_x: 0,
         ..*net
     };
+    // The pixel the netlist draws in dot 1 is in the line's first round (the
+    // junk row) when the window starts in the lead-in (WX 1).
+    let first = position + 1 + len_at(fine) as i16 <= 0;
     if dot == 1 {
-        pipeline_at(position + 1, len_at(fine), false, net)
+        pipeline_at(position + 1, len_at(fine), first, net)
     } else if dot == 2 {
         let base = pipeline_at(position + 1, len_at(fine), false, &started);
         NetPipeline {
@@ -88,6 +91,10 @@ pub(super) const fn window_starting(
             fine: held,
             ryfa: false,
             rene: fine == 0,
+            // The fine scroll is held: it does not match through the start
+            // (WX 1 starts the window a pixel before its match).
+            puxa: false,
+            nyze: false,
             nopa: false,
             sovy: false,
             ..base
@@ -107,6 +114,8 @@ pub(super) const fn window_starting(
             fine: held,
             ryfa: false,
             rene: false,
+            puxa: false,
+            nyze: false,
             ..base
         }
     } else if dot == 8 {

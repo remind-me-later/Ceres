@@ -812,7 +812,7 @@ dots) and `_inside`, about a minute and 2.5 GB each. Its two
 counterexamples were pairs no line reaches: a ninth dot past the line's end
 (with WX at 165 the line is drawn after the eighth), and a window's column
 beyond its five bits. Not proved yet: the window with objects on, how a
-line starts armed (WY's trigger against REJO), WX 0, 1 and 166 (2 to 6 are in since task 1.3), writes
+line starts armed (WY's trigger against REJO), WX 0 and 166 (1 to 6 are in since task 1.3), writes
 of WX and of LCDC's window bit, and the pixels.
 
 The proofs take every state the relation allows, and the 803 ROMs reach

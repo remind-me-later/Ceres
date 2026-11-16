@@ -324,10 +324,11 @@ pub(crate) fn start_before(l: &Mode3Loop, net: &NetPipeline) -> bool {
         & starting_objects(l, net)
 }
 
-/// The WX the armed window takes. Below 2 the window starts in the lead-in,
-/// and the two sides part in its start (WX 0 and 1, task 1.3); at 166 the
-/// WX 166 glitch ends mode 3 early (`locks-with-wx-166-glitch`).
-const FIRST_WX: u8 = 2;
+/// The WX the armed window takes. At 1 the window starts in the lead-in a
+/// pixel before the netlist's fine scroll matches (`window_starting`); at 0
+/// the two sides part in its start (task 1.3); at 166 the WX 166 glitch
+/// ends mode 3 early (`locks-with-wx-166-glitch`).
+const FIRST_WX: u8 = 1;
 
 const LAST_WX: u8 = 165;
 
