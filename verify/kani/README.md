@@ -19,6 +19,16 @@ a time (2), under a memory cap where systemd-run is there (`KANI_MEMORY`,
 only a failing harness needs it, for its counterexample. Mode 3's 22
 harnesses take about 90 minutes two at a time; the other 27, six.
 
+A harness passes as well when its relation holds of no state, so the
+covers (`kani::cover!`) say which states it has. `covers.tsv` keeps each
+harness's covers with their status, for the program it ran. A cover has to be
+satisfied by a harness that has it, and a harness with covers has to
+satisfy one of them, else `run` records it as vacuous. The covers sit in the
+helpers the harnesses share, and each harness reaches some of them. Both
+`run` and `status` list any cover no harness satisfies as `uncovered`. Each
+harness's full results, the covers among them, are in the worktree's
+`result_output_dir/`.
+
 `faults/` holds the planted faults: patches of ceres or of a
 transcription, each naming the harness that must fail with it. They show
 that a harness would notice the kind of bug it is there for; `faults`

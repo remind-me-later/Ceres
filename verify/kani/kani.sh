@@ -8,12 +8,14 @@
 #
 #   kani.sh list            the harnesses, by their full names
 #   kani.sh status          each harness: verified on these sources, stale
-#                           (verified on others) or never run; exits 1
-#                           unless all are verified
+#                           (verified on others) or never run, and the
+#                           covers none of them satisfies; exits 1 unless
+#                           all are verified and covered
 #   kani.sh run [NAME...]   run the harnesses that are not verified on these
 #                           sources (those whose names contain a NAME, if
 #                           given), but those whose program is unchanged,
-#                           and record their verdicts; exits 1 if one fails
+#                           and record their verdicts and covers; exits 1 if
+#                           one fails or a cover is not satisfied
 #   kani.sh rerun NAME...   run those harnesses again, verified or not
 #   kani.sh faults [NAME]   the planted faults, faults/*.patch: each
 #                           names a harness that must fail with it applied,
@@ -42,6 +44,17 @@
 # its harness's program; a comment, or code a harness does not reach, does
 # not. `rerun` always runs.
 #
+# A verdict says nothing of a relation no state satisfies: every harness
+# would pass. The covers (`kani::cover!`) say which states the relation has:
+# covers.tsv keeps, per harness and program, each cover's status, from the
+# harness's results (--output-into-files; covers.pl). A cover is one of a
+# function's, by its description; the helpers that hold them are shared, and
+# each harness takes some of their states. Every cover has to be satisfied
+# by a harness verified on these sources that has it, and every harness that
+# has covers has to satisfy one of them: else `run` records it as vacuous,
+# not as passed. A harness keeps its verdict only with its covers recorded
+# for its program (goto-instrument's --show-properties lists those it has).
+#
 # A run is one `cargo kani` with KANI_JOBS harnesses at a time (2), under
 # a memory cap where systemd-run is there (KANI_MEMORY, 9G; no swap), on
 # KANI_CORES if given (taskset's list), with KANI_SOLVER (cadical). The
@@ -59,6 +72,7 @@ set -eu
 KANI=$(cd -- "$(dirname -- "$0")" && pwd)
 ROOT=$(cd -- "$KANI/../.." && pwd)
 RESULTS=$KANI/results.tsv
+COVERS=$KANI/covers.tsv
 FAULTS=$KANI/faults
 WT=${KANI_WORKTREE:-$ROOT-kani}
 JOBS=${KANI_JOBS:-2}
@@ -144,6 +158,39 @@ record() {
     rm "$RESULTS.new"
 }
 
+# Records the covers of harness $1 with program $2, "function description
+# status" lines (tab-separated) on the standard input: replaces the
+# harness's lines.
+record_covers() {
+    {
+        if [ -f "$COVERS" ]; then
+            grep -v '^#' "$COVERS" | awk -F '\t' -v name="$1" '$1 != name'
+        fi
+        awk -v name="$1" -v program="$2" '{ print name "\t" program "\t" $0 }'
+    } | LC_ALL=C sort >"$COVERS.new"
+    {
+        echo "# Kani's covers, written by verify/kani/kani.sh: the harness, the hash of its"
+        echo "# program (as results.tsv has it), the cover's function and description, and"
+        echo "# its status in the harness (see kani.sh)."
+        cat "$COVERS.new"
+    } >"$COVERS"
+    rm "$COVERS.new"
+}
+
+# The covers that the harnesses run on the sources $1 have and none of them
+# satisfies, each harness with its covers for the program it ran: "function:
+# description" lines.
+uncovered() {
+    [ -f "$COVERS" ] || return 0
+    awk -F '\t' -v hash="$1" '
+        FILENAME == ARGV[1] { if ($2 == hash) program[$1] = $6; next }
+        /^#/ || !($1 in program) || program[$1] != $2 { next }
+        { key = $3 ": " $4; has[key] = 1 }
+        $5 == "SATISFIED" { satisfied[key] = 1 }
+        END { for (key in has) if (!(key in satisfied)) print key }
+    ' "$RESULTS" "$COVERS" | LC_ALL=C sort
+}
+
 # The harnesses of the standard input in their state on the sources $1:
 # "verified", "stale" or "new", then the name.
 states() {
@@ -180,7 +227,8 @@ verdicts() {
 
 # Runs the harnesses of the standard input in the worktree, $1 at a time
 # (JOBS if not given), logging to run$2.log; prints "name verdict seconds"
-# for each that finished.
+# for each that finished, and leaves its results in
+# result_output_dir/NAME.
 kani() {
     at_once=${1:-$JOBS}
     log=$LOGS/run${2:-}.log
@@ -190,8 +238,11 @@ kani() {
         set -- "$@" --harness "$name"
     done
     [ $# -gt 0 ] || return 0
+    # Each harness's results, its covers' statuses among them, in a file
+    # of its name.
+    rm -rf "$WT/result_output_dir"
     set -- cargo kani -p ceres-core "$@" --exact -j "$at_once" \
-        --output-format terse --solver "$SOLVER"
+        --output-format terse -Z unstable-options --output-into-files --solver "$SOLVER"
     if [ -n "${KANI_CORES:-}" ]; then
         set -- taskset -c "$KANI_CORES" "$@"
     fi
@@ -210,7 +261,8 @@ kani() {
 # it). The hash takes in the harness's attributes as Kani records them (its
 # unwinding, solver and stubs), Kani's and CBMC's versions and the solver.
 # A passing verdict whose program has the same hash still holds: CBMC would
-# be given the same program.
+# be given the same program. The covers each has: "name function
+# description" lines (tab-separated) in $LOGS/covers.
 program_hashes() {
     version=$(cd "$WT" && cargo kani --version 2>/dev/null | tr '\n' ' ')
     kani_version=$(printf '%s' "$version" | awk '{ print $4 }')
@@ -223,8 +275,23 @@ program_hashes() {
         echo "the harnesses do not compile (see $LOGS/codegen.log)" >&2
         return 1
     }
-    meta=$(ls -t "$WT"/target/kani/*/debug/build/ceres-core/*/out/*.kani-metadata.json | head -n 1)
+    # The newest metadata of every harness: a run of some harnesses (a
+    # counterexample's, by hand) leaves metadata of only those, newer than
+    # a codegen that had nothing to rebuild.
+    count=$(harnesses | wc -l)
+    meta=$(ls -t "$WT"/target/kani/*/debug/build/ceres-core/*/out/*.kani-metadata.json |
+        while read -r file; do
+            if [ "$(grep -o '"pretty_name"' "$file" | wc -l)" -ge "$count" ]; then
+                echo "$file"
+                break
+            fi
+        done)
+    [ -n "$meta" ] || {
+        echo "no metadata of every harness (see $LOGS/codegen.log)" >&2
+        return 1
+    }
     tab=$(printf '\t')
+    : >"$LOGS/covers"
     # shellcheck disable=SC2016
     perl -ne 'while (/\{"pretty_name":"([^"]*)".*?"goto_file":"([^"]*)","attributes":(\{.*?\}),"contract"/g) { print "$1\t$2\t$3\n" }' "$meta" |
         while IFS=$tab read -r name goto attributes; do
@@ -232,6 +299,8 @@ program_hashes() {
             hash=$(printf '%s\n%s\n%s\n%s\n' "$program" "$attributes" "$version" "$SOLVER" |
                 sha256sum | cut -c1-16)
             printf '%s %s\n' "$name" "$hash"
+            "$gi" --show-properties "${goto%.symtab.out}.out" | perl "$KANI/covers.pl" program |
+                awk -v name="$name" '{ print name "\t" $0 }' >>"$LOGS/covers"
         done >"$LOGS/programs"
     [ -s "$LOGS/programs" ]
 }
@@ -241,9 +310,10 @@ program_of() {
     awk -v name="$1" '$1 == name { print $2 }' "$LOGS/programs"
 }
 
-# Runs the harnesses of the standard input and records their verdicts. With
-# $2 "keep", a harness whose last verdict passed on a program of the same
-# hash keeps it, with the sources' new hash, and does not run.
+# Runs the harnesses of the standard input and records their verdicts and
+# covers. With $2 "keep", a harness whose last verdict passed on a program
+# of the same hash, with its covers recorded for it if it has any, keeps
+# it, with the sources' new hash, and does not run.
 run_and_record() {
     hash=$1
     failed=0
@@ -253,7 +323,11 @@ run_and_record() {
         while read -r name; do
             line=$(recorded "$name")
             program=$(program_of "$name")
-            if [ -n "$program" ] && [ "$(printf '%s' "$line" | cut -f3,6)" = "$(printf 'pass\t%s' "$program")" ]; then
+            has_covers=$(awk -F '\t' -v name="$name" '$1 == name { print 1; exit }' "$LOGS/covers")
+            covered=$(awk -F '\t' -v name="$name" -v program="$program" \
+                '$1 == name && $2 == program { print 1; exit }' "$COVERS" 2>/dev/null)
+            if [ -n "$program" ] && [ "$(printf '%s' "$line" | cut -f3,6)" = "$(printf 'pass\t%s' "$program")" ] &&
+                { [ -z "$has_covers" ] || [ -n "$covered" ]; }; then
                 record "$name" "$hash" pass "$(printf '%s' "$line" | cut -f4)" "$program"
                 echo "kept $name (its program is unchanged)"
             else
@@ -267,7 +341,17 @@ run_and_record() {
         grep -e "$SOLO" "$LOGS/todo" | kani 1 -solo
     } >"$LOGS.verdicts" 2>/dev/null || true
     while read -r name verdict seconds; do
-        record "$name" "$hash" "$verdict" "$seconds" "$(program_of "$name")"
+        program=$(program_of "$name")
+        results=$WT/result_output_dir/$name
+        if [ -f "$results" ]; then
+            perl "$KANI/covers.pl" results "$results" >"$LOGS/covers.run"
+            # Covers, none satisfied: the harness holds of no state.
+            if [ -s "$LOGS/covers.run" ] && ! cut -f3 "$LOGS/covers.run" | grep -qx SATISFIED; then
+                [ "$verdict" != pass ] || verdict=vacuous
+            fi
+            record_covers "$name" "$program" <"$LOGS/covers.run"
+        fi
+        record "$name" "$hash" "$verdict" "$seconds" "$program"
         echo "$verdict $name (${seconds}s)"
         [ "$verdict" = pass ] || failed=1
     done <"$LOGS.verdicts"
@@ -280,6 +364,11 @@ run_and_record() {
         fi
     done <"$LOGS/todo"
     rm -f "$LOGS.verdicts"
+    uncovered "$hash" >"$LOGS/uncovered"
+    while read -r cover; do
+        echo "uncovered $cover"
+        failed=1
+    done <"$LOGS/uncovered"
     return "$failed"
 }
 
@@ -290,7 +379,8 @@ list)
 status)
     hash=$(sources_hash "$ROOT")
     harnesses | states "$hash" | LC_ALL=C sort
-    ! harnesses | states "$hash" | grep -qv '^verified '
+    uncovered "$hash" | sed 's/^/uncovered /'
+    ! harnesses | states "$hash" | grep -qv '^verified ' && [ -z "$(uncovered "$hash")" ]
     ;;
 sync)
     sync
