@@ -43,7 +43,7 @@
 //! The `netlist_mode3_armed_*` harnesses prove the same dots with the window
 //! armed (`mode3-window-armed`): LCDC's bit 5 set, WY matched in the frame on
 //! both sides (ceres's `wy_triggered`, the netlist's REJO), WX held between
-//! 2 and 165, and ceres's window check short of it. Both stay related, the
+//! 1 and 165, and ceres's window check short of it. Both stay related, the
 //! netlist's window waiting (no WX match, not in it), until ceres's check
 //! reaches WX: the window starts in the next dot.
 //!
