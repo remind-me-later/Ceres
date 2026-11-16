@@ -215,9 +215,15 @@ pub(crate) const fn expected(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetP
         WindowPhase::Starting { dot, fine } => {
             return window_starting(l, net, dot, fine, g.rerun);
         }
-        WindowPhase::Inside => return window_inside(l, net),
+        WindowPhase::Inside => return window_inside(l, net, g),
         WindowPhase::Off | WindowPhase::Armed => {}
     }
+    background(l, net, g)
+}
+
+/// The netlist's background pipeline (`expected` with the window not
+/// started, and inside it but for the window's flip-flops).
+pub(super) const fn background(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetPipeline {
     let (p, len) = shifted(&l.pace.bg, g.extra);
     let first = (p + len as i16 <= 0) & !g.rerun;
     let mut e = pipeline_at(p, len, first, net);

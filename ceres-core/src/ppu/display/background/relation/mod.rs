@@ -339,6 +339,9 @@ const LAST_WX: u8 = 165;
 /// Ceres's window check compares WX with its position plus this.
 const WX_AHEAD: i16 = 7;
 
+/// An object matches as ceres's position plus this reaches its X.
+const OBJECT_AHEAD: i16 = 8;
+
 /// The window's column counter's bits.
 const WIN_X_MASK: u8 = 0x1F;
 
@@ -383,7 +386,8 @@ pub(crate) fn step_agrees(
         & quiet(&falling, l)
         & writes(net, &rising, &falling, l.mixer_scx)
         & (!l.window_enabled | holds_wx(&net.inputs, &rising) & holds_wx(&rising, &falling))
-        & lead_in_matches(l, mixer_scx))
+        & lead_in_matches(l, mixer_scx)
+        & objects_clear(l, g))
     {
         return true;
     }

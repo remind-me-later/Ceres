@@ -10,7 +10,7 @@
 use {
     super::relation::{
         Before, Ghost, INSIDE, Mode3Loop, before_start, ceres_dot, ceres_first_dot, expected,
-        related, signed, start_agrees, start_before, step_agrees,
+        objects_clear, related, signed, start_agrees, start_before, step_agrees,
     },
     crate::ppu::display::{
         Pace,
@@ -361,6 +361,59 @@ fn window_lines_stay_related() {
             );
         }
     }
+}
+
+/// The window's lines with the objects on, from start to end: related at
+/// every dot, through the window's start and inside it, but for the steps
+/// the proofs leave out (`relation::objects_clear`: an object fetched in
+/// the window's start or just before it), where the line stops.
+#[test]
+fn window_lines_with_objects_stay_related() {
+    let objects: [&[u8]; 9] = [
+        &[8],
+        &[9],
+        &[16],
+        &[20],
+        &[40],
+        &[80],
+        &[160],
+        &[20, 21],
+        &[8, 16, 17, 100, 166],
+    ];
+    let (mut lines, mut left_out) = (0, 0);
+    for scx in 0..8 {
+        for wx in 0..=165 {
+            for xs in objects {
+                let mut w = Walk::start(&Line {
+                    scx,
+                    wx: Some(wx),
+                    objects: xs,
+                });
+                w.first_dot();
+                lines += 1;
+                loop {
+                    assert!(
+                        w.related(),
+                        "SCX {scx}, WX {wx}, objects {xs:?}\n{}",
+                        w.table
+                    );
+                    if !objects_clear(&w.l, w.g) {
+                        left_out += 1;
+                        break;
+                    }
+                    if let Some(stopped) = w.dot() {
+                        assert!(stopped, "SCX {scx}, WX {wx}, objects {xs:?}\n{}", w.table);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    // Objects within a few pixels of WX: one line in fifteen of these.
+    assert!(
+        left_out * 15 <= lines,
+        "{left_out} of {lines} lines left out"
+    );
 }
 
 /// A small generator of the values a harness leaves free (xorshift).

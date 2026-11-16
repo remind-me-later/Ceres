@@ -213,17 +213,31 @@ const fn counted_len(l: &Mode3Loop) -> u8 {
     }
 }
 
-/// The netlist's pipeline ten dots or more after the window started, with
-/// the objects off: the background's at ceres's position and FIFO length,
-/// in the window (NOPA and its latch), its column a tile behind ceres's
-/// from ceres's read of a tile's last byte (a dot earlier with the fetcher
+/// The netlist's pipeline ten dots or more after the window started: the
+/// background's (in the lead-in at ceres's position and FIFO length, from
+/// the first pixel on with the objects' history, `background`), in the
+/// window (NOPA and its latch), its column a tile behind ceres's from
+/// ceres's read of a tile's last byte (a dot earlier with the fetcher
 /// ahead, `blank_ahead`) to the netlist's restart for it.
-pub(super) const fn window_inside(l: &Mode3Loop, net: &NetPipeline) -> NetPipeline {
+pub(super) const fn window_inside(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetPipeline {
     let pace = &l.pace;
     let position = signed(pace.bg.position);
-    let inside = pipeline_at(position, counted_len(l), false, net);
+    let inside = if position < 0 {
+        pipeline_at(position, counted_len(l), false, net)
+    } else {
+        background(l, net, g)
+    };
     let matched = wx_matched(l, position);
-    let read = inside.fine + blank_ahead(l) as u8 >= 4;
+    // Ceres steps its column as it reads a tile's last byte, the netlist as
+    // its fetcher restarts for the tile (its fine scroll at 0): between,
+    // ceres holds the tile, or has pushed it and the netlist's pixels have
+    // not reached its third. While an object is fetched the netlist's
+    // pixels stand still and ceres's fetcher runs on.
+    let read = if position < 0 {
+        inside.fine + blank_ahead(l) as u8 >= 4
+    } else {
+        matches_step(pace.bg.step, FetcherStep::Push) | (inside.fine >= 6)
+    };
     NetPipeline {
         pyco: matched,
         nunu: matched,
@@ -295,11 +309,18 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     let bg = &pace.bg;
     let p = signed(bg.position);
     let len = bg.fifo.len();
-    let fetch = if blank_ahead(l) {
-        // From the blank's dot to the tile's push.
-        p + i16::from(len) == 2
+    // No object before the first pixel: the ghost rests in the lead-in, and
+    // from the blank's dot to the tile's push the fetcher is a step ahead.
+    // From the first pixel on, the objects' history as outside the window.
+    let history = if p < 0 {
+        ghost_rests(l, g)
+            & if blank_ahead(l) {
+                p + i16::from(len) == 2
+            } else {
+                matches_step(bg.step, step_for(len))
+            }
     } else {
-        matches_step(bg.step, step_for(len))
+        history_ok(pace, g)
     };
     // Ceres's window matches WX again at -7, the tile pushed.
     let blank = (p == LAST_DISCARDED - 1) & (len == FULL) & (l.wx == 0);
@@ -319,13 +340,12 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     };
     (len >= 1)
         & (len <= FULL)
-        & fetch
+        & history
         & lead_in
         & (p <= i16::from(PX_WIDTH))
         & !pace.window.being_fetched
         & (pace.window.tile_x <= WIN_X_MASK)
         & (!bg.insert_blank | blank)
-        & ghost_rests(l, g)
         & objects_ok(l, g)
 }
 
@@ -388,9 +408,30 @@ pub(super) const fn window_agrees(l: &Mode3Loop, net: &NetPipeline, g: Ghost) ->
         }
         // The netlist's window is `expected`'s there.
         WindowPhase::Starting { .. } | WindowPhase::Inside => {
-            ceres_window_waits(l, true, true) & wx_held & !l.objects_enabled
+            ceres_window_waits(l, true, true) & wx_held
         }
     }
+}
+
+/// With the objects on, the window's start clear of them: as ceres's check
+/// reaches WX (and while the window starts), no object is being fetched,
+/// the history of the last one is at rest (the netlist's pixels and fetcher
+/// back with ceres's background, `ghost_rests`), and the next object matches past the start (its X at least WX + 5, the position
+/// of the window's tenth dot plus 8). An object fetched in the start, or
+/// just before it, is left out (`window-objects-clear`).
+pub(crate) fn objects_clear(l: &Mode3Loop, g: Ghost) -> bool {
+    let pace = &l.pace;
+    let near = match window_phase(l, g) {
+        WindowPhase::Armed => signed(pace.bg.position) + WX_AHEAD >= i16::from(l.wx),
+        WindowPhase::Starting { .. } => true,
+        WindowPhase::Off | WindowPhase::Inside => false,
+    };
+    let settled = ghost_rests(l, g) & !fetching(pace);
+    let past_start = match pace.objs.next() {
+        Some(e) => i16::from(e.x) >= start_position(l.wx, INSIDE) + OBJECT_AHEAD,
+        None => true,
+    };
+    !(l.objects_enabled & l.window_enabled & near) | (settled & past_start)
 }
 
 /// At WX 0 the lead-in that runs in the window matches SCX before it would

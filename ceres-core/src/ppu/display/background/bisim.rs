@@ -47,9 +47,10 @@
 //! netlist's window waiting (no WX match, not in it), until ceres's check
 //! reaches WX: the window starts in the next dot.
 //!
-//! The `netlist_mode3_window_*` harnesses prove the window's start and the
-//! window after it, with the objects off (`mode3-window-start`): from the
-//! armed window with ceres's check at WX, through the nine dots in which
+//! The `netlist_mode3_window_*` and `netlist_mode3_inside_*` harnesses
+//! prove the window's start and the window after it (`mode3-window-start`):
+//! from the armed window with ceres's check at WX, through the nine dots in
+//! which
 //! ceres fetches the window's first tile and the netlist holds its pixels
 //! and restarts its fetcher and fine scroll (`relation::window_starting`), and
 //! inside the window to the line's end, both stay related, and the
@@ -58,6 +59,15 @@
 //! 0 it waits a dot (`relation::window_delay_ok`), and SCX's discard runs in
 //! the window (`relation::in_lead`), but for a lead-in that misses SCX
 //! altogether, which the steps leave out (`wx0-lead-in-matches`).
+//! Inside the window the objects are fetched as outside it, the ghost
+//! keeping their history (`relation::background`), one harness per sleep
+//! of an object's fetch; the window's column follows ceres's from its read
+//! of a tile's last byte to the netlist's restart for the tile, which an
+//! object's fetch holds back. The steps leave out an object fetched in the
+//! window's start or just before it (`relation::objects_clear`,
+//! `window-objects-clear`): as ceres's check reaches WX and through the
+//! start, the last object's history is at rest and the next one matches
+//! past the start.
 //!
 //! Ceres's side is its mode 3 loop (`mode3::mode3`), run on the display's
 //! pace (`relation::Mode3Loop`): the window's check runs (`Pace::mode3_window`),
@@ -74,11 +84,10 @@
 //! `step_state_machine` does, and takes `mode3_done`'s sleep into
 //! `HBlankStart`.
 //!
-//! What it does not cover yet: the window's start with the objects on, the
-//! pixels the window draws, how it is armed (ceres's WY match against the
-//! netlist's latch: a line that starts armed is covered), WX 0 and 166,
-//! and
-//! writes of WX and LCDC's window bit (the loop stops ceres's window as a
+//! What it does not cover yet: an object fetched in the window's start or
+//! just before it, the pixels the window draws, how it is armed (ceres's
+//! WY match against the netlist's latch: a line that starts armed is
+//! covered), WX 166, and writes of WX and LCDC's window bit (the loop stops ceres's window as a
 //! tile's fetch starts with the bit clear, `Pace::window_before_fetch`);
 //! objects at X 0 to 7 (they match in the lead-in), an object's mode 0 pulse
 //! at X 167, and writes of LCDC's object bit (the aborted fetch); line 0
@@ -280,18 +289,34 @@ fn any_loop() -> Mode3Loop {
     }
 }
 
+/// Where the window is in `dot_from`'s pairs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Window {
+    Off,
+    /// Armed, ceres's check short of WX (at it, the window starts).
+    Armed,
+    /// Ten dots or more after ceres's check fired.
+    Inside,
+}
+
 /// A dot from every related pair whose loop sleeps in `state`, `since_push`
-/// dots after ceres's last object push if given, with the window off, or
-/// armed and its check short of WX (at it, the window starts).
-fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
+/// dots after ceres's last object push if given, with the window where
+/// `window` has it.
+fn dot_from(state: State, since_push: Option<u8>, window: Window) {
     let mut l = any_loop();
     l.pace.state = state;
-    // The window's flags as `window_agrees` has them: not started, WY
-    // matched if armed.
-    l.window_enabled = armed;
-    l.pace.window.wy_triggered = armed;
-    if armed {
+    // The window's flags as `window_agrees` has them: WY matched if the
+    // window is on, started inside it, its first tile fetched.
+    let on = window != Window::Off;
+    l.window_enabled = on;
+    l.pace.window.wy_triggered = on;
+    if window == Window::Armed {
         kani::assume(super::relation::signed(l.pace.bg.position) + 7 < i16::from(l.wx));
+    }
+    if window == Window::Inside {
+        l.pace.window.wx_triggered = true;
+        l.pace.window.being_fetched = false;
+        l.pace.window.tile_x = kani::any();
     }
     // The sleep's dots left as `between_dots` has them.
     l.pace.wait = if matches!(state, State::Mode3ObjectAttributes | State::Mode3ObjectLow) {
@@ -303,9 +328,13 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     if let Some(since) = since_push {
         g.since_push = since;
     }
-    // The window not started: the ghost counts no dot of it.
-    g.window = 0;
-    g.window_fine = 0;
+    // The ghost counts the window's dots once ceres's check fired.
+    if window == Window::Inside {
+        g.window = INSIDE;
+    } else {
+        g.window = 0;
+        g.window_fine = 0;
+    }
     // Every related pair's netlist is `expected` of what it carries over
     // (`netlist_mode3_expected_carries`).
     let mut net = expected(&l, &any_carried(&l), g);
@@ -333,8 +362,12 @@ fn dot_from(state: State, since_push: Option<u8>, armed: bool) {
     kani::cover!(related & (p == 160), "line drawn");
     kani::cover!(related & (bg.fifo.len() == 1) & (p > 0), "push next dot");
     kani::cover!(
-        related & armed & (p + 8 == i16::from(l.wx)),
+        related & (window == Window::Armed) & (p + 8 == i16::from(l.wx)),
         "WX in the next dot"
+    );
+    kani::cover!(
+        related & (window == Window::Inside) & (g.since_push == 0),
+        "object pushed in the window"
     );
     if related {
         let rising = quiet_inputs(&l, true);
@@ -376,7 +409,7 @@ fn netlist_mode3_expected_carries() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_pixel() {
-    dot_from(State::Mode3Pixel, None, false);
+    dot_from(State::Mode3Pixel, None, Window::Off);
 }
 
 /// A dot from every related pair where an object's fetch waits for the tile.
@@ -388,7 +421,7 @@ fn netlist_mode3_dot_pixel() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_wait() {
-    dot_from(State::Mode3ObjectWait, None, false);
+    dot_from(State::Mode3ObjectWait, None, Window::Off);
 }
 
 /// A dot from every related pair where an object's fetch starts as ceres pushes the last.
@@ -400,7 +433,7 @@ fn netlist_mode3_dot_wait() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_fetch_pushed() {
-    dot_from(State::Mode3ObjectFetch, Some(0), false);
+    dot_from(State::Mode3ObjectFetch, Some(0), Window::Off);
 }
 
 /// A dot from every related pair where an object's fetch starts a dot after ceres pushed the last.
@@ -412,7 +445,7 @@ fn netlist_mode3_dot_fetch_pushed() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_fetch_after_push() {
-    dot_from(State::Mode3ObjectFetch, Some(1), false);
+    dot_from(State::Mode3ObjectFetch, Some(1), Window::Off);
 }
 
 /// A dot from every related pair where an object's fetch starts.
@@ -424,7 +457,7 @@ fn netlist_mode3_dot_fetch_after_push() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_fetch() {
-    dot_from(State::Mode3ObjectFetch, Some(2), false);
+    dot_from(State::Mode3ObjectFetch, Some(2), Window::Off);
 }
 
 /// A dot from every related pair where an object's attributes are read.
@@ -436,7 +469,7 @@ fn netlist_mode3_dot_fetch() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_attributes() {
-    dot_from(State::Mode3ObjectAttributes, None, false);
+    dot_from(State::Mode3ObjectAttributes, None, Window::Off);
 }
 
 /// A dot from every related pair where an object's low byte is read.
@@ -448,7 +481,7 @@ fn netlist_mode3_dot_attributes() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_low() {
-    dot_from(State::Mode3ObjectLow, None, false);
+    dot_from(State::Mode3ObjectLow, None, Window::Off);
 }
 
 /// A dot from every related pair where an object's high byte is read.
@@ -460,7 +493,7 @@ fn netlist_mode3_dot_low() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_high() {
-    dot_from(State::Mode3ObjectHigh, None, false);
+    dot_from(State::Mode3ObjectHigh, None, Window::Off);
 }
 
 /// A dot from every related pair where the line is drawn.
@@ -472,7 +505,7 @@ fn netlist_mode3_dot_high() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_drawn() {
-    dot_from(State::HBlankStart, None, false);
+    dot_from(State::HBlankStart, None, Window::Off);
 }
 
 /// A dot from every related pair with the window armed where the loop sleeps after a pixel.
@@ -483,7 +516,7 @@ fn netlist_mode3_dot_drawn() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_pixel() {
-    dot_from(State::Mode3Pixel, None, true);
+    dot_from(State::Mode3Pixel, None, Window::Armed);
 }
 
 /// A dot from every related pair with the window armed where an object's fetch waits for the tile.
@@ -494,7 +527,7 @@ fn netlist_mode3_armed_pixel() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_wait() {
-    dot_from(State::Mode3ObjectWait, None, true);
+    dot_from(State::Mode3ObjectWait, None, Window::Armed);
 }
 
 /// A dot from every related pair with the window armed where an object's fetch starts as ceres pushes the last.
@@ -505,7 +538,7 @@ fn netlist_mode3_armed_wait() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_fetch_pushed() {
-    dot_from(State::Mode3ObjectFetch, Some(0), true);
+    dot_from(State::Mode3ObjectFetch, Some(0), Window::Armed);
 }
 
 /// A dot from every related pair with the window armed where an object's fetch starts a dot after ceres pushed the last.
@@ -516,7 +549,7 @@ fn netlist_mode3_armed_fetch_pushed() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_fetch_after_push() {
-    dot_from(State::Mode3ObjectFetch, Some(1), true);
+    dot_from(State::Mode3ObjectFetch, Some(1), Window::Armed);
 }
 
 /// A dot from every related pair with the window armed where an object's fetch starts.
@@ -527,7 +560,7 @@ fn netlist_mode3_armed_fetch_after_push() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_fetch() {
-    dot_from(State::Mode3ObjectFetch, Some(2), true);
+    dot_from(State::Mode3ObjectFetch, Some(2), Window::Armed);
 }
 
 /// A dot from every related pair with the window armed where an object's attributes are read.
@@ -538,7 +571,7 @@ fn netlist_mode3_armed_fetch() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_attributes() {
-    dot_from(State::Mode3ObjectAttributes, None, true);
+    dot_from(State::Mode3ObjectAttributes, None, Window::Armed);
 }
 
 /// A dot from every related pair with the window armed where an object's low byte is read.
@@ -549,7 +582,7 @@ fn netlist_mode3_armed_attributes() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_low() {
-    dot_from(State::Mode3ObjectLow, None, true);
+    dot_from(State::Mode3ObjectLow, None, Window::Armed);
 }
 
 /// A dot from every related pair with the window armed where an object's high byte is read.
@@ -560,11 +593,88 @@ fn netlist_mode3_armed_low() {
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_armed_high() {
-    dot_from(State::Mode3ObjectHigh, None, true);
+    dot_from(State::Mode3ObjectHigh, None, Window::Armed);
 }
 
-/// A dot from every related pair with the window on and the objects off,
-/// `window` dots after ceres's window check fired if given (0: armed, with
+/// A dot from every related pair inside the window where an object's fetch waits for the tile.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_inside_wait() {
+    dot_from(State::Mode3ObjectWait, None, Window::Inside);
+}
+
+/// A dot from every related pair inside the window where an object's fetch starts as ceres pushes the last.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_inside_fetch_pushed() {
+    dot_from(State::Mode3ObjectFetch, Some(0), Window::Inside);
+}
+
+/// A dot from every related pair inside the window where an object's fetch starts a dot after ceres pushed the last.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_inside_fetch_after_push() {
+    dot_from(State::Mode3ObjectFetch, Some(1), Window::Inside);
+}
+
+/// A dot from every related pair inside the window where an object's fetch starts.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_inside_fetch() {
+    dot_from(State::Mode3ObjectFetch, Some(2), Window::Inside);
+}
+
+/// A dot from every related pair inside the window where an object's attributes are read.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_inside_attributes() {
+    dot_from(State::Mode3ObjectAttributes, None, Window::Inside);
+}
+
+/// A dot from every related pair inside the window where an object's low byte is read.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_inside_low() {
+    dot_from(State::Mode3ObjectLow, None, Window::Inside);
+}
+
+/// A dot from every related pair inside the window where an object's high byte is read.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges mode3-window-start
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_inside_high() {
+    dot_from(State::Mode3ObjectHigh, None, Window::Inside);
+}
+
+/// A dot from every related pair with the window on, the objects on or
+/// off, `window` dots after ceres's window check fired if given (0: armed, with
 /// the check at WX; `INSIDE`: ten or more), any of the first nine if not;
 /// the loop sleeps after a pixel, or has drawn the line.
 fn window_dot(window: Option<u8>) {
@@ -581,7 +691,6 @@ fn window_dot(window: Option<u8>) {
     };
     l.pace.wait = 1;
     l.window_enabled = true;
-    l.objects_enabled = false;
     l.pace.window.wy_triggered = true;
     l.pace.window.wx_triggered = kani::any();
     l.pace.window.being_fetched = kani::any();
@@ -634,11 +743,12 @@ fn window_dot(window: Option<u8>) {
     }
 }
 
-/// A dot from every related pair with the window armed, the objects off and
-/// ceres's check at WX: the window starts.
+/// A dot from every related pair with the window armed and ceres's check at
+/// WX: the window starts.
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes window-objects-clear
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -650,6 +760,7 @@ fn netlist_mode3_window_reached() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes window-objects-clear
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]

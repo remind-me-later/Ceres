@@ -74,8 +74,8 @@ impl Ghost {
     /// (from two dots after ceres's stop to two dots after its push), the
     /// lead-in back at its start, and the netlist's fetcher's restart, as
     /// its fine scroll begins a tile. Once ceres's window check has fired,
-    /// the dots since, and the rest as with nothing fetched (the objects are
-    /// off there).
+    /// the dots since, with nothing fetched through the window's start, and
+    /// the objects' history again inside the window.
     pub(crate) fn after(self, before: Before, pace: &Pace) -> Self {
         let (state, wait, position) = (before.state, before.wait, before.position);
         let fired = !before.window_started & pace.window.wx_triggered;
@@ -86,9 +86,10 @@ impl Ghost {
         } else {
             self.window
         };
-        if window != 0 {
+        if (window != 0) & ((window < INSIDE) | (signed(pace.bg.position) < 0)) {
             // At WX 0 the window can start before SCX's discard, and the
-            // lead-in run on in it, back to its start too.
+            // lead-in run on in it, back to its start too; no object is
+            // fetched before the first pixel.
             return Self {
                 rerun: self.rerun | ((position == pos(-9)) & (pace.bg.position == pos(-16))),
                 window,
@@ -129,8 +130,8 @@ impl Ghost {
             extra,
             frozen,
             age,
-            window: 0,
-            window_fine: 0,
+            window,
+            window_fine: self.window_fine,
         }
     }
 }
@@ -170,24 +171,33 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     let bg = &l.pace.bg;
     let p = signed(bg.position);
     let len = bg.fifo.len();
-    let shapes = (len >= 1)
-        & (len <= FULL)
-        & fetcher_ok(&l.pace, g)
-        & !bg.insert_blank
-        & (p >= LEAD_IN)
-        & (p <= i16::from(PX_WIDTH))
-        & (g.since_push <= 2)
-        & (g.extra <= 2)
-        & (g.age <= 7);
+    let shapes =
+        (len >= 1) & (len <= FULL) & !bg.insert_blank & (p >= LEAD_IN) & (p <= i16::from(PX_WIDTH));
     // No object before the first pixel: the ghost rests in the lead-in.
     let lead_in = (p >= 0)
         | (g == Ghost {
             rerun: g.rerun,
             ..Ghost::at_rest(bg)
         });
+    shapes
+        & lead_in_ok(p, len, latched, l.mixer_scx, g.rerun)
+        & lead_in
+        & history_ok(&l.pace, g)
+        & objects_ok(l, g)
+        // Armed at WX 0, ceres's check fires in the line's first dot
+        // (`window_delay_ok`), or matched SCX and reaches WX in its second,
+        // its first pixel popped.
+        & (!l.window_enabled | (l.wx != 0) | (p == LAST_DISCARDED - 1) & (len == FULL - 1))
+}
+
+/// The objects' history in the ghost against ceres's background: the
+/// fetcher's step, the netlist's pixels ahead and its fetcher's age, as
+/// ceres's object fetches and pushes leave them.
+pub(super) const fn history_ok(pace: &Pace, g: Ghost) -> bool {
+    let bg = &pace.bg;
     // The netlist's fetcher only runs ahead of its fine scroll's count.
     let (net_p, net_len) = shifted(bg, g.extra);
-    let fetcher_ahead = ((net_p + i16::from(net_len) <= 0) & !g.rerun)
+    let fetcher_ahead = ((net_p + net_len as i16 <= 0) & !g.rerun)
         | if g.frozen {
             // While the pixels stand still the fetcher counts on.
             (g.age > fine_of(net_len)) | (g.age == 7)
@@ -198,17 +208,13 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         } else {
             g.age >= fine_of(net_len)
         };
-    shapes
-        & lead_in_ok(p, len, latched, l.mixer_scx, g.rerun)
-        & lead_in
+    fetcher_ok(pace, g)
+        & (g.since_push <= 2)
+        & (g.extra <= 2)
+        & (g.age <= 7)
         & fetcher_ahead
-        & ghost_ok(&l.pace, g)
-        & fetch_age_ok(&l.pace, g)
-        & objects_ok(l, g)
-        // Armed at WX 0, ceres's check fires in the line's first dot
-        // (`window_delay_ok`), or matched SCX and reaches WX in its second,
-        // its first pixel popped.
-        & (!l.window_enabled | (l.wx != 0) | (p == LAST_DISCARDED - 1) & (len == FULL - 1))
+        & ghost_ok(pace, g)
+        & fetch_age_ok(pace, g)
 }
 
 /// The lead-in from its start (at -16, the FIFO full) at position `p` with

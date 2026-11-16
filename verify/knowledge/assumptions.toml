@@ -184,7 +184,7 @@ title = "On a line where the window is armed (LCDC's bit 5 set, WY matched in th
 evidence = "proved"
 
 [mode3-window-start]
-title = "On a line where the window is armed (LCDC's bit 5 set, WY matched in the frame on both sides, WX held between 0 and 165) and the objects are off, ceres's mode 3 loop and render's pipeline stay related dot by dot from ceres's window check at WX, through the nine dots of the window's start and inside the window (at WX 0, the lead-in too, whatever SCX is and whenever the CPU writes it, but as wx0-lead-in-matches leaves out), and render's mode 0 rises a half dot after ceres's loop ends mode 3"
+title = "On a line where the window is armed (LCDC's bit 5 set, WY matched in the frame on both sides, WX held between 0 and 165), ceres's mode 3 loop and render's pipeline stay related dot by dot from ceres's window check at WX, through the nine dots of the window's start and inside the window, with the objects off or on (fetched inside the window as outside it, but as window-objects-clear leaves out; at WX 0, the lead-in too, whatever SCX is and whenever the CPU writes it, but as wx0-lead-in-matches leaves out), and render's mode 0 rises a half dot after ceres's loop ends mode 3"
 evidence = "proved"
 
 [wx0-lead-in-matches]
@@ -192,6 +192,11 @@ title = "On a line where the window starts at WX 0 before SCX's discard, the lea
 evidence = "open"
 how = "Otherwise the netlist's fine scroll waits at 7 for a match, where ceres's lead-in starts again (window-wx-0-lead-in-unmatched): the mode 3 relation takes the case out of its steps (background::relation::lead_in_matches). It needs SCX written as the lead-in runs in the window; no ROM of the sweep does."
 facts = ["window-wx-0-lead-in-unmatched"]
+
+[window-objects-clear]
+title = "On a line where the window starts with the objects on, no object is fetched in the window's start or just before it: as ceres's check reaches WX, no object is being fetched and the last one's history is at rest (the netlist's pixels and fetcher back with ceres's background), and the next object's X is at least WX + 5, so that it matches past the start"
+evidence = "open"
+how = "The mode 3 relation takes the other cases out of its steps (background::relation::objects_clear): it relates the window's start only with the ghost at rest. They are objects with X between WX - 6 and WX + 4, about one line in fifteen of the cosim's window lines with objects (window_lines_with_objects_stay_related). Relating them needs the window's start with an object's fetch in it, on both sides."
 
 [mode3-hooks-keep-pace]
 title = "What ceres's mode 3 loop asks of the PPU (its hooks: the fetchers' reads, the object's row, the pixels, the HBlank source) leaves the display's pace as it was, and changes of what the loop reads back only the tile the fetcher holds"
