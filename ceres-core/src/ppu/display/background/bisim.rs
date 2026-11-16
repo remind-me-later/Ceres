@@ -43,7 +43,7 @@
 //! The `netlist_mode3_armed_*` harnesses prove the same dots with the window
 //! armed (`mode3-window-armed`): LCDC's bit 5 set, WY matched in the frame on
 //! both sides (ceres's `wy_triggered`, the netlist's REJO), WX held between
-//! 1 and 165, and ceres's window check short of it. Both stay related, the
+//! 0 and 165, and ceres's window check short of it. Both stay related, the
 //! netlist's window waiting (no WX match, not in it), until ceres's check
 //! reaches WX: the window starts in the next dot.
 //!
@@ -54,6 +54,10 @@
 //! and restarts its fetcher and fine scroll (`relation::window_starting`), and
 //! inside the window to the line's end, both stay related, and the
 //! netlist's mode 3 stops a dot after ceres has drawn the line.
+//! At WX 0 the check fires in the line's first dot: with SCX's low bits not
+//! 0 it waits a dot (`relation::window_delay_ok`), and SCX's discard runs in
+//! the window (`relation::in_lead`), but for a lead-in that misses SCX
+//! altogether, which the steps leave out (`wx0-lead-in-matches`).
 //!
 //! Ceres's side is its mode 3 loop (`mode3::mode3`), run on the display's
 //! pace (`relation::Mode3Loop`): the window's check runs (`Pace::mode3_window`),
