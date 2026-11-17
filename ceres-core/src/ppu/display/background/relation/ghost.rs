@@ -74,8 +74,8 @@ impl Ghost {
     /// (from two dots after ceres's stop to two dots after its push), the
     /// lead-in back at its start, and the netlist's fetcher's restart, as
     /// its fine scroll begins a tile. Once ceres's window check has fired,
-    /// the dots since, with nothing fetched through the window's start, and
-    /// the objects' history again inside the window.
+    /// the dots since, the last push's history through the start's first two
+    /// dots, and the objects' history again from its seventh, ceres drawing.
     pub(crate) fn after(self, before: Before, pace: &Pace) -> Self {
         let (state, wait, position) = (before.state, before.wait, before.position);
         let fired = !before.window_started & pace.window.wx_triggered;
@@ -86,19 +86,59 @@ impl Ghost {
         } else {
             self.window
         };
-        if (window != 0) & ((window < INSIDE) | (signed(pace.bg.position) < 0)) {
+        // From the start's seventh dot ceres draws again, and an object at its
+        // position (0 or more) stops it: the objects' history as outside it.
+        let drawing = (window >= DRAWS_AGAIN) & (signed(pace.bg.position) >= 0);
+        if (window != 0) & ((window < INSIDE) | (signed(pace.bg.position) < 0)) & !drawing {
             // At WX 0 the window can start before SCX's discard, and the
             // lead-in run on in it, back to its start too; no object is
             // fetched before the first pixel.
+            let rerun = self.rerun | ((position == pos(-9)) & (pace.bg.position == pos(-16)));
+            let window_fine = if fired {
+                (fine_of(before.len) + 1) & 7
+            } else {
+                self.window_fine
+            };
+            // The last object's push may still hold the netlist in the
+            // start's first two dots: the dots since it, whether the
+            // netlist's pixels stood still, and its fetcher's age in its tile
+            // (in the first dot, as its fine scroll there has it at rest).
+            let since_push = if matches!(state, State::Mode3ObjectHigh) & (wait == 1) {
+                0
+            } else if self.since_push < 2 {
+                self.since_push + 1
+            } else {
+                2
+            };
+            let frozen = since_push <= 1;
+            let age = if !fired {
+                // The second dot: on from the first.
+                if self.age < 7 { self.age + 1 } else { 7 }
+            } else if (signed(position) + i16::from(before.len) <= 0) & !rerun {
+                window_fine
+            } else if !frozen & (window_fine == 0) {
+                0
+            } else if self.age < 7 {
+                self.age + 1
+            } else {
+                7
+            };
+            if window > 2 {
+                return Self {
+                    rerun,
+                    window,
+                    window_fine,
+                    ..Self::at_rest(&pace.bg)
+                };
+            }
             return Self {
-                rerun: self.rerun | ((position == pos(-9)) & (pace.bg.position == pos(-16))),
+                rerun,
+                since_push,
+                extra: 0,
+                frozen,
+                age,
                 window,
-                window_fine: if fired {
-                    (fine_of(before.len) + 1) & 7
-                } else {
-                    self.window_fine
-                },
-                ..Self::at_rest(&pace.bg)
+                window_fine,
             };
         }
         let pushed = matches!(state, State::Mode3ObjectHigh) & (wait == 1);

@@ -10,6 +10,10 @@ use super::*;
 /// pipeline is the background's again, in the window.
 pub(crate) const INSIDE: u8 = 10;
 
+/// The start's dot from which ceres draws again, the window's row pushed:
+/// an object can stop it from there.
+pub(crate) const DRAWS_AGAIN: u8 = 7;
+
 /// Where the window is on a line.
 #[derive(Clone, Copy)]
 pub(crate) enum WindowPhase {
@@ -41,7 +45,7 @@ pub(crate) const fn window_phase(l: &Mode3Loop, g: Ghost) -> WindowPhase {
 }
 
 /// The netlist's pipeline `dot` dots (1 to 9) after ceres's window check
-/// fired, its fine scroll at `fine` in the first, with the objects off.
+/// fired, its fine scroll at `fine` in the first.
 ///
 /// Dot 1 is one more dot of the background: ceres cleared its FIFO and holds
 /// its position, the netlist drew a pixel. In dot 2 the netlist's pixel
@@ -52,15 +56,24 @@ pub(crate) const fn window_phase(l: &Mode3Loop, g: Ghost) -> WindowPhase {
 /// (SOVY, not RYDY any more): the fetcher and the fine scroll restart, with
 /// no RYFA, and the window's column steps. In dot 9 the pixels go on, PYCO
 /// and NUNU fall, and RENE has no RYFA to take.
+///
+/// An object's push in the dot before the check fired still holds the
+/// netlist's pixels in dot 1, and its fetcher may be done (`g.age`); from
+/// dot 7 an object stops ceres two dots before the netlist (the ghost's
+/// `extra`), whose fetcher counts on while its pixels stand still.
 pub(super) const fn window_starting(
     l: &Mode3Loop,
     net: &NetPipeline,
     dot: u8,
     fine: u8,
-    rerun: bool,
+    g: Ghost,
 ) -> NetPipeline {
     let pace = &l.pace;
+    let rerun = g.rerun;
     let position = signed(pace.bg.position);
+    // The netlist's pixels: from dot 7 an object can stop ceres two dots
+    // before the netlist (the ghost's `extra`).
+    let (net_p, net_len) = shifted(&pace.bg, g.extra);
     // At WX 0 the netlist's window fires in the lead-in's first dot: its
     // fine scroll restarted for the line (0), and ceres's check fired at
     // the lead-in's start (`lead`, SCX's discard to come) or matched at -7
@@ -89,18 +102,27 @@ pub(super) const fn window_starting(
             // The lead-in's second dot: its first fetch restarted.
             pipeline_at(LEAD_IN, 6, true, net)
         } else {
-            pipeline_at(position + 1, len_at(fine), first, net)
+            first_dot_after(
+                l,
+                pipeline_at(position + 1, len_at(fine), first, net),
+                first,
+                g,
+            )
         }
     } else if dot == 2 {
         let base = pipeline_at(position + 1, len_at(fine), false, &started);
+        // At WX 0 the lead-in's first fetch restarted in dot 1 (`fine`).
+        let age = if at_line_start { fine + 1 } else { g.age };
         NetPipeline {
             px,
             fetcher: NetFetcher {
                 count: 0,
-                lyzu: (if fine < FETCH_DONE { fine } else { FETCH_DONE }) & 1 != 0,
+                // A clock behind the fetcher's count, which restarted: as
+                // it was a dot on in its tile.
+                lyzu: fetcher_for(age).lyzu,
                 nyka: false,
                 pory: false,
-                pygo: (fine >= 6) | (fine == 0),
+                pygo: fetcher_for(age).pygo,
                 ..base.fetcher
             },
             fine: held,
@@ -117,7 +139,8 @@ pub(super) const fn window_starting(
             ..base
         }
     } else if dot <= 7 {
-        let base = pipeline_at(position + 1, len_at(fine), false, &started);
+        // In dot 7 ceres may have stopped for an object, the netlist not.
+        let base = pipeline_at(net_p + 1, len_at(fine), false, &started);
         NetPipeline {
             px,
             fetcher: NetFetcher {
@@ -136,8 +159,27 @@ pub(super) const fn window_starting(
             discard: if at_line_start { lead } else { base.discard },
             ..base
         }
-    } else if dot == 8 {
-        let base = pipeline_at(position, pace.bg.fifo.len(), false, &started);
+    } else {
+        first_tile_fetched(
+            l,
+            pipeline_at(net_p, net_len, false, &started),
+            dot,
+            g,
+            net_p,
+        )
+    }
+}
+
+/// The netlist's pipeline in the window's eighth and ninth dots, `base` as
+/// its pixels at `net_p` have it: the window's first tile fetched.
+const fn first_tile_fetched(
+    l: &Mode3Loop,
+    base: NetPipeline,
+    dot: u8,
+    g: Ghost,
+    net_p: i16,
+) -> NetPipeline {
+    if dot == 8 {
         NetPipeline {
             fetcher: NetFetcher {
                 pygo: false,
@@ -150,15 +192,41 @@ pub(super) const fn window_starting(
         }
     } else {
         NetPipeline {
+            // Its fetcher counts on if an object stopped its pixels.
+            fetcher: NetFetcher {
+                started: base.fetcher.started,
+                ..fetcher_for(g.age)
+            },
+            ryfa: base.ryfa & !window_ryfa_held(l, g, net_p),
             rene: false,
-            pyco: wx_matched(l, position),
-            nunu: wx_matched(l, position),
+            pyco: wx_matched(l, net_p),
+            nunu: wx_matched(l, net_p),
             rydy: false,
             sovy: false,
             win_x: 1,
-            ..pipeline_at(position, pace.bg.fifo.len(), false, &started)
+            ..base
         }
     }
+}
+
+/// The netlist's pipeline in the window's first dot, `e` as its pixels
+/// have it: the last object's history as `background` has it, the
+/// fetcher's age in its tile (but in the line's first round, `first`), the
+/// pixels standing still for the push, and the sprite fetch at its end.
+const fn first_dot_after(l: &Mode3Loop, mut e: NetPipeline, first: bool, g: Ghost) -> NetPipeline {
+    if !first {
+        e.fetcher = NetFetcher {
+            started: e.fetcher.started,
+            ..fetcher_for(g.age)
+        };
+    }
+    if g.frozen {
+        e.rene = e.ryfa;
+    }
+    if let Some(phase) = SpritePhase::of(g.since_push, l.pace.state, l.pace.wait) {
+        e.sprite = phase.net();
+    }
+    e
 }
 
 /// Ceres's position `dot` dots (1 to 9) after its window check fired, the
@@ -227,7 +295,10 @@ pub(super) const fn window_inside(l: &Mode3Loop, net: &NetPipeline, g: Ghost) ->
     } else {
         background(l, net, g)
     };
-    let matched = wx_matched(l, position);
+    // The netlist's pixel counter, ahead of ceres's while an object stops it.
+    let net_p = shifted(&pace.bg, g.extra).0;
+    let matched = wx_matched(l, net_p);
+    let ryfa_held = window_ryfa_held(l, g, net_p);
     // Ceres steps its column as it reads a tile's last byte, the netlist as
     // its fetcher restarts for the tile (its fine scroll at 0): between,
     // ceres holds the tile, or has pushed it and the netlist's pixels have
@@ -246,6 +317,10 @@ pub(super) const fn window_inside(l: &Mode3Loop, net: &NetPipeline, g: Ghost) ->
         rydy: false,
         sovy: false,
         win_x: pace.window.tile_x.wrapping_sub(read as u8) & WIN_X_MASK,
+        ryfa: inside.ryfa & !ryfa_held,
+        // Its first pixel past the window's eighth dot finds no RYFA, as in
+        // the start's ninth.
+        rene: inside.rene & !ryfa_held & !((net_p >= 0) & (net_p == start_position(l.wx, 9))),
         ..inside
     }
 }
@@ -268,12 +343,25 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
     } else {
         start_position(l.wx, dot)
     };
+    // From dot 7 an object at ceres's position stops it, waiting for the
+    // tile: its pixels held since, the netlist's two dots behind
+    // (`Ghost::after`), its fetcher running on (`history_ok`).
+    let drawing = (dot >= DRAWS_AGAIN) & (p >= 0);
+    let stopped = drawing & matches!(pace.state, State::Mode3ObjectWait);
     let shape = if dot <= 5 {
         (len == 0)
             & (bg.step as u8 == dot)
             & (p == held)
             & pace.window.being_fetched
             & (pace.window.tile_x == 0)
+    } else if stopped {
+        // Stopped at the start's position (the object at WX + 1), ceres has
+        // not drawn the window's first pixel.
+        (p + i16::from(len) == start_position(l.wx, 6) + i16::from(FULL))
+            & (p >= start_position(l.wx, 6))
+            & (p < held)
+            & (pace.window.being_fetched == (p == start_position(l.wx, 6)))
+            & (pace.window.tile_x == 1)
     } else {
         (len == 14 - dot)
             & matches_step(bg.step, step_for(len))
@@ -296,8 +384,28 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
         & (p <= i16::from(PX_WIDTH))
         & (fine <= 7)
         & !bg.insert_blank
-        & ghost_rests(l, g)
+        & if stopped {
+            (g.since_push == 2) & history_ok(pace, g)
+        } else {
+            start_history_ok(l, g, dot)
+        }
         & objects_ok(l, g)
+}
+
+/// The ghost through the window's start: in its first two dots the last
+/// object's push may still hold the netlist (pushed in the dot before the
+/// check fired, its pixels stand still in the first and its fetcher is
+/// done), or its fetcher ran on past its fine scroll's count (done), or
+/// is at the count (`fine`, in the first dot); then it rests.
+fn start_history_ok(l: &Mode3Loop, g: Ghost, dot: u8) -> bool {
+    let fine = g.window_fine;
+    let held = (g.since_push == 1) & g.frozen & (g.age == 7);
+    let on = (g.since_push == 2) & !g.frozen;
+    match dot {
+        1 => (g.extra == 0) & (held | on & ((g.age == fine) | (g.age == 7) & (fine != 0))),
+        2 => (g.extra == 0) & on & ((g.age == 7) | (g.age == fine + 1)),
+        _ => ghost_rests(l, g),
+    }
 }
 
 /// Ceres's loop ten dots or more after its window check fired: the
@@ -336,14 +444,18 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
             & !unblanked
             & lead_in_ok(p, counted_len(l), latched, l.mixer_scx, g.rerun)
     } else {
-        p + 3 >= i16::from(l.wx)
+        // Four pixels drawn past WX's position, or fewer for an object
+        // that stopped ceres from the start's seventh dot.
+        p + WX_AHEAD >= i16::from(l.wx)
     };
     (len >= 1)
         & (len <= FULL)
         & history
         & lead_in
         & (p <= i16::from(PX_WIDTH))
-        & !pace.window.being_fetched
+        // The window's first pixel not drawn: an object at WX + 1 stopped
+        // ceres at the start's position.
+        & (!pace.window.being_fetched | first_pixel_held(l))
         & (pace.window.tile_x <= WIN_X_MASK)
         & (!bg.insert_blank | blank)
         & objects_ok(l, g)
@@ -392,7 +504,7 @@ pub(super) const fn window_unstarted(g: Ghost) -> bool {
 /// the frame), or on, WY matched in the frame (ceres's `wy_triggered`, the
 /// netlist's REJO) and WX held up to `LAST_WX`: armed, the
 /// netlist's window waiting and ceres's check not past WX (at it, the
-/// window starts in the next dot), or started, with the objects off.
+/// window starts in the next dot), or started.
 pub(super) const fn window_agrees(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
     let wx_held = net.wy_latch & (net.wx == l.wx) & (l.wx <= LAST_WX);
     match window_phase(l, g) {
@@ -413,27 +525,6 @@ pub(super) const fn window_agrees(l: &Mode3Loop, net: &NetPipeline, g: Ghost) ->
     }
 }
 
-/// With the objects on, the window's start clear of them: as ceres's check
-/// reaches WX (and while the window starts), no object is being fetched,
-/// the history of the last one is at rest (the netlist's pixels and fetcher
-/// back with ceres's background, `ghost_rests`), and the next object matches past the start (its X at least WX + 5, the position
-/// of the window's tenth dot plus 8). An object fetched in the start, or
-/// just before it, is left out (`window-objects-clear`).
-pub(crate) fn objects_clear(l: &Mode3Loop, g: Ghost) -> bool {
-    let pace = &l.pace;
-    let near = match window_phase(l, g) {
-        WindowPhase::Armed => signed(pace.bg.position) + WX_AHEAD >= i16::from(l.wx),
-        WindowPhase::Starting { .. } => true,
-        WindowPhase::Off | WindowPhase::Inside => false,
-    };
-    let settled = ghost_rests(l, g) & !fetching(pace);
-    let past_start = match pace.objs.next() {
-        Some(e) => i16::from(e.x) >= start_position(l.wx, INSIDE) + OBJECT_AHEAD,
-        None => true,
-    };
-    !(l.objects_enabled & l.window_enabled & near) | (settled & past_start)
-}
-
 /// At WX 0 the lead-in that runs in the window matches SCX before it would
 /// go back to its start: at -9 SCX's low bits are 7. Otherwise the
 /// netlist's fine scroll waits at 7 for a match, where ceres's lead-in
@@ -446,4 +537,18 @@ pub(super) const fn lead_in_matches(l: &Mode3Loop, mixer_scx: u8) -> bool {
         & l.pace.window.wx_triggered
         & (signed(l.pace.bg.position) == LAST_UNMATCHED);
     !at_end | (mixer_scx & 7 == 7)
+}
+
+/// Ceres waits at the window's start position, its first pixel not drawn,
+/// for an object at WX + 1 (its X 8 or more: WX 7 or more).
+const fn first_pixel_held(l: &Mode3Loop) -> bool {
+    let p = signed(l.pace.bg.position);
+    l.objects_enabled & (p >= 0) & (p == start_position(l.wx, 6))
+}
+
+/// The window's eighth dot restarts the netlist's fine scroll with no RYFA:
+/// while its pixels stand still there (an object at WX + 1), RYFA stays
+/// low, and RENE, which takes it at each clock, with it.
+const fn window_ryfa_held(l: &Mode3Loop, g: Ghost, net_p: i16) -> bool {
+    g.frozen & (net_p == start_position(l.wx, 8))
 }

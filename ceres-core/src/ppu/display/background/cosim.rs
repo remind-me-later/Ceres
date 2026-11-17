@@ -10,7 +10,7 @@
 use {
     super::relation::{
         Before, Ghost, INSIDE, Mode3Loop, before_start, ceres_dot, ceres_first_dot, expected,
-        objects_clear, related, signed, start_agrees, start_before, step_agrees,
+        related, signed, start_agrees, start_before, step_agrees,
     },
     crate::ppu::display::{
         Pace,
@@ -33,10 +33,10 @@ const SCX: u16 = 0xFF43;
 
 /// A line: SCX, the armed window's WX if it is on, and the objects' X from
 /// the nearest.
-struct Line {
+struct Line<'a> {
     scx: u8,
     wx: Option<u8>,
-    objects: &'static [u8],
+    objects: &'a [u8],
 }
 
 /// Both sides, the ghost, and the dots walked (the table's rows).
@@ -109,7 +109,7 @@ impl Walk {
     /// The line before ceres's first dot of the loop (`h = 162`): the
     /// netlist as `relation::before_start` has it, ceres's position at the
     /// lead-in's start, the window armed if it is on.
-    fn start(line: &Line) -> Self {
+    fn start(line: &Line<'_>) -> Self {
         let mut pace = Pace::default();
         let armed = line.wx.is_some();
         pace.window.wy_triggered = armed;
@@ -364,12 +364,13 @@ fn window_lines_stay_related() {
 }
 
 /// The window's lines with the objects on, from start to end: related at
-/// every dot, through the window's start and inside it, but for the steps
-/// the proofs leave out (`relation::objects_clear`: an object fetched in
-/// the window's start or just before it), where the line stops.
+/// every dot, through the window's start and inside it, and the netlist's
+/// mode 3 stops a dot after ceres has drawn the line. Objects anywhere on
+/// the line, and each X from WX - 8 to WX + 6 (fetched just before the
+/// start, in it, or as it ends), alone and in pairs.
 #[test]
 fn window_lines_with_objects_stay_related() {
-    let objects: [&[u8]; 9] = [
+    let anywhere: [&[u8]; 9] = [
         &[8],
         &[9],
         &[16],
@@ -380,27 +381,40 @@ fn window_lines_with_objects_stay_related() {
         &[20, 21],
         &[8, 16, 17, 100, 166],
     ];
-    let (mut lines, mut left_out) = (0, 0);
     for scx in 0..8 {
-        for wx in 0..=165 {
-            for xs in objects {
+        for wx in 0..=165_u8 {
+            let mut sets: Vec<Vec<u8>> = anywhere.iter().map(|xs| xs.to_vec()).collect();
+            for d in -8..=6 {
+                let x = i16::from(wx) + d;
+                if !(8..=167).contains(&x) {
+                    continue;
+                }
+                #[expect(
+                    clippy::cast_sign_loss,
+                    clippy::cast_possible_truncation,
+                    reason = "8 to 167"
+                )]
+                let x = x as u8;
+                sets.push(vec![x]);
+                for e in [0, 1, 2, 5, 8] {
+                    if x + e <= 167 {
+                        sets.push(vec![x, x + e]);
+                    }
+                }
+            }
+            for xs in &sets {
                 let mut w = Walk::start(&Line {
                     scx,
                     wx: Some(wx),
                     objects: xs,
                 });
                 w.first_dot();
-                lines += 1;
                 loop {
                     assert!(
                         w.related(),
                         "SCX {scx}, WX {wx}, objects {xs:?}\n{}",
                         w.table
                     );
-                    if !objects_clear(&w.l, w.g) {
-                        left_out += 1;
-                        break;
-                    }
                     if let Some(stopped) = w.dot() {
                         assert!(stopped, "SCX {scx}, WX {wx}, objects {xs:?}\n{}", w.table);
                         break;
@@ -409,11 +423,6 @@ fn window_lines_with_objects_stay_related() {
             }
         }
     }
-    // Objects within a few pixels of WX: one line in fifteen of these.
-    assert!(
-        left_out * 15 <= lines,
-        "{left_out} of {lines} lines left out"
-    );
 }
 
 /// A small generator of the values a harness leaves free (xorshift).
@@ -479,7 +488,7 @@ fn shown(i: &EdgeInputs) -> String {
 
 impl Walk {
     /// The line after `dots` dots, unless it ended before.
-    fn after(line: &Line, dots: u32) -> Option<Self> {
+    fn after(line: &Line<'_>, dots: u32) -> Option<Self> {
         let mut w = Self::start(line);
         w.first_dot();
         for _ in 1..dots {

@@ -47,8 +47,9 @@
 //! fetcher in the eighth dot (`window_starting`). From the tenth dot the
 //! netlist's pipeline is the background's at ceres's position again, in the
 //! window (`window_inside`). The ghost counts the dots and keeps the fine
-//! scroll's count the start found. The started window's lines have the
-//! objects off.
+//! scroll's count the start found, and the objects' history: an object
+//! fetched just before the start holds the netlist in its first two dots,
+//! and from its seventh an object stops ceres as outside the window.
 //! At WX 0 the window starts in the line's first dot, before SCX's discard
 //! unless SCX's low bits are 0: ceres waits a dot and then runs its lead-in
 //! in the window (`in_lead`), as the netlist runs its fine scroll; with SCX's
@@ -339,9 +340,6 @@ const LAST_WX: u8 = 165;
 /// Ceres's window check compares WX with its position plus this.
 const WX_AHEAD: i16 = 7;
 
-/// An object matches as ceres's position plus this reaches its X.
-const OBJECT_AHEAD: i16 = 8;
-
 /// The window's column counter's bits.
 const WIN_X_MASK: u8 = 0x1F;
 
@@ -386,8 +384,7 @@ pub(crate) fn step_agrees(
         & quiet(&falling, l)
         & writes(net, &rising, &falling, l.mixer_scx)
         & (!l.window_enabled | holds_wx(&net.inputs, &rising) & holds_wx(&rising, &falling))
-        & lead_in_matches(l, mixer_scx)
-        & objects_clear(l, g))
+        & lead_in_matches(l, mixer_scx))
     {
         return true;
     }

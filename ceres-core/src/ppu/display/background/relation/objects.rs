@@ -44,8 +44,21 @@ pub(super) fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
         None => false,
     };
     let (_, net_len) = shifted(&l.pace.bg, g.extra);
+    // The fetcher at its fine scroll's count: in the window's first two
+    // dots ceres's FIFO is cleared, and the count is the ghost's.
+    let rest_age = match g.window {
+        1 => g.window_fine,
+        2 => {
+            if g.window_fine < 7 {
+                g.window_fine + 1
+            } else {
+                7
+            }
+        }
+        _ => fine_of(net_len),
+    };
     let quiet_line = l.objects_enabled
-        | ((g.since_push == 2) & (g.extra == 0) & !g.frozen & (g.age == fine_of(net_len)));
+        | ((g.since_push == 2) & (g.extra == 0) & !g.frozen & (g.age == rest_age));
     // The fetch waits for the tile while the fetcher has not reached its
     // high byte's second dot, a step a dot (or the FIFO ran out and got its
     // row).

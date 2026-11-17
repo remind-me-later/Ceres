@@ -149,7 +149,7 @@ pub(super) enum SpritePhase {
 impl SpritePhase {
     /// The phase after ceres's dot, from the dots since its last push and
     /// its loop's sleep; `None` between fetches.
-    const fn of(since_push: u8, state: State, wait: i32) -> Option<Self> {
+    pub(super) const fn of(since_push: u8, state: State, wait: i32) -> Option<Self> {
         match since_push {
             0 => Some(Self::Pushed),
             1 => Some(Self::AfterPush),
@@ -164,7 +164,7 @@ impl SpritePhase {
     }
 
     /// The netlist's sprite fetch in the phase.
-    const fn net(self) -> NetSpriteFetch {
+    pub(super) const fn net(self) -> NetSpriteFetch {
         let (sobu, suda, step, busy, tobu, vonu, seba, tyfo) = match self {
             Self::Pushed => (false, false, 4, true, true, true, true, false),
             Self::AfterPush => (false, false, SPRITE_DONE, false, false, true, true, true),
@@ -213,7 +213,7 @@ pub(super) const fn shifted(bg: &Background, extra: u8) -> (i16, u8) {
 pub(crate) const fn expected(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetPipeline {
     match window_phase(l, g) {
         WindowPhase::Starting { dot, fine } => {
-            return window_starting(l, net, dot, fine, g.rerun);
+            return window_starting(l, net, dot, fine, g);
         }
         WindowPhase::Inside => return window_inside(l, net, g),
         WindowPhase::Off | WindowPhase::Armed => {}
