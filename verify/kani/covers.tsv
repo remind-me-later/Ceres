@@ -14,215 +14,354 @@ memory::dma::bisim::netlist_dma_bisimulation	8e42986a98186ffb	memory::dma::relat
 memory::dma::bisim::netlist_dma_bisimulation	8e42986a98186ffb	memory::dma::relation::step_agrees	byte 0	SATISFIED
 memory::dma::bisim::netlist_dma_bisimulation	8e42986a98186ffb	memory::dma::relation::step_agrees	byte 159	SATISFIED
 memory::dma::bisim::netlist_dma_bisimulation	8e42986a98186ffb	memory::dma::relation::step_agrees	the transfer ends	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_attributes	e4cdb2ea05aec7ee	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch	54249e01c28ea1d6	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	97499a2d77e0d7c4	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	8fa71424614fa3e1	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_high	eabe4e8ae23914f1	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_low	e6f7e538f1d5ecea	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	object waits for the tile	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	push next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_wait	b5cb2f7ad240b2c9	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_attributes	a34af2e651c22b95	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	line drawn	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_drawn	5897ccd06012406c	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch	01b5302426c30ec7	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	0d764ca49c25e71f	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	f2836eb749d701f1	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_high	08f78bf715920eed	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_low	5c7b7937ac792ff3	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	SCX written in the lead-in	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	lead-in restarted	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	netlist still discards	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	9323350a0e98332e	ppu::display::background::bisim::dot_from	unmatched lead-in	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	object waits for the tile	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	push next dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_wait	f2cf18c5b790205e	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	a blank pixel inserted	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	line drawn in the start	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	line drawn in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	the check reaches WX	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	the lead-in in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	the start's last dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	the window waits for SCX's discard	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	the window's column wrapped	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	the window's first dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_inside	f7068f6c9a7d479f	ppu::display::background::bisim::window_dot	the window's row pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	a blank pixel inserted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	in the window	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	line drawn in the start	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	line drawn in the window	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	the check reaches WX	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	the lead-in in the window	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	the start's last dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	the window waits for SCX's discard	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	the window's column wrapped	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	the window's first dot	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_reached	5268ba10538d080b	ppu::display::background::bisim::window_dot	the window's row pushed	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	a blank pixel inserted	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	in the window	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	line drawn in the start	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	line drawn in the window	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	the check reaches WX	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	the lead-in in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	the start's last dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	the window waits for SCX's discard	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	the window's column wrapped	UNSATISFIABLE
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	the window's first dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_starting	fa9e57698fd75bab	ppu::display::background::bisim::window_dot	the window's row pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_attributes	ae6b2b2eaa9d1afb	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch	479f4cd881ccf8cf	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8a2733310520e502	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	fe05f1db157a24e4	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_high	9f7dab76d7aeecf5	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_low	f0058a40cd2d8322	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	SCX written in the lead-in	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	lead-in restarted	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	netlist still discards	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	26f2157cb2f93b35	ppu::display::background::bisim::dot_from	unmatched lead-in	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	object waits for the tile	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	push next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_wait	417c6b81af1d259f	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_attributes	8ae5e9deab62a757	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	line drawn	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_drawn	d90434b1ce9334b4	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch	da48238875b1e641	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	3e51346a7e1853ef	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	4922c3b5ebbd20c2	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_high	3dc8d13099755da1	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_low	9c0ea4f7093714e9	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	SCX written in the lead-in	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	lead-in restarted	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	netlist still discards	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	e13ba0b21ef4bc2d	ppu::display::background::bisim::dot_from	unmatched lead-in	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	object waits for the tile	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	push next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_wait	e0dbaca6e63b2df1	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_attributes	c7b2f7739e9bb15c	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch	02c4fc5bb8441db3	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	52c367f711018483	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	object pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	object pushed in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	844f2a0a57326a63	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_high	3a879ee556622f0d	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	object waits for the tile	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_low	f2b2a570ba18da94	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	SCX written in the lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	WX in the next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	lead-in restarted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	line drawn	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	netlist still discards	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	netlist's fetcher ahead	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	object pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	object pushed in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	object waits for the tile	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	push next dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_wait	f51652f9dd3e93e7	ppu::display::background::bisim::dot_from	unmatched lead-in	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	a blank pixel inserted	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	line drawn in the start	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	line drawn in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	the check reaches WX	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	the lead-in in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	the start's last dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	the window waits for SCX's discard	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	the window's column wrapped	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	the window's first dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_inside	2d937bdbb30384d9	ppu::display::background::bisim::window_dot	the window's row pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	a blank pixel inserted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	line drawn in the start	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	line drawn in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	the check reaches WX	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	the lead-in in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	the start's last dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	the window waits for SCX's discard	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	the window's column wrapped	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	the window's first dot	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_reached	2f8f1c22f872b3e9	ppu::display::background::bisim::window_dot	the window's row pushed	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	a blank pixel inserted	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	line drawn in the start	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	line drawn in the window	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	the check reaches WX	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	the lead-in in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	the start's last dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	the window waits for SCX's discard	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	the window's column wrapped	UNSATISFIABLE
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	the window's first dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_starting	410682ebe43db68c	ppu::display::background::bisim::window_dot	the window's row pushed	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	e0590282634680d1	ppu::display::objects::bisim::netlist_scan_dma	a DMA that ends in the scan	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	e0590282634680d1	ppu::display::objects::bisim::netlist_scan_dma	a DMA that starts in the scan, ten sprites	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	e0590282634680d1	ppu::display::objects::bisim::netlist_scan_dma	the CPU halts during the scan	SATISFIED
+ppu::display::objects::bisim::netlist_scan_selection	425071089359df19	ppu::display::objects::bisim::netlist_scan_selection	ten sprites on the line	SATISFIED
+ppu::display::objects::bisim::netlist_scan_selection	425071089359df19	ppu::display::objects::bisim::netlist_scan_selection	the height changes during the scan	SATISFIED
+ppu::display::objects::bisim::netlist_scan_selection	425071089359df19	ppu::display::objects::bisim::netlist_scan_selection	three sprites on the line	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	LY reads 0 in line 153	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	a STAT read sees LY = LYC	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	a STAT write raises the line with the LCD off	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	a STAT write's glitch raises the line	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	a STAT write's glitch with HBlank's gate up	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	an LYC write raises the line	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	an access in line 0 after the LCD is turned on	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	the HBlank source raises the line	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	the LCD is turned off	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	the LCD is turned on	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	the line rises in the last T-cycle	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	the pixel pipeline's line end resyncs the clock	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_access	dbe84f6578ce5170	ppu::display::timing::relation::step_agrees	the scan's line start clears HBlank's gate	SATISFIED
+ppu::display::timing::bisim::netlist_lcd_on	634c21fc56700462	ppu::display::timing::bisim::netlist_lcd_on	LYC 0 raises ceres's line an M-cycle early	SATISFIED
+timer_if::bisim::netlist_timer_and_if	2c5922cbadb0bded	timer_if::bisim::netlist_timer_and_if	the timer's interrupt	SATISFIED
+timer_if::bisim::netlist_timer_and_if	2c5922cbadb0bded	timer_if::bisim::netlist_timer_and_if	the timer's interrupt rises again as the entry takes it	SATISFIED
+timer_if::bisim::netlist_timer_and_if	2c5922cbadb0bded	timer_if::bisim::netlist_timer_and_if	the timer's interrupt survives a write of IF that clears it	SATISFIED
+timing::bisim::netlist_timer_bisimulation	ec4e9e0ffd5215d9	timing::relation::step_agrees	DIV write then interrupt	SATISFIED
+timing::bisim::netlist_timer_bisimulation	ec4e9e0ffd5215d9	timing::relation::step_agrees	TAC write then interrupt	SATISFIED
+timing::bisim::netlist_timer_bisimulation	ec4e9e0ffd5215d9	timing::relation::step_agrees	TIMA write ignored	SATISFIED
+timing::bisim::netlist_timer_bisimulation	ec4e9e0ffd5215d9	timing::relation::step_agrees	ends overflowed	SATISFIED
+timing::bisim::netlist_timer_bisimulation	ec4e9e0ffd5215d9	timing::relation::step_agrees	ends reloading	SATISFIED
+timing::bisim::netlist_timer_bisimulation	ec4e9e0ffd5215d9	timing::relation::step_agrees	interrupt	SATISFIED
+timing::bisim::netlist_timer_bisimulation	ec4e9e0ffd5215d9	timing::relation::step_agrees	reads 0	SATISFIED
