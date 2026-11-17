@@ -219,8 +219,9 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         (len >= 1) & (len <= FULL) & !bg.insert_blank & (p >= LEAD_IN) & (p <= i16::from(PX_WIDTH));
     // The ghost rests in the lead-in, but for an object at X 0 to 7, fetched
     // there (with the window at WX 0 to 6, left out: `objects_ok`).
-    let early_objects =
-        l.objects_enabled & (!l.window_enabled | (l.wx >= super::FIRST_OBJECT_X - 1));
+    let early_objects = l.objects_enabled
+        & lead_in_objects(l)
+        & (!l.window_enabled | (l.wx >= super::FIRST_OBJECT_X - 1));
     let lead_in = (p >= 0)
         | early_objects
         | (g == Ghost {

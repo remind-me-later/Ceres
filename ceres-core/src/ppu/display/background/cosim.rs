@@ -115,6 +115,7 @@ impl Walk {
         pace.window.wy_triggered = armed;
         let mut xs = [NO_X; SLOTS];
         pace.objs.count = line.objects.len();
+        pace.objs.found = line.objects.len();
         for (i, &x) in line.objects.iter().enumerate() {
             // Ceres's are sorted descending, the next one last.
             pace.objs.entries[line.objects.len() - 1 - i].x = x;
@@ -585,6 +586,7 @@ impl Walk {
             *x = free.byte();
         }
         self.l.pace.objs.count = usize::from(free.byte() % 11);
+        self.l.pace.objs.found = self.l.pace.objs.count;
         let mut x = 8 + free.byte() % 160;
         for i in (0..self.l.pace.objs.count).rev() {
             self.l.pace.objs.entries[i].x = x;

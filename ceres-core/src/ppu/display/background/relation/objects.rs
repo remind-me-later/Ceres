@@ -16,20 +16,21 @@ pub(super) fn starting_objects(l: &Mode3Loop, net: &NetPipeline) -> bool {
         & (!l.objects_enabled | objects_agree(l, net, rest))
 }
 
-/// Ceres's objects: left to draw from the nearest, at X 8 or more if the
-/// window starts in the lead-in (WX 6 or less: those at X 0 to 7, fetched in
-/// the lead-in, are left out there, `lead-in-objects-before-window`), none
-/// left behind the position; while it fetches one, it is the nearest, at the
+/// Ceres's objects: left to draw from the nearest, of those the search
+/// found, at X 8 or more if the window starts in the lead-in (WX 6 or less:
+/// those at X 0 to 7, fetched in the lead-in, are left out there,
+/// `lead-in-objects`), none left behind the position (one at X 0 only at
+/// the lead-in's start); while it fetches one, it is the nearest, at the
 /// position's X (X 0 from the lead-in's start to its discard's end).
 pub(super) fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
     let objs = &l.pace.objs;
     let at = l.pace.bg.object_match_x();
-    let mut ok = objs.count <= MAX_OBJECTS;
+    let mut ok = (objs.count <= objs.found) & (objs.found <= MAX_OBJECTS);
     let mut i = 0;
     while i < MAX_OBJECTS {
         if i < objs.count {
             // Objects at X 0 to 7 are fetched in the lead-in: with the window
-            // off or starting past it (`lead-in-objects-before-window`).
+            // off or starting past it (`lead-in-objects`).
             ok &= (objs.entries[i].x >= FIRST_OBJECT_X)
                 | !l.window_enabled
                 | (l.wx >= FIRST_OBJECT_X - 1);
@@ -42,7 +43,11 @@ pub(super) fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
     let next = objs.next();
     // With the objects off, the loop drops those it passed a dot later.
     let ahead = match next {
-        Some(e) => !l.objects_enabled | (e.x >= at),
+        Some(e) => {
+            !l.objects_enabled
+                | (e.x > at)
+                | (e.x == at) & ((at != 0) | (signed(l.pace.bg.position) == LEAD_IN))
+        }
         None => true,
     };
     let fetched = match next {
@@ -147,4 +152,17 @@ pub(super) const fn store_holds(net: &NetPipeline) -> bool {
         slot += 1;
     }
     holds
+}
+
+/// The line has an object at X 0 to 7 (left or dropped): fetched in the
+/// lead-in, where the netlist's history is not the resting one.
+pub(super) const fn lead_in_objects(l: &Mode3Loop) -> bool {
+    let objs = &l.pace.objs;
+    let mut any = false;
+    let mut i = 0;
+    while i < MAX_OBJECTS {
+        any |= (i < objs.found) & (objs.entries[i].x < FIRST_OBJECT_X);
+        i += 1;
+    }
+    any
 }
