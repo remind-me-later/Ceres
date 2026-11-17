@@ -7,7 +7,7 @@
 use super::*;
 
 /// As the line's loop starts, ceres's objects and the netlist's store hold
-/// the same sprites (the OAM scan's proofs), none fetched, at X 8 or more.
+/// the same sprites (the OAM scan's proofs), none fetched.
 pub(super) fn starting_objects(l: &Mode3Loop, net: &NetPipeline) -> bool {
     let rest = Ghost::at_rest(&l.pace.bg);
     (net.fetched == 0)
@@ -16,9 +16,11 @@ pub(super) fn starting_objects(l: &Mode3Loop, net: &NetPipeline) -> bool {
         & (!l.objects_enabled | objects_agree(l, net, rest))
 }
 
-/// Ceres's objects: left to draw from the nearest, all at X 8 or more (the
-/// lead-in's are left out), none left behind the position; while it fetches
-/// one, it is the nearest, at the position's X.
+/// Ceres's objects: left to draw from the nearest, at X 8 or more if the
+/// window starts in the lead-in (WX 6 or less: those at X 0 to 7, fetched in
+/// the lead-in, are left out there, `lead-in-objects-before-window`), none
+/// left behind the position; while it fetches one, it is the nearest, at the
+/// position's X (X 0 from the lead-in's start to its discard's end).
 pub(super) fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
     let objs = &l.pace.objs;
     let at = l.pace.bg.object_match_x();
@@ -26,7 +28,11 @@ pub(super) fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
     let mut i = 0;
     while i < MAX_OBJECTS {
         if i < objs.count {
-            ok &= objs.entries[i].x >= FIRST_OBJECT_X;
+            // Objects at X 0 to 7 are fetched in the lead-in: with the window
+            // off or starting past it (`lead-in-objects-before-window`).
+            ok &= (objs.entries[i].x >= FIRST_OBJECT_X)
+                | !l.window_enabled
+                | (l.wx >= FIRST_OBJECT_X - 1);
             if i + 1 < objs.count {
                 ok &= objs.entries[i].x >= objs.entries[i + 1].x;
             }

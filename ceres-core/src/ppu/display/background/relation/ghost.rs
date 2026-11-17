@@ -155,7 +155,11 @@ impl Ghost {
         let rerun = self.rerun | ((position == pos(-9)) & (pace.bg.position == pos(-16)));
         let (p, len) = shifted(&pace.bg, extra);
         let fine = fine_of(len);
-        let age = if (p + i16::from(len) <= 0) & !rerun {
+        // In the line's first round the netlist's first fetch is done (7) or
+        // restarts (6) as its fine scroll goes; from there its fetcher
+        // counts as in any tile, on while an object stops its pixels (an
+        // object at X 0 stops them at the restart).
+        let age = if (p + i16::from(len) <= 0) & !rerun & (len >= FULL - 2) & !frozen {
             fine
         } else if !frozen & (fine == 0) {
             0
@@ -213,14 +217,18 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     let len = bg.fifo.len();
     let shapes =
         (len >= 1) & (len <= FULL) & !bg.insert_blank & (p >= LEAD_IN) & (p <= i16::from(PX_WIDTH));
-    // No object before the first pixel: the ghost rests in the lead-in.
+    // The ghost rests in the lead-in, but for an object at X 0 to 7, fetched
+    // there.
     let lead_in = (p >= 0)
+        | l.objects_enabled
         | (g == Ghost {
             rerun: g.rerun,
             ..Ghost::at_rest(bg)
         });
+    // An object at X 0 stops ceres at the lead-in's start.
+    let at_zero = (p == LEAD_IN) & (len == FULL) & fetching(&l.pace);
     shapes
-        & lead_in_ok(p, len, latched, l.mixer_scx, g.rerun)
+        & (lead_in_ok(p, len, latched, l.mixer_scx, g.rerun) | at_zero)
         & lead_in
         & history_ok(&l.pace, g)
         & objects_ok(l, g)
@@ -452,7 +460,10 @@ pub(super) const fn fetcher_ok(pace: &Pace, g: Ghost) -> bool {
     // Ceres pushed its row a dot or two ago, before the netlist's pixels
     // reach the tile and its fetcher restarts for it.
     let fresh = matches_step(step, step_for(len)) & (len >= FULL - 1) & (net_len >= FULL - 1);
-    if first_round(bg) & !g.rerun {
+    // In the first round at rest (no object at X 0 to 7 fetched in it) the
+    // fetcher keeps to the FIFO.
+    let rests = (g.since_push == 2) & (g.extra == 0) & !g.frozen & (g.age == fine_of(len));
+    if first_round(bg) & !g.rerun & !fetching(pace) & rests {
         matches_step(step, step_for(len))
     } else if !fetching(pace) & (len == FULL) {
         // A full FIFO after a pixel: its row was pushed in this dot.

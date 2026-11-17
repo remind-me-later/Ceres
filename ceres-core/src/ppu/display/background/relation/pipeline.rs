@@ -227,11 +227,10 @@ pub(super) const fn background(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> Ne
     let (p, len) = shifted(&l.pace.bg, g.extra);
     let first = (p + len as i16 <= 0) & !g.rerun;
     let mut e = pipeline_at(p, len, first, net);
-    if !first {
-        e.fetcher = NetFetcher {
-            started: e.fetcher.started,
-            ..fetcher_for(g.age)
-        };
+    // Past the first fetch's restart, the fetcher's age in its tile: its
+    // count began the fetch (`started`).
+    if !first | (len < FULL - 2) | (g.age != fine_of(len)) {
+        e.fetcher = fetcher_for(g.age);
     }
     if g.frozen {
         // RENE takes RYFA at each clock, and RYFA holds.

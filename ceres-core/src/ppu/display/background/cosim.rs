@@ -283,7 +283,7 @@ impl Walk {
 }
 
 /// The lines the proofs cover from their start: the window off, any SCX,
-/// objects at X 8 or more.
+/// objects at X 8 or more (`lead_in_objects_stay_related` has the others).
 #[test]
 fn idle_lines_stay_related() {
     let objects: [&[u8]; 7] = [
@@ -418,6 +418,59 @@ fn window_lines_with_objects_stay_related() {
                     if let Some(stopped) = w.dot() {
                         assert!(stopped, "SCX {scx}, WX {wx}, objects {xs:?}\n{}", w.table);
                         break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Lines with objects at X 0 to 7, fetched in the lead-in, alone or with
+/// another, the window off or starting past the lead-in (WX 7 or more):
+/// related at every dot, and the netlist's mode 3 stops a dot after ceres
+/// has drawn the line.
+#[test]
+fn lead_in_objects_stay_related() {
+    for scx in 0..8 {
+        for wx in [
+            None,
+            Some(7),
+            Some(8),
+            Some(9),
+            Some(15),
+            Some(16),
+            Some(80),
+            Some(165),
+        ] {
+            for x in 0..8_u8 {
+                for other in [
+                    None,
+                    Some(x),
+                    Some(x + 1),
+                    Some(x + 2),
+                    Some(8),
+                    Some(9),
+                    Some(12),
+                ] {
+                    let mut xs = vec![x];
+                    xs.extend(other);
+                    xs.sort_unstable();
+                    let mut w = Walk::start(&Line {
+                        scx,
+                        wx,
+                        objects: &xs,
+                    });
+                    w.first_dot();
+                    loop {
+                        assert!(
+                            w.related(),
+                            "SCX {scx}, WX {wx:?}, objects {xs:?}\n{}",
+                            w.table
+                        );
+                        if let Some(stopped) = w.dot() {
+                            assert!(stopped, "SCX {scx}, WX {wx:?}, objects {xs:?}\n{}", w.table);
+                            break;
+                        }
                     }
                 }
             }

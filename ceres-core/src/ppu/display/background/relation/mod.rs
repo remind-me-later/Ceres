@@ -240,8 +240,9 @@ const LCDC_OBJ_EN: u8 = 2;
 
 const LCDC_WIN_EN: u8 = 0x20;
 
-/// The objects a line holds; the X of the first one the proofs take (those
-/// before match in the lead-in), and of the last the netlist fetches.
+/// The objects a line holds; the X of the first one the proofs take with
+/// the window starting in the lead-in (those before match in the lead-in),
+/// and of the last the netlist fetches.
 const MAX_OBJECTS: usize = 10;
 
 const FIRST_OBJECT_X: u8 = 8;

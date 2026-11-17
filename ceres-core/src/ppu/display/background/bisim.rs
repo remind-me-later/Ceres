@@ -1,5 +1,5 @@
 //! Kani proofs that ceres's mode 3 ends where the netlist's does, on the
-//! DMG, while the window is idle, with any objects at X 8 or more, and that
+//! DMG, while the window is idle, with any objects, and that
 //! an armed window does not start before its WX
 //! (`cargo kani -p ceres-core --harness netlist_mode3`).
 //!
@@ -366,6 +366,22 @@ fn dot_from(state: State, since_push: Option<u8>, window: Window) {
     );
     kani::cover!(related & (p == -6), "netlist still discards");
     kani::cover!(related & (p == 160), "line drawn");
+    let fetching_object = matches!(
+        l.pace.state,
+        State::Mode3ObjectWait
+            | State::Mode3ObjectFetch
+            | State::Mode3ObjectAttributes
+            | State::Mode3ObjectLow
+            | State::Mode3ObjectHigh
+    );
+    kani::cover!(
+        related & (p < 0) & fetching_object,
+        "object fetched in the lead-in"
+    );
+    kani::cover!(
+        related & (p == -16) & fetching_object,
+        "object at X 0 at the lead-in's start"
+    );
     kani::cover!(related & (bg.fifo.len() == 1) & (p > 0), "push next dot");
     kani::cover!(
         related & (window == Window::Armed) & (p + 8 == i16::from(l.wx)),
@@ -400,6 +416,7 @@ fn dot_from(state: State, since_push: Option<u8>, window: Window) {
 /// related pair.
 // @assumes transcription-render-edge
 // @discharges mode3-end-background
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -522,6 +539,7 @@ fn netlist_mode3_dot_drawn() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -533,6 +551,7 @@ fn netlist_mode3_armed_pixel() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -544,6 +563,7 @@ fn netlist_mode3_armed_wait() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -555,6 +575,7 @@ fn netlist_mode3_armed_fetch_pushed() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -566,6 +587,7 @@ fn netlist_mode3_armed_fetch_after_push() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -577,6 +599,7 @@ fn netlist_mode3_armed_fetch() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -588,6 +611,7 @@ fn netlist_mode3_armed_attributes() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -599,6 +623,7 @@ fn netlist_mode3_armed_low() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -610,6 +635,7 @@ fn netlist_mode3_armed_high() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -621,6 +647,7 @@ fn netlist_mode3_inside_wait() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -632,6 +659,7 @@ fn netlist_mode3_inside_fetch_pushed() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -643,6 +671,7 @@ fn netlist_mode3_inside_fetch_after_push() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -654,6 +683,7 @@ fn netlist_mode3_inside_fetch() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -665,6 +695,7 @@ fn netlist_mode3_inside_attributes() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -676,6 +707,7 @@ fn netlist_mode3_inside_low() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -769,6 +801,7 @@ fn window_dot(window: Option<u8>, waits: bool) {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -780,6 +813,7 @@ fn netlist_mode3_window_reached() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -792,6 +826,7 @@ fn netlist_mode3_window_starting() {
 // @assumes transcription-render-edge
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
@@ -804,6 +839,7 @@ fn netlist_mode3_window_starting_wait() {
 // @assumes mapping-scx-write
 // @assumes wx0-lead-in-matches
 // @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects-before-window
 // @discharges mode3-window-start
 #[kani::proof]
 #[kani::unwind(12)]
