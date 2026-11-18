@@ -55,12 +55,13 @@
 # not as passed. A harness keeps its verdict only with its covers recorded
 # for its program (goto-instrument's --show-properties lists those it has).
 #
-# A run is one `cargo kani` per harness, KANI_JOBS at a time (2), under
-# a memory cap they share where systemd-run is there (KANI_MEMORY, 9G; no
-# swap), on KANI_CORES if given (taskset's list), with KANI_SOLVER
-# (cadical). The harnesses that need the cap to themselves (SOLO: the
-# CPU's against the netlist's core, up to 7.4 GB, and the mode 3 pairs
-# reach 8.3) run after the others, one at a time.
+# A run is one `cargo kani` per harness, the longest first (by their last
+# seconds), without Kani's reachability checks unless KANI_REACH_CHECKS is
+# 1, KANI_JOBS at a time (4), under a memory cap they share where
+# systemd-run is there (KANI_MEMORY, 12G; no swap: four mode 3 harnesses
+# took 8.8 GB), on KANI_CORES if given (taskset's list), with KANI_SOLVER
+# (cadical). The CPU's harnesses against the netlist's core (SOLO, up to
+# 3.5 GB each) run after the others, KANI_SOLO_JOBS at a time (3).
 # Without Kani's concrete playback: it multiplies a harness's memory, and
 # only a failing harness needs it, for its counterexample:
 #
@@ -75,10 +76,22 @@ RESULTS=$KANI/results.tsv
 COVERS=$KANI/covers.tsv
 FAULTS=$KANI/faults
 WT=${KANI_WORKTREE:-$ROOT-kani}
-JOBS=${KANI_JOBS:-2}
+JOBS=${KANI_JOBS:-4}
 SOLO=netlist_sm83_
-MEMORY=${KANI_MEMORY:-9G}
+SOLO_JOBS=${KANI_SOLO_JOBS:-3}
+MEMORY=${KANI_MEMORY:-12G}
 SOLVER=${KANI_SOLVER:-cadical}
+# Kani's reachability checks of each assertion, off unless KANI_REACH_CHECKS
+# is 1: CBMC finds a trace for each one reached, which took most of a short
+# harness's time and memory, and the covers (with their own checks) are
+# what tells a harness holds of some state.
+if [ "${KANI_REACH_CHECKS:-0}" = 1 ]; then
+    REACH=
+    CHECKS=reach-checks
+else
+    REACH=--no-assertion-reach-checks
+    CHECKS=no-reach-checks
+fi
 LOGS=$WT/target/kani-logs
 # What the worktree takes of this one, and what a verdict's hash covers.
 SOURCES="ceres-core ceres-netlist Cargo.toml Cargo.lock"
@@ -247,8 +260,8 @@ kani() {
     # shellcheck disable=SC2016
     set -- xargs -P "$at_once" -I '{}' sh -c \
         'cargo kani -p ceres-core --harness "$1" --exact -j 1 --output-format terse \
-            -Z unstable-options --output-into-files --solver "$2" >"$3/$1.log" 2>&1' \
-        sh '{}' "$SOLVER" "$one"
+            -Z unstable-options --output-into-files --solver "$2" $4 >"$3/$1.log" 2>&1' \
+        sh '{}' "$SOLVER" "$one" "$REACH"
     if [ -n "${KANI_CORES:-}" ]; then
         set -- taskset -c "$KANI_CORES" "$@"
     fi
@@ -278,7 +291,7 @@ program_hashes() {
     version=$(cd "$WT" && cargo kani --version 2>/dev/null | tr '\n' ' ')
     kani_version=$(printf '%s' "$version" | awk '{ print $4 }')
     gi=${KANI_GOTO_INSTRUMENT:-$HOME/.kani/kani-$kani_version/bin/goto-instrument}
-    set -- cargo kani -p ceres-core --only-codegen
+    set -- cargo kani -p ceres-core --only-codegen $REACH
     if command -v systemd-run >/dev/null; then
         set -- systemd-run --user --scope -q -p "MemoryMax=$MEMORY" -p MemorySwapMax=0 "$@"
     fi
@@ -307,13 +320,22 @@ program_hashes() {
     perl -ne 'while (/\{"pretty_name":"([^"]*)".*?"goto_file":"([^"]*)","attributes":(\{.*?\}),"contract"/g) { print "$1\t$2\t$3\n" }' "$meta" |
         while IFS=$tab read -r name goto attributes; do
             program=$("$gi" --show-goto-functions "${goto%.symtab.out}.out" | perl "$KANI/program.pl") || return 1
-            hash=$(printf '%s\n%s\n%s\n%s\n' "$program" "$attributes" "$version" "$SOLVER" |
+            hash=$(printf '%s\n%s\n%s\n%s\n%s\n' "$program" "$attributes" "$version" "$SOLVER" "$CHECKS" |
                 sha256sum | cut -c1-16)
             printf '%s %s\n' "$name" "$hash"
             "$gi" --show-properties "${goto%.symtab.out}.out" | perl "$KANI/covers.pl" program |
                 awk -v name="$name" '{ print name "\t" $0 }' >>"$LOGS/covers"
         done >"$LOGS/programs"
     [ -s "$LOGS/programs" ]
+}
+
+# The names of the standard input, the longest first by their last
+# recorded seconds (those never run before all): run so, the jobs end
+# together rather than one waiting on the last long harness.
+longest_first() {
+    awk -F '\t' -v results="$RESULTS" '
+        BEGIN { while ((getline line < results) > 0) if (line !~ /^#/) { split(line, f, "\t"); s[f[1]] = f[4] } }
+        { print ($1 in s ? s[$1] : 999999) "\t" $1 }' | sort -t "$(printf '\t')" -k1,1nr | cut -f2
 }
 
 # The hash of the program of harness $1, from $LOGS/programs.
@@ -348,8 +370,8 @@ run_and_record() {
         mv "$LOGS/todo.run" "$LOGS/todo" 2>/dev/null || : >"$LOGS/todo"
     fi
     {
-        grep -v -e "$SOLO" "$LOGS/todo" | kani
-        grep -e "$SOLO" "$LOGS/todo" | kani 1 -solo
+        grep -v -e "$SOLO" "$LOGS/todo" | longest_first | kani
+        grep -e "$SOLO" "$LOGS/todo" | longest_first | kani "$SOLO_JOBS" -solo
     } >"$LOGS.verdicts" 2>/dev/null || true
     while read -r name verdict seconds; do
         program=$(program_of "$name")
