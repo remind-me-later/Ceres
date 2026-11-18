@@ -32,7 +32,12 @@ covers (`kani::cover!`) say which states it has. `covers.tsv` keeps each
 harness's covers with their status, for the program it ran. A cover has to be
 satisfied by a harness that has it, and a harness with covers has to
 satisfy one of them, else `run` records it as vacuous. The covers sit in the
-helpers the harnesses share, and each harness reaches some of them. Both
+helpers the harnesses share, and each harness reaches some of them. A
+cover CBMC cannot satisfy in a harness is a proof of its own there: in
+mode 3's dot harnesses the covers took about a third of the time, so they
+keep only "a related pair", and the cases their
+pairs reach are in harnesses of their own that build the pairs without the
+dot (`netlist_mode3_dot_covers`, `netlist_mode3_window_covers`). Both
 `run` and `status` list any cover no harness satisfies as `uncovered`. Each
 harness's full results, the covers among them, are in the worktree's
 `result_output_dir/`.

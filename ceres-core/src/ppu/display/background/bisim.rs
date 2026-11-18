@@ -313,6 +313,33 @@ enum Window {
 /// dots after ceres's last object push if given, with the window where
 /// `window` has it.
 fn dot_from(state: State, since_push: Option<u8>, window: Window) {
+    let (mut l, mut net, g) = dot_pair(state, since_push, window);
+    let related = related_but_pipeline(&l, &net, g);
+    // Some pair is related, so the proof is not vacuous; the cases the
+    // pairs reach are `netlist_mode3_dot_covers`'s.
+    kani::cover!(related, "a related pair");
+    if related {
+        let rising = quiet_inputs(&l, true);
+        let falling = quiet_inputs(&l, false);
+        assert!(step_agrees(
+            &mut l,
+            &mut net,
+            g,
+            kani::any(),
+            rising,
+            falling
+        ));
+    }
+}
+
+/// The pairs `dot_from` takes, related or not: the loop sleeps in `state`,
+/// `since_push` dots after ceres's last object push if given, with the
+/// window where `window` has it.
+fn dot_pair(
+    state: State,
+    since_push: Option<u8>,
+    window: Window,
+) -> (Mode3Loop, NetPipeline, Ghost) {
     let mut l = any_loop();
     l.pace.state = state;
     // The window's flags as `window_agrees` has them: WY matched if the
@@ -349,7 +376,50 @@ fn dot_from(state: State, since_push: Option<u8>, window: Window) {
     }
     // Every related pair's netlist is `expected` of what it carries over
     // (`netlist_mode3_expected_carries`).
-    let mut net = expected(&l, &any_carried(&l), g);
+    let net = expected(&l, &any_carried(&l), g);
+    (l, net, g)
+}
+
+/// The sleeps and windows of the `dot_from` harnesses, as `dot_from` takes
+/// them.
+const DOT_PAIRS: [(State, Option<u8>, Window); 24] = [
+    (State::Mode3Pixel, None, Window::Off),
+    (State::Mode3ObjectWait, None, Window::Off),
+    (State::Mode3ObjectFetch, Some(0), Window::Off),
+    (State::Mode3ObjectFetch, Some(1), Window::Off),
+    (State::Mode3ObjectFetch, Some(2), Window::Off),
+    (State::Mode3ObjectAttributes, None, Window::Off),
+    (State::Mode3ObjectLow, None, Window::Off),
+    (State::Mode3ObjectHigh, None, Window::Off),
+    (State::HBlankStart, None, Window::Off),
+    (State::Mode3Pixel, None, Window::Armed),
+    (State::Mode3ObjectWait, None, Window::Armed),
+    (State::Mode3ObjectFetch, Some(0), Window::Armed),
+    (State::Mode3ObjectFetch, Some(1), Window::Armed),
+    (State::Mode3ObjectFetch, Some(2), Window::Armed),
+    (State::Mode3ObjectAttributes, None, Window::Armed),
+    (State::Mode3ObjectLow, None, Window::Armed),
+    (State::Mode3ObjectHigh, None, Window::Armed),
+    (State::Mode3ObjectWait, None, Window::Inside),
+    (State::Mode3ObjectFetch, Some(0), Window::Inside),
+    (State::Mode3ObjectFetch, Some(1), Window::Inside),
+    (State::Mode3ObjectFetch, Some(2), Window::Inside),
+    (State::Mode3ObjectAttributes, None, Window::Inside),
+    (State::Mode3ObjectLow, None, Window::Inside),
+    (State::Mode3ObjectHigh, None, Window::Inside),
+];
+
+/// The related pairs of the `dot_from` harnesses reach each case below: a
+/// harness of its own, without the dot, as the covers took a third of
+/// theirs.
+// @assumes transcription-render-edge
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_dot_covers() {
+    let i: usize = kani::any();
+    kani::assume(i < DOT_PAIRS.len());
+    let (state, since_push, window) = DOT_PAIRS[i];
+    let (l, net, g) = dot_pair(state, since_push, window);
     let last_scx = l.mixer_scx;
     let bg = &l.pace.bg;
     let p = super::relation::signed(bg.position);
@@ -385,18 +455,6 @@ fn dot_from(state: State, since_push: Option<u8>, window: Window) {
         related & (window == Window::Inside) & l.pace.window.being_fetched,
         "the window's first pixel held for an object"
     );
-    if related {
-        let rising = quiet_inputs(&l, true);
-        let falling = quiet_inputs(&l, false);
-        assert!(step_agrees(
-            &mut l,
-            &mut net,
-            g,
-            kani::any(),
-            rising,
-            falling
-        ));
-    }
 }
 
 /// What `expected` gives keeps what it carries over from the netlist: it
@@ -710,6 +768,28 @@ fn netlist_mode3_inside_high() {
 /// the loop sleeps after a pixel, or has drawn the line, or (`waits`)
 /// waits for the tile to fetch an object.
 fn window_dot(window: Option<u8>, waits: bool) {
+    let (mut l, mut net, g, _) = window_pair(window, waits);
+    let related = related_but_pipeline(&l, &net, g);
+    // Some pair is related, so the proof is not vacuous; the cases the
+    // pairs reach are `netlist_mode3_window_covers`'s.
+    kani::cover!(related, "a related pair");
+    if related {
+        let rising = quiet_inputs(&l, true);
+        let falling = quiet_inputs(&l, false);
+        assert!(step_agrees(
+            &mut l,
+            &mut net,
+            g,
+            kani::any(),
+            rising,
+            falling
+        ));
+    }
+}
+
+/// The pairs `window_dot` takes, related or not, and whether ceres's loop
+/// waits a dot for SCX's discard.
+fn window_pair(window: Option<u8>, waits: bool) -> (Mode3Loop, NetPipeline, Ghost, bool) {
     let mut l = any_loop();
     // At WX 0 with SCX's low bits not 0, the check fired in the line's
     // first dot and the loop waits a dot (`relation::window_delay_ok`).
@@ -740,7 +820,30 @@ fn window_dot(window: Option<u8>, waits: bool) {
         g.window_fine = 0;
         kani::assume((p + 7 == i16::from(l.wx)) | delay);
     }
-    let mut net = expected(&l, &any_carried(&l), g);
+    let net = expected(&l, &any_carried(&l), g);
+    (l, net, g, delay)
+}
+
+/// The windows and sleeps of the `window_dot` harnesses, as `window_dot`
+/// takes them.
+const WINDOW_PAIRS: [(Option<u8>, bool); 4] = [
+    (Some(0), false),
+    (None, false),
+    (None, true),
+    (Some(INSIDE), false),
+];
+
+/// The related pairs of the `window_dot` harnesses reach each case below,
+/// in a harness of its own as `netlist_mode3_dot_covers`.
+// @assumes transcription-render-edge
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_mode3_window_covers() {
+    let i: usize = kani::any();
+    kani::assume(i < WINDOW_PAIRS.len());
+    let (window, waits) = WINDOW_PAIRS[i];
+    let (l, net, g, delay) = window_pair(window, waits);
+    let p = super::relation::signed(l.pace.bg.position);
     let related = related_but_pipeline(&l, &net, g);
     let drawn = matches!(l.pace.state, State::HBlankStart);
     kani::cover!(related & (g.window == 0) & !delay, "the check reaches WX");
@@ -771,18 +874,6 @@ fn window_dot(window: Option<u8>, waits: bool) {
         related & waits & (g.window == 9) & !l.pace.window.being_fetched,
         "an object stops the start's pixels"
     );
-    if related {
-        let rising = quiet_inputs(&l, true);
-        let falling = quiet_inputs(&l, false);
-        assert!(step_agrees(
-            &mut l,
-            &mut net,
-            g,
-            kani::any(),
-            rising,
-            falling
-        ));
-    }
 }
 
 /// A dot from every related pair with the window armed and ceres's check at

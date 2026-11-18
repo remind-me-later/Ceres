@@ -294,10 +294,8 @@ pub(super) const fn history_ok(pace: &Pace, g: Ghost) -> bool {
     // the netlist's fetcher keeps to the fine scroll, or stands at the end
     // after the objects fetched at the lead-in's start.
     let first_quiet = first_round(bg) & !g.rerun & (g.window == 0) & !fetching(pace);
-    let first_rests = (g.since_push == 2)
-        & (g.extra == 0)
-        & !g.frozen
-        & (g.age == fine_of(bg.fifo.len()));
+    let first_rests =
+        (g.since_push == 2) & (g.extra == 0) & !g.frozen & (g.age == fine_of(bg.fifo.len()));
     fetcher_ok(pace, g)
         & pushed_late
         & (!first_quiet | first_rests | (g.age == 7))
