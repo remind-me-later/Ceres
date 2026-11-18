@@ -176,16 +176,32 @@ impl Pace {
             == wx;
     }
 
-    /// A blank pixel inserted right at the FIFO's end, as the window's WX
-    /// matches again there.
-    pub(super) fn window_pixel_insertion(&mut self, wx: u8, hw: bool) {
-        if wx == self.bg.position.wrapping_add(7)
-            && (!hw || wx == 0)
-            && self.window.wx_triggered
-            && !self.window.being_fetched
-            && self.bg.step == FetcherStep::GetTileT1
-            && self.bg.fifo.len() == 8
-        {
+    /// A blank pixel inserted as the window's WX matches again where a tile
+    /// is pushed, with the mixer's SCX: on the CGB (and the DMG past WX 0)
+    /// at the new tile's front; on the DMG at WX 0 a pixel earlier, before
+    /// the last one of the tile before, whose pop comes to WX's position
+    /// (-7) and lets the push go a dot later. The netlist loads the tile a
+    /// dot late there, and an object at X 1 to 6 waits for its fetcher as
+    /// the netlist's does.
+    // @fact window-wx-0-blank-before-push
+    pub(super) fn window_pixel_insertion(&mut self, wx: u8, scx: u8, hw: bool) {
+        if !self.window.wx_triggered || self.window.being_fetched {
+            return;
+        }
+        let position = self.bg.position;
+        let insert = if !hw && wx == 0 {
+            // The pop as `Background::pop` runs it: the lead-in's SCX match
+            // lands at -7, as -8 does.
+            let lands_at_wx =
+                position == pos(-8) || position.wrapping_add(16) < 8 && position & 7 == scx & 7;
+            lands_at_wx && self.bg.step == FetcherStep::Push && self.bg.fifo.len() == 1
+        } else {
+            wx == position.wrapping_add(7)
+                && (!hw || wx == 0)
+                && self.bg.step == FetcherStep::GetTileT1
+                && self.bg.fifo.len() == 8
+        };
+        if insert {
             self.bg.insert_blank = true;
         }
     }

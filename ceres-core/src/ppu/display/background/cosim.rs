@@ -813,3 +813,61 @@ impl Walk {
         self.row();
     }
 }
+
+/// Lines with objects at X 0 to 7 and the window in the lead-in (WX 0 to 6),
+/// which the relation does not follow (`lead-in-objects`): the netlist's
+/// mode 3 stops a dot after ceres has drawn the line, whatever SCX's low
+/// bits (at WX 0, `window-wx-0-blank-before-push` and
+/// `window-wx-0-object-first`).
+#[test]
+fn lead_in_window_objects_end_with_the_netlist() {
+    for wx in 0..7 {
+        for scx in 0..8 {
+            for x in 0..8_u8 {
+                for other in [
+                    None,
+                    Some(x),
+                    Some(x + 1),
+                    Some(x + 2),
+                    Some(8),
+                    Some(9),
+                    Some(12),
+                ] {
+                    let mut xs = vec![x];
+                    xs.extend(other);
+                    xs.sort_unstable();
+                    let mut w = Walk::start(&Line {
+                        scx,
+                        wx: Some(wx),
+                        objects: &xs,
+                    });
+                    w.first_dot();
+                    let (mut drawn, mut stopped) = (None, None);
+                    for dot in 2..400_u32 {
+                        if drawn.is_none() {
+                            ceres_dot(&mut w.l);
+                            if matches!(w.l.pace.state, State::HBlankStart) {
+                                drawn = Some(dot);
+                            }
+                        }
+                        for clk in [true, false] {
+                            w.net.edge(inputs(&w.l, clk));
+                            if stopped.is_none() && w.net.stop_mode3() {
+                                stopped = Some((dot, clk));
+                            }
+                        }
+                        if drawn.is_some() && stopped.is_some() {
+                            break;
+                        }
+                    }
+                    let drawn = drawn.expect("ceres draws the line");
+                    assert_eq!(
+                        stopped,
+                        Some((drawn + 1, false)),
+                        "SCX {scx}, WX {wx}, objects {xs:?}: ceres drew the line at dot {drawn}"
+                    );
+                }
+            }
+        }
+    }
+}

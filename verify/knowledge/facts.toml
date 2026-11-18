@@ -176,6 +176,22 @@ open = ["doc/hardware-tests.md#the-window-at-wx-0-when-scxs-discard-does-not-mat
 needs = ["flash-cart", "camera"]
 note = "Only when SCX is written as the lead-in runs, so that its low bits miss all eight pixels'. Found by the mode 3 relation's co-simulation (cosim.rs, wx0_lines_with_scx_written)."
 
+[window-wx-0-blank-before-push]
+title = "At WX 0 with SCX's low bits at 7, the window's second tile is loaded a dot late: an object at X 1 to 6 waits for the fetch after it"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+emulators = "disagree"
+note = "SameBoy inserts its blank pixel after the tile's push (WX matching again at -7), so its fetcher runs a dot ahead and an object there ends mode 3 a dot early, or five late at X 1. Ceres inserts it before the tile's last pixel, as the netlist's fine scroll holds 7 for its match. The pixels shown are the same. Found by the mode 3 co-simulation (cosim.rs, lead_in_window_objects_end_with_the_netlist)."
+
+[window-wx-0-object-first]
+title = "At WX 0 an object at X 0 is fetched before the window starts: the window's first tile waits for it"
+models = ["dmg"]
+netlist = "same"
+hardware = "none"
+emulators = "disagree"
+note = "SameBoy starts the window first and fetches the object as the window's tile is fetched, which leaves its fetcher a tile ahead: an object at X 1 or 2 after it ends mode 3 early, by up to three dots. Ceres fetches the object first and starts the window before a pixel comes out, as the netlist does. Found by the mode 3 co-simulation (cosim.rs, lead_in_window_objects_end_with_the_netlist)."
+
 [window-start-tile-register-pulse]
 title = "At a window start the tile register takes the precharged bus (FF)"
 models = ["dmg"]

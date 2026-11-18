@@ -126,14 +126,21 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> M
             Step::WindowCheck => {
                 let (enabled, wx, scx, hw) =
                     (p.window_enabled(), p.wx(), p.mixer_scx(), p.cgb_hardware());
-                if pace.mode3_window(enabled, wx, scx, hw, p.fetcher()) {
+                // The DMG fetches an object at X 0 before its window starts
+                // at WX 0: the window's first tile waits for the object.
+                // @fact window-wx-0-object-first
+                let object_first = !hw
+                    && wx == 0
+                    && p.objects_enabled()
+                    && pace.objs.next().is_some_and(|e| e.x == 0);
+                if !object_first && pace.mode3_window(enabled, wx, scx, hw, p.fetcher()) {
                     return Mode3Flow::Slept;
                 }
                 Step::Objects
             }
             Step::Objects => {
-                let (wx, hw) = (p.wx(), p.cgb_hardware());
-                pace.window_pixel_insertion(wx, hw);
+                let (wx, scx, hw) = (p.wx(), p.mixer_scx(), p.cgb_hardware());
+                pace.window_pixel_insertion(wx, scx, hw);
                 // Drop the objects left of the current position.
                 while pace
                     .objs
@@ -200,7 +207,14 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> M
             Step::PushObject => {
                 p.push_object(pace);
                 pace.objs.count -= 1;
-                Step::NextObject
+                if !p.cgb_hardware() && p.wx() == 0 && !pace.window.wx_triggered {
+                    // The DMG's window at WX 0 waited for the object at X 0:
+                    // it starts now, before a pixel comes out.
+                    // @fact window-wx-0-object-first
+                    Step::WindowCheck
+                } else {
+                    Step::NextObject
+                }
             }
             Step::OutputPixel => {
                 let enabled = p.objects_enabled();

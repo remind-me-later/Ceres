@@ -29,6 +29,11 @@ pub(crate) struct Ghost {
     /// The netlist's fine scroll's count in the first of them, which ceres's
     /// cleared FIFO no longer gives.
     pub window_fine: u8,
+    /// At WX 0 with SCX's low bits at 7, ceres drew its blank pixel in the
+    /// lead-in (`window_pixel_insertion`) and has not popped a pixel of the
+    /// tile pushed after it: the netlist's fine scroll counts a pixel on
+    /// from ceres's FIFO (`counted_len`).
+    pub blank: bool,
 }
 
 /// Ceres's loop before a dot, as `Ghost::after` takes it: its sleep, its
@@ -66,6 +71,7 @@ impl Ghost {
             age: fine_of(bg.fifo.len()),
             window: 0,
             window_fine: 0,
+            blank: false,
         }
     }
 
@@ -89,6 +95,11 @@ impl Ghost {
         // From the start's seventh dot ceres draws again, and an object at its
         // position (0 or more) stops it: the objects' history as outside it.
         let drawing = (window >= DRAWS_AGAIN) & (signed(pace.bg.position) >= 0);
+        // Ceres's blank pixel moves its position and leaves its FIFO as it
+        // was, which no pixel of the FIFO does; it counts until a pixel of
+        // the tile pushed after it is popped.
+        let (now_len, popped) = (pace.bg.fifo.len(), pace.bg.position != position);
+        let blank = popped & ((now_len == before.len) | self.blank & (now_len > before.len));
         if (window != 0) & ((window < INSIDE) | (signed(pace.bg.position) < 0)) & !drawing {
             // At WX 0 the window can start before SCX's discard, and the
             // lead-in run on in it, back to its start too; no object is
@@ -128,6 +139,7 @@ impl Ghost {
                     rerun,
                     window,
                     window_fine,
+                    blank,
                     ..Self::at_rest(&pace.bg)
                 };
             }
@@ -139,6 +151,7 @@ impl Ghost {
                 age,
                 window,
                 window_fine,
+                blank,
             };
         }
         let pushed = matches!(state, State::Mode3ObjectHigh) & (wait == 1);
@@ -149,7 +162,6 @@ impl Ghost {
         } else {
             2
         };
-        let popped = pace.bg.position != position;
         let frozen = (since_push <= 1) | ((self.extra == 2) & fetching(pace));
         let extra = (self.extra + u8::from(!frozen)).wrapping_sub(u8::from(popped));
         let rerun = self.rerun | ((position == pos(-9)) & (pace.bg.position == pos(-16)));
@@ -176,6 +188,7 @@ impl Ghost {
             age,
             window,
             window_fine: self.window_fine,
+            blank: false,
         }
     }
 }
@@ -200,6 +213,10 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     // lead-in could run again, and the lead-in does not run again in the
     // window (`lead_in_matches`).
     if l.window_enabled & (l.wx == 0) & g.rerun {
+        return false;
+    }
+    // Ceres draws its blank pixel inside the window only.
+    if g.blank & !matches!(window_phase(l, g), WindowPhase::Inside) {
         return false;
     }
     match window_phase(l, g) {
@@ -316,6 +333,7 @@ pub(super) fn ghost_rests(l: &Mode3Loop, g: Ghost) -> bool {
         rerun: g.rerun,
         window: g.window,
         window_fine: g.window_fine,
+        blank: g.blank,
         ..Ghost::at_rest(&l.pace.bg)
     }
 }

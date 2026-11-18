@@ -759,7 +759,7 @@ fn window_dot(window: Option<u8>, waits: bool) {
         related & (l.wx == 0) & (g.window != 0) & (p < -7),
         "the lead-in in the window"
     );
-    kani::cover!(related & l.pace.bg.insert_blank, "a blank pixel inserted");
+    kani::cover!(related & g.blank, "a blank pixel drawn");
     kani::cover!(related & (g.window == 1), "the window's first dot");
     kani::cover!(related & (g.window == 6), "the window's row pushed");
     kani::cover!(related & (g.window == 9), "the start's last dot");
@@ -856,6 +856,7 @@ fn any_ghost() -> Ghost {
         age: kani::any(),
         window: kani::any(),
         window_fine: kani::any(),
+        blank: kani::any(),
     };
     kani::assume(
         (g.since_push <= 2)

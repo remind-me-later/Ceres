@@ -53,7 +53,8 @@
 //! At WX 0 the window starts in the line's first dot, before SCX's discard
 //! unless SCX's low bits are 0: ceres waits a dot and then runs its lead-in
 //! in the window (`in_lead`), as the netlist runs its fine scroll; with SCX's
-//! low bits at 7 ceres inserts a blank pixel at its end (`blank_ahead`).
+//! low bits at 7 ceres inserts a blank pixel before its last pixel, which
+//! the netlist counts as one of its tile (the ghost's `blank`).
 #![cfg_attr(
     not(kani),
     expect(

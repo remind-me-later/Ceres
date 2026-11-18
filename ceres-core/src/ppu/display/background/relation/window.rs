@@ -257,41 +257,37 @@ const fn wx_matched(l: &Mode3Loop, position: i16) -> bool {
     position + PX_AHEAD <= l.wx as i16 + 1
 }
 
-/// At WX 0 with SCX's low bits at 7, ceres's position comes back to WX's
-/// (-7) as it pushes a tile after its match: its window inserts a blank
-/// pixel there (`window_pixel_insertion`), drawn in the next dot with the
-/// FIFO held, and its fetcher runs a step ahead of the FIFO for the tile.
-/// The netlist inserts nothing: its fine scroll counts on to 7 in that dot,
-/// and holds 7 for its match.
-const fn blank_ahead(l: &Mode3Loop) -> bool {
-    let bg = &l.pace.bg;
-    let len = bg.fifo.len();
-    (l.wx == 0) & (len >= 3) & (len <= FULL) & (bg.step as u8 == step_for(len) as u8 + 1)
+/// At WX 0 with SCX's low bits at 7, ceres's last pixel before WX's
+/// position (-7) is its tile's last, the next tile due there: its window
+/// inserts a blank pixel before it (`window_pixel_insertion`), which takes
+/// the match at -9, and pushes the tile a dot later, as the netlist loads
+/// it. The netlist inserts nothing: its fine scroll counts on to 7 and
+/// holds 7 for its match, a pixel on from ceres's FIFO until ceres pops a
+/// pixel of the tile (the ghost's `blank`).
+const fn counted_len(l: &Mode3Loop, g: Ghost) -> u8 {
+    l.pace.bg.fifo.len() - g.blank as u8
 }
 
-/// The FIFO's length the netlist's fine scroll counts by: ceres's, but in
-/// the dot ceres draws the blank pixel (`blank_ahead`, the FIFO full), a
-/// pixel on.
-const fn counted_len(l: &Mode3Loop) -> u8 {
-    let len = l.pace.bg.fifo.len();
-    if blank_ahead(l) & (len == FULL) {
-        FULL - 1
-    } else {
-        len
-    }
+/// Where ceres's blank pixel leaves it: at -7 with the tile's last pixel,
+/// or at -6 with the next tile pushed.
+const fn blank_ok(l: &Mode3Loop, g: Ghost) -> bool {
+    let (p, len) = (signed(l.pace.bg.position), l.pace.bg.fifo.len());
+    !g.blank
+        | (l.wx == 0)
+            & ((p == LAST_DISCARDED - 1) & (len == 1) | (p == LAST_DISCARDED) & (len == FULL))
 }
 
 /// The netlist's pipeline ten dots or more after the window started: the
-/// background's (in the lead-in at ceres's position and FIFO length, from
-/// the first pixel on with the objects' history, `background`), in the
-/// window (NOPA and its latch), its column a tile behind ceres's from
-/// ceres's read of a tile's last byte (a dot earlier with the fetcher
-/// ahead, `blank_ahead`) to the netlist's restart for it.
+/// background's (in the lead-in at ceres's position and FIFO length, but
+/// for its blank pixel, `counted_len`; from the first pixel on with the
+/// objects' history, `background`), in the window (NOPA and its latch),
+/// its column a tile behind ceres's from ceres's read of a tile's last byte
+/// to the netlist's restart for it.
 pub(super) const fn window_inside(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> NetPipeline {
     let pace = &l.pace;
     let position = signed(pace.bg.position);
     let inside = if position < 0 {
-        pipeline_at(position, counted_len(l), false, net)
+        pipeline_at(position, counted_len(l, g), false, net)
     } else {
         background(l, net, g)
     };
@@ -305,7 +301,7 @@ pub(super) const fn window_inside(l: &Mode3Loop, net: &NetPipeline, g: Ghost) ->
     // not reached its third. While an object is fetched the netlist's
     // pixels stand still and ceres's fetcher runs on.
     let read = if position < 0 {
-        inside.fine + blank_ahead(l) as u8 >= 4
+        inside.fine >= 4
     } else {
         matches_step(pace.bg.step, FetcherStep::Push) | (inside.fine >= 6)
     };
@@ -433,38 +429,30 @@ fn start_history_ok(l: &Mode3Loop, g: Ghost, dot: u8) -> bool {
 /// Ceres's loop ten dots or more after its window check fired: the
 /// background's shapes past the window's start, a tile's fetch a FIFO, the
 /// window's column within its five bits. At WX 0 the lead-in may run on
-/// (`lead_in_ok`), and at its end insert a blank pixel (`blank_ahead`).
+/// (`lead_in_ok`), and before its last pixel insert a blank one (`blank_ok`).
 pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     let pace = &l.pace;
     let bg = &pace.bg;
     let p = signed(bg.position);
     let len = bg.fifo.len();
-    // No object before the first pixel: the ghost rests in the lead-in, and
-    // from the blank's dot to the tile's push the fetcher is a step ahead.
+    // No object before the first pixel: the ghost rests in the lead-in.
     // From the first pixel on, the objects' history as outside the window.
     let history = if p < 0 {
-        ghost_rests(l, g)
-            & if blank_ahead(l) {
-                p + i16::from(len) == 2
-            } else {
-                matches_step(bg.step, step_for(len))
-            }
+        ghost_rests(l, g) & matches_step(bg.step, step_for(len))
     } else {
         history_ok(pace, g)
     };
-    // Ceres's window matches WX again at -7, the tile pushed.
-    let blank = (p == LAST_DISCARDED - 1) & (len == FULL) & (l.wx == 0);
     let lead_in = if l.wx == 0 {
         // The lead-in's first round pops a pixel a dot from the start's
         // sixth (`lead_position`): four are gone by its tenth.
         let first_left = (p + i16::from(len) > 0) | (len <= FULL - (INSIDE - 6));
-        // A tile pushed at -7 starts with the blank: no pixel of it popped
-        // at -7.
-        let unblanked = (p == LAST_DISCARDED) & (len == FULL - 1);
+        // No tile is pushed at -7: the blank pixel comes before it.
+        let at_wx = (p == LAST_DISCARDED - 1) & (len == FULL);
         (p >= lead_position(INSIDE))
             & first_left
-            & !unblanked
-            & lead_in_ok(p, counted_len(l), latched, l.mixer_scx, g.rerun)
+            & !at_wx
+            & blank_ok(l, g)
+            & lead_in_ok(p, counted_len(l, g), latched, l.mixer_scx, g.rerun)
     } else {
         // Four pixels drawn past WX's position, or fewer for an object
         // that stopped ceres from the start's seventh dot (drawing).
@@ -488,7 +476,8 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         // before).
         & ((l.wx == 0) | (p + i16::from(g.extra) >= reached))
         & (pace.window.tile_x <= WIN_X_MASK)
-        & (!bg.insert_blank | blank)
+        & !bg.insert_blank
+        & (!g.blank | (l.wx == 0))
         & objects_ok(l, g)
 }
 
