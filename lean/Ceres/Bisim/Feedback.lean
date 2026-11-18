@@ -1,0 +1,90 @@
+import Ceres.Bisim.Compose
+open Aeneas Aeneas.Std Result
+
+/-!
+# Feedback through a block's state, and a block in phases
+
+`Steps.wire` passes a signal one way within a step: block B sees A's
+output, A never sees B's. On the chip some signals go back, but only from
+a block's state: the PPU's VRAM and OAM locks, which the memory needs for
+the CPU's access before the PPU's dots read the memory, are a function of
+where the PPU is, not of what it reads in the M-cycle. `feedback` is that
+loop: A gives an output from its state alone (a Moore output), B steps
+with it, and A then steps with B's output. `Steps.feedback` carries the
+claims over, A's in two parts: related states give related Moore outputs,
+and A's step from related states and inputs.
+
+`Steps.phases`: a block whose invariant is one of several (the PPU's line:
+the OAM scan, mode 3, HBlank, VBlank), each proved to step into one of
+them, steps under their union.
+-/
+
+namespace ceres_core.bisim
+
+/-- A's output from its state, B with it, then A with B's output: the
+outputs of both, A's Moore output and its step's. -/
+def feedback {Sa Sb I Oa Pa Ob : Type} (outA : Sa → Oa)
+    (stepA : Sa → I × Ob → Result (Pa × Sa)) (b : Sb → I × Oa → Result (Ob × Sb)) :
+    Sa × Sb → I → Result ((Oa × Ob × Pa) × (Sa × Sb)) := fun s i => do
+  let oa := outA s.1
+  let (ob, sb) ← b s.2 (i, oa)
+  let (pa, sa) ← stepA s.1 (i, ob)
+  ok ((oa, ob, pa), (sa, sb))
+
+/-- The loop's known differences: B's on A's Moore output, or A's on the
+output B gives. -/
+def feedbackK {Sa Sb I Oa Ob : Type} (outA : Sa → Oa) (b : Sb → I × Oa → Result (Ob × Sb))
+    (KA : Sa → I × Ob → Prop) (KB : Sb → I × Oa → Prop) : Sa × Sb → I → Prop :=
+  fun s i => KB s.2 (i, outA s.1) ∨ ∀ o s', b s.2 (i, outA s.1) = ok (o, s') → KA s.1 (i, o)
+
+theorem Steps.feedback {Sna Snb Sca Scb In Ic Ona Oca Pna Pca Onb Ocb : Type}
+    {outN : Sna → Ona} {outC : Sca → Oca}
+    {na : Sna → In × Onb → Result (Pna × Sna)} {ca : Sca → Ic × Ocb → Result (Pca × Sca)}
+    {nb : Snb → In × Ona → Result (Onb × Snb)} {cb : Scb → Ic × Oca → Result (Ocb × Scb)}
+    {RI : In → Ic → Prop} {RM : Ona → Oca → Prop} {RA : Pna → Pca → Prop}
+    {RB : Onb → Ocb → Prop}
+    {KA : Sna → In × Onb → Prop} {KB : Snb → In × Ona → Prop}
+    {R1 : Sna → Sca → Prop} {R2 : Snb → Scb → Prop}
+    (hM : ∀ n c, R1 n c → RM (outN n) (outC c))
+    (hB : Steps nb cb (fun i j => RI i.1 j.1 ∧ RM i.2 j.2) RB KB R2)
+    (hA : Steps na ca (fun i j => RI i.1 j.1 ∧ RB i.2 j.2) RA KA R1) :
+    Steps (feedback outN na nb) (feedback outC ca cb) RI
+      (fun o p => RM o.1 p.1 ∧ RB o.2.1 p.2.1 ∧ RA o.2.2 p.2.2)
+      (feedbackK outN nb KA KB) (fun n c => R1 n.1 c.1 ∧ R2 n.2 c.2) := by
+  rintro ⟨sna, snb⟩ ⟨sca, scb⟩ ⟨hr1, hr2⟩ i j hij
+  have hm := hM sna sca hr1
+  rcases hB snb scb hr2 (i, outN sna) (j, outC sca) ⟨hij, hm⟩ with
+    kB | ⟨ob, snb', pb, scb', hnb, hcb, hrb, hr2'⟩
+  · exact Or.inl (Or.inl kB)
+  rcases hA sna sca hr1 (i, ob) (j, pb) ⟨hij, hrb⟩ with
+    kA | ⟨oa, sna', pa, sca', hna, hca, hra, hr1'⟩
+  · refine Or.inl (Or.inr ?_)
+    intro o s' h
+    rw [hnb, Result.ok.injEq] at h
+    cases h
+    exact kA
+  · refine Or.inr ⟨(outN sna, ob, oa), (sna', snb'), (outC sca, pb, pa), (sca', scb'), ?_, ?_,
+      ⟨hm, hrb, hra⟩, hr1', hr2'⟩
+    · simp [bisim.feedback, hna, hnb]
+    · simp [bisim.feedback, hca, hcb]
+
+/-- One step from the states `R` relates into those `R'` relates. -/
+def StepsInto {Sn Sc In Ic On Oc : Type}
+    (net : Sn → In → Result (On × Sn)) (cer : Sc → Ic → Result (Oc × Sc))
+    (RI : In → Ic → Prop) (RO : On → Oc → Prop) (K : Sn → In → Prop)
+    (R R' : Sn → Sc → Prop) : Prop :=
+  ∀ n c, R n c → ∀ i j, RI i j → K n i ∨
+    ∃ o n' p c', net n i = ok (o, n') ∧ cer c j = ok (p, c') ∧ RO o p ∧ R' n' c'
+
+/-- A block in phases: from each phase's states, a step reaches one of the
+phases'; then it steps under their union. -/
+theorem Steps.phases {Sn Sc In Ic On Oc ι : Type}
+    {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {R : ι → Sn → Sc → Prop}
+    (h : ∀ k, StepsInto net cer RI RO K (R k) (fun n c => ∃ k', R k' n c)) :
+    Steps net cer RI RO K (fun n c => ∃ k, R k n c) := by
+  rintro n c ⟨k, hr⟩ i j hij
+  exact h k n c hr i j hij
+
+end ceres_core.bisim

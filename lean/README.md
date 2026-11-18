@@ -67,6 +67,11 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
 - `Ceres/Bisim/Close.lean`: `Steps.close`, a block closed with a driver that
   gives its input from its own state and takes its output back (the CPU and
   the blocks on its bus, the loop cut at the CPU's state).
+- `Ceres/Bisim/Feedback.lean`: `Steps.feedback`, a block whose output comes from
+  its state alone (a Moore output) fed to a block before it, which feeds it
+  back (the PPU's VRAM and OAM locks for the memory, whose bytes the PPU's
+  dots then read); `Steps.phases`, a block in phases, each proved to step
+  into one of them (the PPU's line: scan, mode 3, HBlank, VBlank).
 - `Ceres/Bisim/Line.lean`: a line's start, the OAM scan before mode 3. The
   scan is the proved one (`scan_agrees`), and mode 3's start a hypothesis
   (`hStart`: from the scan's end, ceres's first ten sprites in the
@@ -100,6 +105,14 @@ emulator's types yet.
   `2d` and `2d + 1` and mode 3 ends at the second (the real input names a
   half dot, and an end at an even one is a known difference there), and
   mode 3 ends at most once in an M-cycle (the real input holds one).
+- `Sketch/Dmg.lean`: the whole DMG, speculatively: the CPU closed around
+  every block its bus or the LCD reaches (the PPU's line a dot at a time in
+  phases, around the memory and its locks; the M-cycle blocks; HRAM's side,
+  the joypad and serial port, the APU), proved from one hypothesis a block,
+  `dmg_agrees`. Its closing section lists each hypothesis with what stands
+  for it today: a proof to plug in, Kani's not yet translated, or nothing.
+- `Sketch/DmgReal.lean`: `dmg_agrees_real`, the same with the real M-cycle
+  blocks (`hPer_real`), on Kani's five claims.
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
   axioms, with no `sorry`.
 
