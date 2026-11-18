@@ -3,6 +3,7 @@ import Ceres.Bisim.Scan
 import Ceres.Bisim.Line
 import Ceres.Bisim.Close
 import Ceres.Bisim.Feedback
+import Ceres.Bisim.Mode3
 
 /-! The theorems rest on Lean's own axioms only: the build fails if one
 comes to need another (`sorry`, or the compiler's, through `native_decide`
@@ -49,3 +50,15 @@ info: 'ceres_core.bisim.Steps.feedback' depends on axioms: [propext, Classical.c
 -/
 #guard_msgs in
 #print axioms ceres_core.bisim.Steps.feedback
+
+/--
+info: 'ceres_core.mode3.mode3_dot_steps' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.mode3.mode3_dot_steps
+
+/--
+info: 'ceres_core.mode3.mode3_start' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.mode3.mode3_start

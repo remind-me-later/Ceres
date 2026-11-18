@@ -356,7 +356,7 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
     } else if stopped {
         // Stopped at the start's position (the object at WX + 1), ceres has
         // not drawn the window's first pixel.
-        (p + i16::from(len) == start_position(l.wx, 6) + i16::from(FULL))
+        (p + wide(len) == start_position(l.wx, 6) + wide(FULL))
             & (p >= start_position(l.wx, 6))
             & (p < held)
             & (pace.window.being_fetched == (p == start_position(l.wx, 6)))
@@ -368,7 +368,7 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
                 // Eight pixels from the seventh dot.
                 lead_in_ok(p, len, latched, l.mixer_scx, false)
             } else {
-                p == held
+                bit(p == held)
             }
             & (pace.window.being_fetched == (dot == 6))
             & (pace.window.tile_x == 1)
@@ -376,11 +376,15 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
     // At WX 0 the netlist's fine scroll compares in dot 2 the SCX ceres's
     // check fired with (`pending_compares`): it matches with SCX 0, and in
     // the lead-in it does not.
-    let matched = (l.wx != 0) | (dot != 1) | ((latched.trailing_zeros() >= 3) != lead);
+    #[expect(
+        clippy::verbose_bit_mask,
+        reason = "Aeneas (lean/) does not model trailing_zeros"
+    )]
+    let matched = (l.wx != 0) | (dot != 1) | ((latched & 7 == 0) != lead);
     // With WX at 165 the line is drawn after the eighth dot.
     shape
         & matched
-        & (p <= i16::from(PX_WIDTH))
+        & (p <= wide(PX_WIDTH))
         & (fine <= 7)
         & !bg.insert_blank
         & if stopped {
@@ -391,7 +395,7 @@ pub(super) fn window_starting_ok(l: &Mode3Loop, latched: u8, g: Ghost, dot: u8, 
             let behind = held - p;
             let extra = if behind < 2 { behind } else { 2 };
             (g.since_push == 2)
-                & (i16::from(g.extra) == extra)
+                & (wide(g.extra) == extra)
                 & (g.frozen == (behind > 2))
                 & (g.age == fine_of(14 - dot))
                 & history_ok(pace, g)
@@ -416,7 +420,7 @@ fn start_history_ok(l: &Mode3Loop, g: Ghost, dot: u8) -> bool {
     let on = (g.since_push == 2) & !g.frozen;
     // In the line's first round the netlist's fetcher is at its fine
     // scroll's count in the first dot (`window_starting`).
-    let first = (signed(l.pace.bg.position) + 1 + i16::from(len_at(fine)) <= 0) & !g.rerun;
+    let first = (signed(l.pace.bg.position) + 1 + wide(len_at(fine)) <= 0) & !g.rerun;
     match dot {
         1 => {
             (g.extra == 0) & (held | on & ((g.age == fine) | (g.age > fine) & (fine != 0) & !first))
@@ -445,7 +449,7 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     let lead_in = if l.wx == 0 {
         // The lead-in's first round pops a pixel a dot from the start's
         // sixth (`lead_position`): four are gone by its tenth.
-        let first_left = (p + i16::from(len) > 0) | (len <= FULL - (INSIDE - 6));
+        let first_left = (p + wide(len) > 0) | (len <= FULL - (INSIDE - 6));
         // No tile is pushed at -7: the blank pixel comes before it, so no
         // pop from a full FIFO leaves -6 with seven pixels.
         let at_wx = (p == LAST_DISCARDED - 1) & (len == FULL);
@@ -459,15 +463,14 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     } else {
         // Four pixels drawn past WX's position, or fewer for an object
         // that stopped ceres from the start's seventh dot (drawing).
-        (p + 3 >= i16::from(l.wx))
-            | l.objects_enabled & (p >= 0) & (p + WX_AHEAD >= i16::from(l.wx))
+        (p + 3 >= wide(l.wx)) | l.objects_enabled & (p >= 0) & (p + WX_AHEAD >= wide(l.wx))
     };
-    let reached = start_position(l.wx, 8).min(i16::from(PX_WIDTH));
+    let reached = start_position(l.wx, 8).min(wide(PX_WIDTH));
     (len >= 1)
         & (len <= FULL)
         & history
         & lead_in
-        & (p <= i16::from(PX_WIDTH))
+        & (p <= wide(PX_WIDTH))
         // The window's first pixel not drawn if and only if an object at
         // WX + 1 stopped ceres at the start's position: a pixel drawn moves
         // it on.
@@ -477,7 +480,7 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         // But at WX 0 the netlist's pixels reached the start's eighth dot's
         // in it, whatever the objects (from X 8 on, none stops ceres
         // before).
-        & ((l.wx == 0) | (p + i16::from(g.extra) >= reached))
+        & ((l.wx == 0) | (p + wide(g.extra) >= reached))
         & (pace.window.tile_x <= WIN_X_MASK)
         & !bg.insert_blank
         & (!g.blank | (l.wx == 0))

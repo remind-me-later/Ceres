@@ -72,6 +72,17 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   back (the PPU's VRAM and OAM locks for the memory, whose bytes the PPU's
   dots then read); `Steps.phases`, a block in phases, each proved to step
   into one of them (the PPU's line: scan, mode 3, HBlank, VBlank).
+- `Ceres/Bisim/Mode3.lean`: mode 3, a dot at a time
+  (`ceres-core/src/ppu/display/background/relation`): Kani's dot harnesses
+  together (`KaniMode3Dot`) give `mode3_dot_steps`, the dot as a block, the
+  netlist's two edges against ceres's dot, from related states into related
+  ones or the line's end (ceres drawn, the netlist's mode 3 stopped at the
+  dot's second edge); `netlist_mode3_start` (`KaniMode3Start`) gives
+  `mode3_start`, the loop's first dot into related states. Two things are
+  taken on trust: that the harnesses, split by ceres's sleep and the window,
+  together take every related pair; and the guard (quiet inputs, WX held, the
+  lead-in matched) reads ceres's state, so the block's known difference is
+  the guard failing for some ceres state related to the netlist's.
 - `Ceres/Bisim/Line.lean`: a line's start, the OAM scan before mode 3. The
   scan is the proved one (`scan_agrees`), and mode 3's start a hypothesis
   (`hStart`: from the scan's end, ceres's first ten sprites in the
@@ -179,8 +190,8 @@ names, and downloads its built files when that release has them.
 
 `Ceres/Gen` is generated, and committed: building the proofs needs no Rust
 tools. After a change to the `relation` modules, or to what they call
-(ceres-core's timer, IF, OAM DMA and line timing, ceres-netlist's
-transcriptions of them), run
+(ceres-core's timer, IF, OAM DMA, line timing, OAM scan and mode 3 loop,
+ceres-netlist's transcriptions of them), run
 
 ```sh
 CHARON=.../charon AENEAS=.../aeneas lean/translate.sh
@@ -207,6 +218,13 @@ or `&&` whose last operand is a comparison, kept in a variable: Aeneas
 makes it a branch whose last arm is the comparison, a proposition, so
 write it with `|` or `&`. Aeneas has no `Option::clone`: a struct with
 `Option` fields that the steps copy derives `Copy`.
+A comparison as the last expression of an `if`'s arm, or alone in a
+tuple, is a proposition too: mode 3's relation wraps it in `bit`
+(`relation::pipeline`), whose argument Lean takes as a bool. Nor does Aeneas
+take a `return` inside a loop (mode 3's loop runs while `running`),
+`i16::from` of a byte (`wide`), `trailing_zeros`, a range's `contains`,
+`mem::take`, or a struct holding a `&mut` whose trait methods change it
+(mode 3's hooks own a copy of the fetcher).
 
 To move to a newer Aeneas: change the `rev` in `lakefile.toml`, run
 `lake update aeneas`, build Charon at that Aeneas's `charon-pin` and the

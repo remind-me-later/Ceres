@@ -127,26 +127,30 @@ impl Mode3Loop {
     /// Runs the loop from `resume`, its hooks beside the pace.
     pub(crate) fn run(&mut self, resume: State) -> Mode3Flow {
         let mut hooks = Hooks {
-            fetcher: &mut self.fetcher,
+            fetcher: self.fetcher.clone(),
             mixer_scx: self.mixer_scx,
             objects_enabled: self.objects_enabled,
             window_enabled: self.window_enabled,
             wx: self.wx,
         };
-        mode3(&mut hooks, &mut self.pace, resume)
+        let flow = mode3(&mut hooks, &mut self.pace, resume);
+        self.fetcher = hooks.fetcher;
+        flow
     }
 }
 
-/// The loop's hooks: its registers, and the fetcher, which they change.
-struct Hooks<'a> {
-    fetcher: &'a mut Fetcher,
+/// The loop's hooks: its registers, and the fetcher, which they change (a
+/// copy, which `Mode3Loop::run` takes back: Aeneas, lean/, does not take a
+/// borrow inside a struct a trait's methods change).
+struct Hooks {
+    fetcher: Fetcher,
     mixer_scx: u8,
     objects_enabled: bool,
     window_enabled: bool,
     wx: u8,
 }
 
-impl Mode3Ppu for Hooks<'_> {
+impl Mode3Ppu for Hooks {
     fn objects_enabled(&self) -> bool {
         self.objects_enabled
     }
@@ -168,13 +172,13 @@ impl Mode3Ppu for Hooks<'_> {
     }
 
     fn fetcher(&self) -> &Fetcher {
-        self.fetcher
+        &self.fetcher
     }
 
     fn fetcher_read(&mut self, _: &Pace) {
         #[cfg(kani)]
         {
-            *self.fetcher = kani::any();
+            self.fetcher = kani::any();
         }
     }
 
@@ -187,7 +191,7 @@ impl Mode3Ppu for Hooks<'_> {
     fn push_object(&mut self, _: &Pace) {
         #[cfg(kani)]
         {
-            *self.fetcher = kani::any();
+            self.fetcher = kani::any();
         }
     }
 

@@ -270,14 +270,16 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
   - `scan`: proved in Lean a sprite's window at a time (`scan_steps`, on
     Kani's three window claims); a window is two dots, so it needs a dot's
     cut, or the M-cycle's dots taken two windows at a time.
-  - `scan` into `mode3`: `scan_then_mode3` (`Line.lean`), with mode 3's
-    start Kani's (`netlist_mode3_start`).
-  - `mode3`: Kani's dot harnesses, within their scope (`lead-in-objects`,
-    `wx0-lead-in-matches` open; WX and LCDC's window and object bits
-    held; the pixels' values not compared). Not translated: Aeneas takes
-    the relation (192 functions) but for ceres's `mode3` loop (an early
-    return inside a loop) and `I16::from(u8)`, `u8::trailing_zeros` and
-    `RangeInclusive::contains`.
+  - `scan` into `mode3`: `scan_then_mode3` (`Line.lean`) and `mode3_start`
+    (on Kani's `netlist_mode3_start`), still to be joined.
+  - `mode3`: `mode3_dot_steps` (`Ceres/Bisim/Mode3.lean`), on Kani's dot
+    harnesses (`KaniMode3Dot`), within their scope (`lead-in-objects`,
+    `wx0-lead-in-matches` open; WX and LCDC's window and object bits held;
+    the pixels' values not compared). To plug in: the line's state taken
+    apart into the netlist's pipeline and ceres's loop, the dot's input
+    made from the M-cycle's; its known difference is one-sided (the guard
+    reads ceres's state, `Steps`'s `K` does not), and that the harnesses
+    together take every related pair is argued, not checked.
   - `mode3` into `hblank`: Kani's (`mode3-end-background`).
   - `hblank`, `vblank`, `off`: no claim; the scan's lead-in from a line's
     end is Kani's (`netlist_scan_lead_in`).

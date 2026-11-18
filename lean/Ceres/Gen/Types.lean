@@ -154,6 +154,143 @@ structure ceres_netlist.oam_scan.NetScan where
   not_saving : Bool
   count : Std.U8
 
+/-- [ceres_netlist::render_edge::EdgeInputs]
+    Source: 'ceres-netlist/src/render_edge.rs', lines 65:0-65:21
+    Name pattern: [ceres_netlist::render_edge::EdgeInputs]
+    Visibility: public -/
+@[rust_type "ceres_netlist::render_edge::EdgeInputs"]
+structure ceres_netlist.render_edge.EdgeInputs where
+  clk : Bool
+  ppu_reset : Bool
+  hard_reset : Bool
+  lcdc : Std.U8
+  ly : Std.U8
+  hclk : Bool
+  mode1 : Bool
+  line_start : Bool
+  stop_scan : Bool
+  ceno : Bool
+  cpu_wr_sync : Bool
+  addr : Std.U16
+  data : Std.U8
+
+/-- [ceres_netlist::render_edge::NetFetcher]
+    Source: 'ceres-netlist/src/render_edge.rs', lines 112:0-112:21
+    Name pattern: [ceres_netlist::render_edge::NetFetcher]
+    Visibility: public -/
+@[rust_type "ceres_netlist::render_edge::NetFetcher"]
+structure ceres_netlist.render_edge.NetFetcher where
+  count : Std.U8
+  lyzu : Bool
+  nyka : Bool
+  pory : Bool
+  pygo : Bool
+  started : Bool
+
+/-- [ceres_netlist::render_edge::NetSpriteFetch]
+    Source: 'ceres-netlist/src/render_edge.rs', lines 125:0-125:25
+    Name pattern: [ceres_netlist::render_edge::NetSpriteFetch]
+    Visibility: public -/
+@[rust_type "ceres_netlist::render_edge::NetSpriteFetch"]
+structure ceres_netlist.render_edge.NetSpriteFetch where
+  sobu : Bool
+  suda : Bool
+  step : Std.U8
+  busy : Bool
+  tobu : Bool
+  vonu : Bool
+  seba : Bool
+  tyfo : Bool
+
+/-- [ceres_netlist::render_edge::NetPipeline]
+    Source: 'ceres-netlist/src/render_edge.rs', lines 140:0-140:22
+    Name pattern: [ceres_netlist::render_edge::NetPipeline]
+    Visibility: public -/
+@[rust_type "ceres_netlist::render_edge::NetPipeline"]
+structure ceres_netlist.render_edge.NetPipeline where
+  mode3 : Bool
+  voga : Bool
+  px : Std.U8
+  fetcher : ceres_netlist.render_edge.NetFetcher
+  fine : Std.U8
+  puxa : Bool
+  nyze : Bool
+  discard : Bool
+  ryfa : Bool
+  rene : Bool
+  scx : Std.U8
+  wy : Std.U8
+  wx : Std.U8
+  sary : Bool
+  wy_latch : Bool
+  pyco : Bool
+  nunu : Bool
+  nopa : Bool
+  in_window : Bool
+  win_x : Std.U8
+  win_y : Std.U8
+  rydy : Bool
+  sovy : Bool
+  xs : Array Std.U8 10#usize
+  fetched : Std.U16
+  sprite : ceres_netlist.render_edge.NetSpriteFetch
+  inputs : ceres_netlist.render_edge.EdgeInputs
+
+/-- [ceres_netlist::render_edge::Wires]
+    Source: 'ceres-netlist/src/render_edge.rs', lines 204:0-204:12
+    Name pattern: [ceres_netlist::render_edge::Wires] -/
+@[rust_type "ceres_netlist::render_edge::Wires"]
+structure ceres_netlist.render_edge.Wires where
+  stop_mode3 : Bool
+  dot : Bool
+  segu : Bool
+  clkpipe : Bool
+  fetch_done : Bool
+  fetch_clock : Bool
+  selected : Std.U16
+  x_match : Bool
+  step_reset : Bool
+  loaded : Bool
+  wy_match : Bool
+  wxy_match : Bool
+  win_reset : Bool
+  wx_clk : Bool
+
+/-- [ceres_netlist::render_edge::Changes]
+    Source: 'ceres-netlist/src/render_edge.rs', lines 229:0-229:14
+    Name pattern: [ceres_netlist::render_edge::Changes] -/
+@[rust_type "ceres_netlist::render_edge::Changes"]
+structure ceres_netlist.render_edge.Changes where
+  mode3 : Option Bool
+  voga : Option Bool
+  px_low : Option Std.U8
+  px_high : Option Std.U8
+  fetch_count : Option Std.U8
+  lyzu : Option Bool
+  nyka : Option Bool
+  pory : Option Bool
+  pygo : Option Bool
+  fine : Option Std.U8
+  puxa : Option Bool
+  nyze : Option Bool
+  ryfa : Option Bool
+  rene : Option Bool
+  fetched : Option Std.U16
+  sobu : Option Bool
+  suda : Option Bool
+  sprite_step : Option Std.U8
+  tobu : Option Bool
+  vonu : Option Bool
+  seba : Option Bool
+  tyfo : Option Bool
+  sary : Option Bool
+  pyco : Option Bool
+  nunu : Option Bool
+  nopa : Option Bool
+  win_x : Option Std.U8
+  win_y : Option Std.U8
+  sovy : Option Bool
+
 /-- [ceres_netlist::timer::Reg]
     Source: 'ceres-netlist/src/timer.rs', lines 20:0-20:12
     Name pattern: [ceres_netlist::timer::Reg]
@@ -254,6 +391,311 @@ structure memory.dma.relation.CeresOut where
   runs : Bool
   blocks_oam : Bool
   twice : Bool
+
+/-- [ceres_core::ppu::display::fifo::Item]
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 4:0-9:1 -/
+structure ppu.display.fifo.Item where
+  pixel : Std.U8
+  palette : Std.U8
+  priority : Std.U8
+  bg_priority : Bool
+
+/-- [ceres_core::ppu::display::fifo::Fifo]
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 13:0-17:1 -/
+structure ppu.display.fifo.Fifo where
+  items : Array ppu.display.fifo.Item 8#usize
+  read_end : Std.U8
+  size : Std.U8
+
+/-- [ceres_core::ppu::display::fetcher::FetcherStep]
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 24:0-33:1 -/
+@[discriminant isize]
+inductive ppu.display.fetcher.FetcherStep where
+| GetTileT1 : ppu.display.fetcher.FetcherStep
+| GetTileT2 : ppu.display.fetcher.FetcherStep
+| DataLowT1 : ppu.display.fetcher.FetcherStep
+| DataLowT2 : ppu.display.fetcher.FetcherStep
+| DataHighT1 : ppu.display.fetcher.FetcherStep
+| DataHighT2 : ppu.display.fetcher.FetcherStep
+| Push : ppu.display.fetcher.FetcherStep
+
+/-- [ceres_core::ppu::display::background::Background]
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 32:0-45:1 -/
+structure ppu.display.background.Background where
+  position : Std.U8
+  fractional : Bool
+  insert_blank : Bool
+  fifo : ppu.display.fifo.Fifo
+  step : ppu.display.fetcher.FetcherStep
+
+/-- [ceres_core::ppu::display::background::Popped]
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 49:0-57:1 -/
+@[discriminant isize]
+inductive ppu.display.background.Popped where
+| Restarted : ppu.display.background.Popped
+| Dropped : ppu.display.background.Popped
+| Shown : ppu.display.background.Popped
+
+/-- [ceres_core::ppu::display::fetcher::Row]
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 86:0-89:1 -/
+structure ppu.display.fetcher.Row where
+  attributes : Std.U8
+  data : Array Std.U8 2#usize
+
+/-- [ceres_core::ppu::display::background::relation::ghost::Ghost]
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 12:0-37:1 -/
+structure ppu.display.background.relation.ghost.Ghost where
+  rerun : Bool
+  since_push : Std.U8
+  extra : Std.U8
+  frozen : Bool
+  age : Std.U8
+  window : Std.U8
+  window_fine : Std.U8
+  blank : Bool
+
+/-- [ceres_core::ppu::display::state::State]
+    Source: 'ceres-core/src/ppu/display/state.rs', lines 31:0-88:1 -/
+@[discriminant u8 [0,23,2,34,37,38,35,6,7,201,8,10,32,200,42,27,41,20,39,40,21,22,33,36,11,31,9,43,28,210,26,12,24,13,220,19,14,15,16,29,17]]
+inductive ppu.display.state.State where
+| LcdOn : ppu.display.state.State
+| FirstLine : ppu.display.state.State
+| FirstLineOamLock : ppu.display.state.State
+| FirstLineMode3 : ppu.display.state.State
+| FirstLinePalettesLock : ppu.display.state.State
+| FirstLineVramLock : ppu.display.state.State
+| LineOamWriteLock : ppu.display.state.State
+| LineLy : ppu.display.state.State
+| OamScanStart : ppu.display.state.State
+| OamScanNext : ppu.display.state.State
+| OamScanObject : ppu.display.state.State
+| Mode3PalettesLock : ppu.display.state.State
+| Mode3Start : ppu.display.state.State
+| Mode3 : ppu.display.state.State
+| Mode3WindowDelay : ppu.display.state.State
+| Mode3ObjectWait : ppu.display.state.State
+| Mode3ObjectFetch : ppu.display.state.State
+| Mode3ObjectAttributes : ppu.display.state.State
+| Mode3ObjectLow : ppu.display.state.State
+| Mode3ObjectHigh : ppu.display.state.State
+| Mode3Pixel : ppu.display.state.State
+| HBlankStart : ppu.display.state.State
+| HBlankHdma : ppu.display.state.State
+| HBlankPalettesUnlock : ppu.display.state.State
+| LineEnd : ppu.display.state.State
+| NextLine : ppu.display.state.State
+| Mode3Abort : ppu.display.state.State
+| LongLineEnd : ppu.display.state.State
+| AbortedLineStart : ppu.display.state.State
+| VBlankLine : ppu.display.state.State
+| VBlankLy : ppu.display.state.State
+| VBlankLyCompare : ppu.display.state.State
+| VBlankLineRest : ppu.display.state.State
+| VBlankLineEnd : ppu.display.state.State
+| Line153 : ppu.display.state.State
+| Line153Ly : ppu.display.state.State
+| Line153LyZero : ppu.display.state.State
+| Line153Compare : ppu.display.state.State
+| Line153CompareZero : ppu.display.state.State
+| Line153LycGlitch : ppu.display.state.State
+| FrameEnd : ppu.display.state.State
+
+/-- [ceres_core::ppu::display::background::relation::ghost::Before]
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 42:0-48:1 -/
+structure ppu.display.background.relation.ghost.Before where
+  state : ppu.display.state.State
+  wait : Std.I32
+  position : Std.U8
+  len : Std.U8
+  window_started : Bool
+
+/-- [ceres_core::ppu::display::fetcher::Fetcher]
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 64:0-82:1 -/
+structure ppu.display.fetcher.Fetcher where
+  tile : Std.U8
+  attributes : Std.U8
+  data : Array Std.U8 2#usize
+  tile_index_address : Std.U16
+  bg_index_address : Std.U16
+  window_tile : Bool
+  data_address : Std.U16
+  last_tileset : Bool
+  y : Std.U8
+  sel_glitch_data : Std.U8
+  tile_sel_glitch : Bool
+
+/-- [ceres_core::ppu::display::window::Window]
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 19:0-56:1 -/
+structure ppu.display.window.Window where
+  line : Std.U8
+  tile_x : Std.U8
+  wx_triggered : Bool
+  wy_triggered : Bool
+  being_fetched : Bool
+  wy_check_scheduled : Bool
+  line0_wy_countdown : Std.U8
+  wy_units : Std.U8
+  wy_just_checked : Bool
+  cgb_wx_glitch : Bool
+  no_pixel_insertion_glitch : Bool
+  wx_166_interrupt_glitch : Bool
+  started_after_line : Bool
+  wx_166_carry : Bool
+  wx_just_changed : Bool
+  enable_pending : Bool
+  saved : Option (ppu.display.fifo.Fifo × ppu.display.fetcher.FetcherStep ×
+    ppu.display.fetcher.Fetcher)
+
+/-- [ceres_core::ppu::display::objects::SizeChange]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 80:0-84:1 -/
+structure ppu.display.objects.SizeChange where
+  line : Std.U8
+  lc : Std.I64
+  new : Bool
+
+/-- [ceres_core::ppu::display::objects::Entry]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 26:0-31:1 -/
+structure ppu.display.objects.Entry where
+  index : Std.U8
+  x : Std.U8
+  y : Std.U8
+
+/-- [ceres_core::ppu::display::objects::ObjectSearch]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 35:0-49:1 -/
+structure ppu.display.objects.ObjectSearch where
+  count : Std.Usize
+  found : Std.Usize
+  entries : Array ppu.display.objects.Entry 10#usize
+  index : Std.U8
+  accessed_oam_row : Std.U8
+  size_change : Option ppu.display.objects.SizeChange
+
+/-- [ceres_core::ppu::display::Pace]
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 75:0-89:1 -/
+structure ppu.display.Pace where
+  state : ppu.display.state.State
+  wait : Std.I32
+  cfl : Std.I32
+  bg : ppu.display.background.Background
+  objs : ppu.display.objects.ObjectSearch
+  fetching_object : Bool
+  object_fetch_aborted : Bool
+  window : ppu.display.window.Window
+
+/-- [ceres_core::ppu::display::background::relation::Mode3Loop]
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 114:0-124:1 -/
+structure ppu.display.background.relation.Mode3Loop where
+  pace : ppu.display.Pace
+  fetcher : ppu.display.fetcher.Fetcher
+  mixer_scx : Std.U8
+  objects_enabled : Bool
+  window_enabled : Bool
+  wx : Std.U8
+
+/-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::ObjectSearch}::next::{closure}]
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 129:38-129:57 -/
+@[reducible]
+def ppu.display.objects.ObjectSearch.next.closure :=
+  ppu.display.objects.ObjectSearch
+
+/-- [ceres_core::ppu::display::background::relation::window::WindowPhase]
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 19:0-29:1 -/
+@[discriminant isize]
+inductive ppu.display.background.relation.window.WindowPhase where
+| Off : ppu.display.background.relation.window.WindowPhase
+| Armed : ppu.display.background.relation.window.WindowPhase
+| Starting :
+  Std.U8 →
+  Std.U8 →
+  ppu.display.background.relation.window.WindowPhase
+| Inside : ppu.display.background.relation.window.WindowPhase
+
+/-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window::{closure}]
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 297:44-297:92 -/
+def ppu.display.window.Pace.mode3_window.closure :=
+  ppu.display.fifo.Fifo × ppu.display.fetcher.FetcherStep ×
+  ppu.display.fetcher.Fetcher
+
+/-- Trait declaration: [ceres_core::ppu::display::mode3::Mode3Ppu]
+    Source: 'ceres-core/src/ppu/display/mode3.rs', lines 53:0-78:1 -/
+structure ppu.display.mode3.Mode3Ppu (Self : Type _) where
+  objects_enabled : Self → Result Bool
+  mixer_scx : Self → Result Std.U8
+  window_enabled : Self → Result Bool
+  wx : Self → Result Std.U8
+  cgb_hardware : Self → Result Bool
+  fetcher : Self → Result ppu.display.fetcher.Fetcher
+  fetcher_read : Self → ppu.display.Pace → Result Self
+  read_object_attributes : Self → ppu.display.Pace → Result Self
+  read_object_low : Self → ppu.display.Pace → Result Self
+  read_object_high : Self → ppu.display.Pace → Result Self
+  push_object : Self → ppu.display.Pace → Result Self
+  mix_pixel : Self → ppu.display.fifo.Item → ppu.display.background.Popped
+    → Result Self
+  signal_mode3_end : Self → Result Self
+
+/-- [ceres_core::ppu::display::mode3::mode3::{closure#3}]
+    Source: 'ceres-core/src/ppu/display/mode3.rs', lines 238:67-238:79 -/
+@[reducible]
+def ppu.display.mode3.mode3.closure_3 (P : Type _) := Unit
+
+/-- [ceres_core::ppu::display::mode3::mode3::{closure#2}]
+    Source: 'ceres-core/src/ppu/display/mode3.rs', lines 154:33-154:67 -/
+@[reducible]
+def ppu.display.mode3.mode3.closure_2 (P : Type _) :=
+  ppu.display.background.Background
+
+/-- [ceres_core::ppu::display::mode3::mode3::{closure#1}]
+    Source: 'ceres-core/src/ppu/display/mode3.rs', lines 139:52-139:64 -/
+@[reducible]
+def ppu.display.mode3.mode3.closure_1 (P : Type _) := Unit
+
+/-- [ceres_core::ppu::display::mode3::mode3::{closure}]
+    Source: 'ceres-core/src/ppu/display/mode3.rs', lines 104:25-106:5 -/
+@[reducible]
+def ppu.display.mode3.mode3.closure (P : Type _) := Unit
+
+/-- [ceres_core::ppu::display::mode3::Step]
+    Source: 'ceres-core/src/ppu/display/mode3.rs', lines 31:0-45:1 -/
+@[discriminant isize]
+inductive ppu.display.mode3.Step where
+| WindowCheck : ppu.display.mode3.Step
+| Objects : ppu.display.mode3.Step
+| NextObject : ppu.display.mode3.Step
+| WaitForTile : ppu.display.mode3.Step
+| ReadObjectAttributes : ppu.display.mode3.Step
+| ReadObjectLow : ppu.display.mode3.Step
+| ReadObjectHigh : ppu.display.mode3.Step
+| PushObject : ppu.display.mode3.Step
+| OutputPixel : ppu.display.mode3.Step
+| AfterPixel : ppu.display.mode3.Step
+
+/-- [ceres_core::ppu::display::mode3::Mode3Flow]
+    Source: 'ceres-core/src/ppu/display/mode3.rs', lines 24:0-27:1 -/
+@[discriminant isize]
+inductive ppu.display.mode3.Mode3Flow where
+| Slept : ppu.display.mode3.Mode3Flow
+| Done : ppu.display.mode3.Mode3Flow
+
+/-- [ceres_core::ppu::display::background::relation::Hooks]
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 145:0-151:1 -/
+structure ppu.display.background.relation.Hooks where
+  fetcher : ppu.display.fetcher.Fetcher
+  mixer_scx : Std.U8
+  objects_enabled : Bool
+  window_enabled : Bool
+  wx : Std.U8
+
+/-- [ceres_core::ppu::display::background::relation::pipeline::SpritePhase]
+    Source: 'ceres-core/src/ppu/display/background/relation/pipeline.rs', lines 153:0-160:1 -/
+@[discriminant isize]
+inductive ppu.display.background.relation.pipeline.SpritePhase where
+| Pushed : ppu.display.background.relation.pipeline.SpritePhase
+| AfterPush : ppu.display.background.relation.pipeline.SpritePhase
+| Attributes : ppu.display.background.relation.pipeline.SpritePhase
+| LowFirst : ppu.display.background.relation.pipeline.SpritePhase
+| Low : ppu.display.background.relation.pipeline.SpritePhase
+| High : ppu.display.background.relation.pipeline.SpritePhase
 
 /-- [ceres_core::ppu::display::objects::OamLatches]
     Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 57:0-60:1 -/

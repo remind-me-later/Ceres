@@ -3,7 +3,8 @@
 # timing::relation::step_agrees, interrupts::relation::step_agrees,
 # memory::dma::relation::step_agrees, ppu::display::timing::relation::step_agrees,
 # ppu::display::objects::relation's step_agrees, lead_in_agrees, tail_agrees
-# and scan, and timer_if::relation::in_sequence, with what they
+# and scan, ppu::display::background::relation::step_agrees and
+# start_agrees (mode 3), and timer_if::relation::in_sequence, with what they
 # call (ceres-netlist's transcriptions included), to Lean: Ceres/Gen.
 #
 #   translate.sh         write Ceres/Gen
@@ -42,6 +43,8 @@ CARGO_TARGET_DIR=$ROOT/target/charon "$CHARON" cargo --preset=aeneas \
 	--start-from crate::ppu::display::objects::relation::lead_in_agrees \
 	--start-from crate::ppu::display::objects::relation::tail_agrees \
 	--start-from crate::ppu::display::objects::relation::scan \
+	--start-from crate::ppu::display::background::relation::step_agrees \
+	--start-from crate::ppu::display::background::relation::start_agrees \
 	--include ceres_netlist \
 	--dest-file "$work/ceres.llbc" -- -p ceres-core --features verify >"$work/charon.log" 2>&1 || {
 	tail -n 30 "$work/charon.log" >&2

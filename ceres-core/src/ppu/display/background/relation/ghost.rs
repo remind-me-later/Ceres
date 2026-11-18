@@ -125,7 +125,7 @@ impl Ghost {
             let age = if !fired {
                 // The second dot: on from the first.
                 if self.age < 7 { self.age + 1 } else { 7 }
-            } else if (signed(position) + i16::from(before.len) <= 0) & !rerun {
+            } else if (signed(position) + wide(before.len) <= 0) & !rerun {
                 window_fine
             } else if !frozen & (window_fine == 0) {
                 0
@@ -171,7 +171,7 @@ impl Ghost {
         // restarts (6) as its fine scroll goes; from there its fetcher
         // counts as in any tile, on while an object stops its pixels (an
         // object at X 0 stops them at the restart).
-        let age = if (p + i16::from(len) <= 0) & !rerun & (len >= FULL - 2) & !frozen {
+        let age = if (p + wide(len) <= 0) & !rerun & (len >= FULL - 2) & !frozen {
             fine
         } else if !frozen & (fine == 0) {
             0
@@ -233,7 +233,7 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     let p = signed(bg.position);
     let len = bg.fifo.len();
     let shapes =
-        (len >= 1) & (len <= FULL) & !bg.insert_blank & (p >= LEAD_IN) & (p <= i16::from(PX_WIDTH));
+        (len >= 1) & (len <= FULL) & !bg.insert_blank & (p >= LEAD_IN) & (p <= wide(PX_WIDTH));
     // The ghost rests in the lead-in, but for an object at X 0 to 7, fetched
     // there (with the window at WX 0 to 6, left out: `objects_ok`).
     let early_objects = l.objects_enabled
@@ -282,9 +282,9 @@ pub(super) const fn history_ok(pace: &Pace, g: Ghost) -> bool {
         } else if fine_of(net_len) == 0 {
             // The fine scroll began the tile in this dot: the fetcher
             // restarted.
-            g.age == 0
+            bit(g.age == 0)
         } else {
-            g.age >= fine_of(net_len)
+            bit(g.age >= fine_of(net_len))
         };
     // An object's fetch outlasts the fetcher's tile: by its push the
     // netlist's fetcher has counted to the end, and stands there with the
@@ -391,7 +391,7 @@ pub(super) const fn ghost_ok(pace: &Pace, g: Ghost) -> bool {
                     // The next object at the same X: its tile is there.
                     matches!(pace.state, State::Mode3ObjectFetch) & (g.extra == 2)
                 } else {
-                    g.extra == 1
+                    bit(g.extra == 1)
                 }
         }
         1 => {
@@ -405,7 +405,7 @@ pub(super) const fn ghost_ok(pace: &Pace, g: Ghost) -> bool {
                         | (matches!(pace.state, State::Mode3ObjectWait | State::Mode3ObjectFetch)
                             & (g.extra == 1))
                 } else {
-                    g.extra == 0
+                    bit(g.extra == 0)
                 }
         }
         _ => {

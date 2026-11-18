@@ -6,6 +6,19 @@
 )]
 use super::*;
 
+/// A boolean as it is. Aeneas (lean/) prints a comparison as a proposition,
+/// which Lean takes back as a boolean where one is expected; a comparison
+/// alone in a branch's arm or a tuple is not: this makes it one.
+pub(crate) const fn bit(b: bool) -> bool {
+    b
+}
+
+/// A byte as a signed value, as `i16::from` gives it (whose `From` Aeneas does
+/// not model, lean/).
+pub(crate) const fn wide(x: u8) -> i16 {
+    x as i16
+}
+
 /// The position as a signed value: the lead-in's 240..=255 are -16..=-1.
 pub(crate) const fn signed(position: u8) -> i16 {
     if position >= pos(-16) {
@@ -53,18 +66,18 @@ pub(crate) const fn pipeline_at(p: i16, len: u8, first: bool, net: &NetPipeline)
     let mut fine = FINE_AHEAD.wrapping_sub(len) & 7;
     let mut fetch_count = if fine < FETCH_DONE { fine } else { FETCH_DONE };
     let before = (fine + 7) & 7;
-    let mut lyzu = (if before < FETCH_DONE {
+    let mut lyzu = bit((if before < FETCH_DONE {
         before
     } else {
         FETCH_DONE
     }) & 1
-        != 0;
+        != 0);
     let mut nyka = (fine >= 6) | (fine == 0);
     let mut pory = nyka;
     let mut pygo = (fine == 7) | (fine <= 1);
     let mut started = true;
-    let mut ryfa = fine == 0;
-    let mut rene = fine == 1;
+    let mut ryfa = bit(fine == 0);
+    let mut rene = bit(fine == 1);
     let mut busy = false;
     if first {
         // The first fetch's restart, not the fine scroll's, began the tile.

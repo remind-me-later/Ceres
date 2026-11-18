@@ -271,7 +271,7 @@ impl Pace {
             let should_activate = if wx == 0 {
                 position == pos(-7)
                     || position == pos(-16) && mixer_scx & 7 != 0
-                    || (pos(-15)..=pos(-8)).contains(&position)
+                    || position >= pos(-15) && position <= pos(-8)
             } else if u16::from(wx) < 166 + u16::from(hw) {
                 if wx == position.wrapping_add(7) {
                     true

@@ -121,7 +121,11 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> M
         State::Mode3Pixel => Step::AfterPixel,
         _ => Step::WindowCheck,
     };
-    loop {
+    // A loop that runs until an arm sleeps or the line is drawn (`running`),
+    // rather than returning from inside it, as Aeneas takes it (lean/).
+    let mut flow = Mode3Flow::Slept;
+    let mut running = true;
+    while running {
         step = match step {
             Step::WindowCheck => {
                 let (enabled, wx, scx, hw) =
@@ -134,9 +138,11 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> M
                     && p.objects_enabled()
                     && pace.objs.next().is_some_and(|e| e.x == 0);
                 if !object_first && pace.mode3_window(enabled, wx, scx, hw, p.fetcher()) {
-                    return Mode3Flow::Slept;
+                    running = false;
+                    step
+                } else {
+                    Step::Objects
                 }
-                Step::Objects
             }
             Step::Objects => {
                 let (wx, scx, hw) = (p.wx(), p.mixer_scx(), p.cgb_hardware());
@@ -169,40 +175,47 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> M
                 }
             }
             Step::WaitForTile => {
-                if mem::take(&mut pace.window.started_after_line) {
+                let started_after_line = pace.window.started_after_line;
+                pace.window.started_after_line = false;
+                if started_after_line {
                     // The window's start restarted the fetcher: the
                     // object waits for the window's first tile and the
                     // next one (the line ends after it, whatever the
                     // fetcher holds).
                     pace.sleep_in_line(State::Mode3ObjectFetch, 1 + WINDOW_TILES_BEFORE_OBJECT);
-                    return Mode3Flow::Slept;
-                }
-                // The background fetcher finishes its tile first.
-                let next = if pace.bg.step < FetcherStep::DataHighT2 || pace.bg.fifo.is_empty() {
-                    State::Mode3ObjectWait
                 } else {
-                    State::Mode3ObjectFetch
-                };
-                advance_fetcher(p, pace);
-                pace.sleep_in_line(next, 1);
-                return Mode3Flow::Slept;
+                    // The background fetcher finishes its tile first.
+                    let next = if pace.bg.step < FetcherStep::DataHighT2 || pace.bg.fifo.is_empty()
+                    {
+                        State::Mode3ObjectWait
+                    } else {
+                        State::Mode3ObjectFetch
+                    };
+                    advance_fetcher(p, pace);
+                    pace.sleep_in_line(next, 1);
+                }
+                running = false;
+                step
             }
             Step::ReadObjectAttributes => {
                 advance_fetcher(p, pace);
                 p.read_object_attributes(pace);
                 pace.sleep_in_line(State::Mode3ObjectAttributes, 2);
-                return Mode3Flow::Slept;
+                running = false;
+                step
             }
             Step::ReadObjectLow => {
                 p.read_object_low(pace);
                 pace.sleep_in_line(State::Mode3ObjectLow, 2);
-                return Mode3Flow::Slept;
+                running = false;
+                step
             }
             Step::ReadObjectHigh => {
                 pace.fetching_object = false;
                 p.read_object_high(pace);
                 pace.sleep_in_line(State::Mode3ObjectHigh, 1);
-                return Mode3Flow::Slept;
+                running = false;
+                step
             }
             Step::PushObject => {
                 p.push_object(pace);
@@ -231,10 +244,12 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> M
                 }
                 advance_fetcher(p, pace);
                 if pace.bg.position == PX_WIDTH {
-                    return Mode3Flow::Done;
+                    flow = Mode3Flow::Done;
+                } else {
+                    pace.sleep_in_line(State::Mode3Pixel, 1);
                 }
-                pace.sleep_in_line(State::Mode3Pixel, 1);
-                return Mode3Flow::Slept;
+                running = false;
+                step
             }
             Step::AfterPixel => {
                 if pace.window.wx_166_interrupt_glitch {
@@ -244,6 +259,7 @@ pub(super) fn mode3<P: Mode3Ppu>(p: &mut P, pace: &mut Pace, resume: State) -> M
             }
         };
     }
+    flow
 }
 
 impl Mode3Ppu for PpuCore {
