@@ -192,15 +192,21 @@ record_covers() {
 
 # The covers that the harnesses run on the sources $1 have and none of them
 # satisfies, each harness with its covers for the program it ran: "function:
-# description" lines.
+# description" lines; and a harness with covers recorded, but none for that
+# program: "NAME: covers not recorded".
 uncovered() {
     [ -f "$COVERS" ] || return 0
     awk -F '\t' -v hash="$1" '
         FILENAME == ARGV[1] { if ($2 == hash) program[$1] = $6; next }
-        /^#/ || !($1 in program) || program[$1] != $2 { next }
-        { key = $3 ": " $4; has[key] = 1 }
+        /^#/ || !($1 in program) { next }
+        { with_covers[$1] = 1 }
+        program[$1] != $2 { next }
+        { recorded[$1] = 1; key = $3 ": " $4; has[key] = 1 }
         $5 == "SATISFIED" { satisfied[key] = 1 }
-        END { for (key in has) if (!(key in satisfied)) print key }
+        END {
+            for (key in has) if (!(key in satisfied)) print key
+            for (name in with_covers) if (!(name in recorded)) print name ": covers not recorded"
+        }
     ' "$RESULTS" "$COVERS" | LC_ALL=C sort
 }
 
@@ -251,9 +257,6 @@ kani() {
     mkdir "$one"
     cat >"$one/names"
     [ -s "$one/names" ] || return 0
-    # Each harness's results, its covers' statuses among them, in a file
-    # of its name.
-    rm -rf "$WT/result_output_dir"
     # One `cargo kani` per harness, $at_once at a time: Kani's driver keeps
     # the results of every harness it ran, the covers' traces among them,
     # until it ends, and the mode 3 harnesses' took it past 6 GB.
@@ -351,6 +354,10 @@ run_and_record() {
     hash=$1
     failed=0
     program_hashes || return 1
+    # Each harness's results, its covers' statuses among them, in a file
+    # of its name: kept from both kani calls below (the CPU's harnesses'
+    # run after the others') until their covers are recorded.
+    rm -rf "$WT/result_output_dir"
     if [ "${2:-}" = keep ]; then
         rm -f "$LOGS/todo.run"
         while read -r name; do
