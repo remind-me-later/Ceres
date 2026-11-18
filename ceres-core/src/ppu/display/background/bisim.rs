@@ -91,10 +91,11 @@
 //! (ceres's WY match against the netlist's latch: a line that starts armed
 //! is covered), WX 166, and writes of WX and LCDC's window bit (the loop
 //! stops ceres's window as a tile's fetch starts with the bit clear,
-//! `Pace::window_before_fetch`); objects at X 0 to 7 (they match in the
-//! lead-in, `lead-in-objects`: the cosim walks them), an object's mode 0 pulse
-//! at X 167, and writes of LCDC's object bit (the aborted fetch); line 0
-//! after the LCD is turned on, whose loop starts elsewhere; how a write
+//! `Pace::window_before_fetch`); objects at X 0 to 7 with the window
+//! starting in the lead-in, at WX 0 to 6 (`lead-in-objects`: the cosim
+//! walks them), an object's mode 0 pulse at X 167, and writes of LCDC's
+//! object bit (the aborted fetch); line 0 after the LCD is turned on,
+//! whose loop starts elsewhere; how a write
 //! reaches ceres's mixer (`cpu_bus::write`'s hold of SCX's low bits,
 //! measured); and the dispatch around the loop
 //! (`ceres_dot`'s, copied from `step_state_machine` and `mode3_done`, as
@@ -281,12 +282,11 @@ fn any_loop() -> Mode3Loop {
     kani::assume((count <= found) & (found <= 10));
     pace.objs.count = usize::from(count);
     pace.objs.found = usize::from(found);
-    // No object at X 0 to 7 on the line, left or dropped
-    // (`lead-in-objects`): none is fetched in the lead-in.
+    // Objects at X 0 to 7 are fetched in the lead-in: `objects_ok` leaves
+    // them out where the window starts there.
     let mut i = 0;
     while i < 10 {
         pace.objs.entries[i].x = kani::any();
-        kani::assume((i >= usize::from(found)) | (pace.objs.entries[i].x >= 8));
         i += 1;
     }
     Mode3Loop {
@@ -406,7 +406,6 @@ fn dot_from(state: State, since_push: Option<u8>, window: Window) {
 /// related pair.
 // @assumes transcription-render-edge
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 // @discharges mode3-window-armed
 #[kani::proof]
 #[kani::unwind(12)]
@@ -423,7 +422,6 @@ fn netlist_mode3_expected_carries() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_pixel() {
@@ -436,7 +434,6 @@ fn netlist_mode3_dot_pixel() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_wait() {
@@ -449,7 +446,6 @@ fn netlist_mode3_dot_wait() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_fetch_pushed() {
@@ -462,7 +458,6 @@ fn netlist_mode3_dot_fetch_pushed() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_fetch_after_push() {
@@ -475,7 +470,6 @@ fn netlist_mode3_dot_fetch_after_push() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_fetch() {
@@ -488,7 +482,6 @@ fn netlist_mode3_dot_fetch() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_attributes() {
@@ -501,7 +494,6 @@ fn netlist_mode3_dot_attributes() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_low() {
@@ -514,7 +506,6 @@ fn netlist_mode3_dot_low() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_high() {
@@ -527,7 +518,6 @@ fn netlist_mode3_dot_high() {
 // @assumes mapping-scx-write
 // @assumes mode3-hooks-keep-pace
 // @discharges mode3-end-background
-// @assumes lead-in-objects
 #[kani::proof]
 #[kani::unwind(12)]
 fn netlist_mode3_dot_drawn() {

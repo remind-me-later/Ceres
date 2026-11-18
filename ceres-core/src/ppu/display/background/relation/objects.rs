@@ -20,8 +20,9 @@ pub(super) fn starting_objects(l: &Mode3Loop, net: &NetPipeline) -> bool {
 /// found, at X 8 or more if the window starts in the lead-in (WX 6 or less:
 /// those at X 0 to 7, fetched in the lead-in, are left out there,
 /// `lead-in-objects`), none left behind the position (one at X 0 only at
-/// the lead-in's start); while it fetches one, it is the nearest, at the
-/// position's X (X 0 from the lead-in's start to its discard's end).
+/// the lead-in's start, before it ran again); while it fetches one, it is
+/// the nearest, at the position's X (X 0 from the lead-in's start to its
+/// discard's end).
 pub(super) fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
     let objs = &l.pace.objs;
     let at = l.pace.bg.object_match_x();
@@ -46,7 +47,7 @@ pub(super) fn objects_ok(l: &Mode3Loop, g: Ghost) -> bool {
         Some(e) => {
             !l.objects_enabled
                 | (e.x > at)
-                | (e.x == at) & ((at != 0) | (signed(l.pace.bg.position) == LEAD_IN))
+                | (e.x == at) & ((at != 0) | (signed(l.pace.bg.position) == LEAD_IN) & !g.rerun)
         }
         None => true,
     };

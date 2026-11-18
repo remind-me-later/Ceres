@@ -245,10 +245,19 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
             rerun: g.rerun,
             ..Ghost::at_rest(bg)
         });
-    // An object at X 0 stops ceres at the lead-in's start.
-    let at_zero = early_objects & (p == LEAD_IN) & (len == FULL) & fetching(&l.pace);
+    // An object at X 0 stops ceres at the lead-in's start, before the
+    // lead-in could run again. The netlist draws a pixel in the stop's
+    // first dot (ceres's fetcher at its tile's second step), and stands two
+    // on, frozen but as its fetcher restarts for the tile (the low byte's
+    // first step).
+    let wait = matches!(l.pace.state, State::Mode3ObjectWait);
+    let first = wait & matches_step(bg.step, FetcherStep::GetTileT2);
+    let restart = wait & matches_step(bg.step, FetcherStep::DataLowT1);
+    let pinned = (g.extra == if first { 1 } else { 2 }) & (g.frozen != (first | restart));
+    let at_zero =
+        early_objects & !g.rerun & (p == LEAD_IN) & (len == FULL) & fetching(&l.pace) & pinned;
     shapes
-        & (lead_in_ok(p, len, latched, l.mixer_scx, g.rerun) | at_zero)
+        & (lead_in_compares(&l.pace, g, latched, l.mixer_scx) | at_zero)
         & lead_in
         & history_ok(&l.pace, g)
         & objects_ok(l, g)
@@ -265,7 +274,8 @@ pub(super) const fn history_ok(pace: &Pace, g: Ghost) -> bool {
     let bg = &pace.bg;
     // The netlist's fetcher only runs ahead of its fine scroll's count.
     let (net_p, net_len) = shifted(bg, g.extra);
-    let fetcher_ahead = ((net_p + net_len as i16 <= 0) & !g.rerun)
+    let at_rest = (g.since_push == 2) & (g.extra == 0) & !g.frozen;
+    let fetcher_ahead = ((net_p + net_len as i16 <= 0) & !g.rerun & at_rest)
         | if g.frozen {
             // While the pixels stand still the fetcher counts on.
             (g.age > fine_of(net_len)) | (g.age == 7)
@@ -283,6 +293,24 @@ pub(super) const fn history_ok(pace: &Pace, g: Ghost) -> bool {
         & fetcher_ahead
         & ghost_ok(pace, g)
         & fetch_age_ok(pace, g)
+}
+
+/// `lead_in_ok` at ceres's position but where an object stopped ceres
+/// after its match (-7 or past, fetching, or popped on from -7) with the
+/// netlist's pixels `extra` on: the netlist ran on to them while ceres
+/// stood, and the compares it still has to make are those at its own
+/// pixels. A match in ceres's last pop (at -7, not fetching) came after the
+/// netlist stopped, and is pending for it as for ceres.
+const fn lead_in_compares(pace: &Pace, g: Ghost, latched: u8, mixer_scx: u8) -> bool {
+    let bg = &pace.bg;
+    let (p, len) = (signed(bg.position), bg.fifo.len());
+    let matched_now = (p == LAST_DISCARDED - 1) & !fetching(pace);
+    if (g.extra != 0) & (p >= LAST_DISCARDED - 1) & !matched_now {
+        let (net_p, net_len) = shifted(bg, g.extra);
+        pending_compares(net_p, net_len, latched, mixer_scx, g.rerun)
+    } else {
+        lead_in_ok(p, len, latched, mixer_scx, g.rerun)
+    }
 }
 
 /// The lead-in from its start (at -16, the FIFO full) at position `p` with
@@ -479,11 +507,28 @@ pub(super) const fn fetcher_ok(pace: &Pace, g: Ghost) -> bool {
     let step = bg.step;
     let (_, net_len) = shifted(bg, g.extra);
     // Ceres pushed its row a dot or two ago, before the netlist's pixels
-    // reach the tile and its fetcher restarts for it.
-    let fresh = matches_step(step, step_for(len)) & (len >= FULL - 1) & (net_len >= FULL - 1);
+    // reach the tile and its fetcher restarts for it (none in the first
+    // round, whose row mode 3 started with).
+    let fresh = matches_step(step, step_for(len))
+        & (len >= FULL - 1)
+        & (net_len >= FULL - 1)
+        & !(first_round(bg) & !g.rerun);
     // In the first round at rest (no object at X 0 to 7 fetched in it) the
     // fetcher keeps to the FIFO.
     let rests = (g.since_push == 2) & (g.extra == 0) & !g.frozen & (g.age == fine_of(len));
+    // An object's fetch waits for the fetcher's tile (`WaitForTile`), and
+    // leaves it at its push: it fetches again only after a row was pushed
+    // (none in the first round).
+    let pushed_row = (len >= FULL - 1) & !(first_round(bg) & !g.rerun);
+    let after_object = (g.since_push < 2) & !pushed_row;
+    if after_object & !matches_step(step, FetcherStep::Push) {
+        return false;
+    }
+    // In the first round the fetcher started with the lead-in and steps with
+    // each pixel, and an object's fetch only takes it further.
+    if first_round(bg) & !g.rerun & ((step as u8) < (step_for(len) as u8)) {
+        return false;
+    }
     if first_round(bg) & !g.rerun & !fetching(pace) & rests {
         matches_step(step, step_for(len))
     } else if !fetching(pace) & (len == FULL) {

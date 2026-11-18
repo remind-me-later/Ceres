@@ -479,6 +479,48 @@ fn lead_in_objects_stay_related() {
     }
 }
 
+/// Lines with objects at X 0 to 7, alone or with others, the window off or
+/// starting past the lead-in, SCX written at random dots: related at every
+/// dot, the lead-in run again (an object still to fetch) on some.
+#[test]
+fn lead_in_objects_with_scx_written() {
+    let mut free = Free(0x9E37_79B9_7F4A_7C15);
+    let mut reruns = 0;
+    for trial in 0..20_000 {
+        let scx = free.byte() & 7;
+        let wx = [None, Some(7), Some(8), Some(15), Some(80)][usize::from(free.byte() % 5)];
+        let mut xs = vec![free.byte() & 7];
+        for _ in 0..free.byte() % 3 {
+            xs.push(free.byte() % 13);
+        }
+        xs.sort_unstable();
+        let mut w = Walk::start(&Line {
+            scx,
+            wx,
+            objects: &xs,
+        });
+        w.first_dot();
+        let mut strobe = None;
+        let mut rerun = false;
+        loop {
+            assert!(
+                w.related(),
+                "trial {trial}, SCX {scx}, WX {wx:?}, objects {xs:?}\n{}",
+                w.table
+            );
+            if matches!(w.l.pace.state, State::HBlankStart) {
+                break;
+            }
+            rerun |= w.g.rerun && w.l.pace.objs.count > 0 && signed(w.l.pace.bg.position) < 0;
+            let mixer = free.byte().is_multiple_of(4).then(|| free.byte());
+            w.dot_writing(mixer, strobe);
+            strobe = mixer;
+        }
+        reruns += usize::from(rerun);
+    }
+    assert!(reruns > 0);
+}
+
 /// A small generator of the values a harness leaves free (xorshift).
 struct Free(u64);
 
