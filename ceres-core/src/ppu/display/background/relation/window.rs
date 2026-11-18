@@ -265,7 +265,7 @@ const fn wx_matched(l: &Mode3Loop, position: i16) -> bool {
 /// holds 7 for its match, a pixel on from ceres's FIFO until ceres pops a
 /// pixel of the tile (the ghost's `blank`).
 const fn counted_len(l: &Mode3Loop, g: Ghost) -> u8 {
-    l.pace.bg.fifo.len() - g.blank as u8
+    l.pace.bg.fifo.len().saturating_sub(g.blank as u8)
 }
 
 /// Where ceres's blank pixel leaves it: at -7 with the tile's last pixel,
@@ -446,11 +446,14 @@ pub(super) fn window_inside_ok(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
         // The lead-in's first round pops a pixel a dot from the start's
         // sixth (`lead_position`): four are gone by its tenth.
         let first_left = (p + i16::from(len) > 0) | (len <= FULL - (INSIDE - 6));
-        // No tile is pushed at -7: the blank pixel comes before it.
+        // No tile is pushed at -7: the blank pixel comes before it, so no
+        // pop from a full FIFO leaves -6 with seven pixels.
         let at_wx = (p == LAST_DISCARDED - 1) & (len == FULL);
+        let popped_at_wx = (p == LAST_DISCARDED) & (len == FULL - 1);
         (p >= lead_position(INSIDE))
             & first_left
             & !at_wx
+            & !popped_at_wx
             & blank_ok(l, g)
             & lead_in_ok(p, counted_len(l, g), latched, l.mixer_scx, g.rerun)
     } else {
