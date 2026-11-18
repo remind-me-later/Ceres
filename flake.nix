@@ -114,7 +114,9 @@
           gawk
           bc
           parallel
-          # kani.sh's kept verdicts (verify/kani/program.pl).
+          # kani.sh's solver (verify/kani/kissat-unsat) and kept verdicts
+          # (verify/kani/program.pl).
+          kissat
           perl
           imagemagick
           zlib

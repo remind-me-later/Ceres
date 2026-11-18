@@ -60,8 +60,9 @@
 # 1, KANI_JOBS at a time (4), under a memory cap they share where
 # systemd-run is there (KANI_MEMORY, 12G; no swap: four mode 3 harnesses
 # took 8.8 GB), on KANI_CORES if given (taskset's list), with KANI_SOLVER
-# (cadical). The CPU's harnesses against the netlist's core (SOLO, up to
-# 3.5 GB each) run after the others, KANI_SOLO_JOBS at a time (3).
+# (Kissat, kissat-unsat). The CPU's harnesses against the netlist's core
+# (SOLO, up to 3.5 GB each) run after the others, KANI_SOLO_JOBS at a time
+# (3).
 # Without Kani's concrete playback: it multiplies a harness's memory, and
 # only a failing harness needs it, for its counterexample:
 #
@@ -80,7 +81,11 @@ JOBS=${KANI_JOBS:-4}
 SOLO=netlist_sm83_
 SOLO_JOBS=${KANI_SOLO_JOBS:-3}
 MEMORY=${KANI_MEMORY:-12G}
-SOLVER=${KANI_SOLVER:-cadical}
+# CBMC's SAT solver: Kissat for unsatisfiable formulas (kissat-unsat, an
+# external solver from here), or KANI_SOLVER (cadical, kissat, ..., as
+# Kani's --solver takes it).
+SOLVER=${KANI_SOLVER:-bin=kissat-unsat}
+PATH=$KANI:$PATH
 # Kani's reachability checks of each assertion, off unless KANI_REACH_CHECKS
 # is 1: CBMC finds a trace for each one reached, which took most of a short
 # harness's time and memory, and the covers (with their own checks) are
@@ -293,6 +298,10 @@ kani() {
 program_hashes() {
     version=$(cd "$WT" && cargo kani --version 2>/dev/null | tr '\n' ' ')
     kani_version=$(printf '%s' "$version" | awk '{ print $4 }')
+    # An external solver's version, which Kani's does not tell.
+    case $SOLVER in
+    bin=*) version="$version $("${SOLVER#bin=}" --version 2>/dev/null | head -n 1)" ;;
+    esac
     gi=${KANI_GOTO_INSTRUMENT:-$HOME/.kani/kani-$kani_version/bin/goto-instrument}
     set -- cargo kani -p ceres-core --only-codegen $REACH
     if command -v systemd-run >/dev/null; then

@@ -1,0 +1,15 @@
+#!/bin/sh
+# Kissat tuned for unsatisfiable formulas, as CBMC's external SAT solver
+# (kani.sh's KANI_SOLVER, bin=kissat-unsat): CBMC runs it on each formula's
+# DIMACS file and reads the verdict and the model from its output.
+#
+# The mode 3 proofs end in one hard unsatisfiable formula. On the four
+# longest, run four at a time, it took 448 to 754 s where CBMC's own CaDiCaL
+# took 2051 to 4149 s, CaDiCaL called the same way about twice Kissat's
+# time, and parallel solvers (plingeling, treengeling, CryptoMiniSat on
+# eight threads) longer than CaDiCaL.
+
+if [ "${1:-}" = --version ]; then
+    exec kissat --version
+fi
+exec kissat -q --unsat "$@"

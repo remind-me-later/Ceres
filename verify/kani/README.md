@@ -19,12 +19,13 @@ a time (4), the longest first, under a memory cap where systemd-run is there
 (`KANI_REACH_CHECKS=1` for them: CBMC writes a trace for each one reached,
 which took most of a short harness's time and memory) and with no concrete
 playback: playback multiplies a harness's memory, and only a failing
-harness needs it, for its counterexample. The CPU's harnesses against the
-netlist's core run last, `KANI_SOLO_JOBS` at a time (3). A run of all 126
-took 2 hours 40 minutes: the 64 but the CPU's in two hours four at a time
-(mode 3's longest, `netlist_mode3_window_inside`, in 70 minutes: four
-CBMCs at once slow each other down), the CPU's 62 in 36 minutes one at a
-time.
+harness needs it, for its counterexample. CBMC's SAT solver is Kissat tuned
+for unsatisfiable formulas (`kissat-unsat`, `KANI_SOLVER` for another): the
+mode 3 proofs end in one hard one, which took CBMC's own CaDiCaL up to five
+times as long. The CPU's harnesses against the netlist's core run last,
+`KANI_SOLO_JOBS` at a time (3). A run of all 126 took 67 minutes: the 64 but
+the CPU's in 50 four at a time (mode 3's longest in 14), the CPU's 62 in 16
+three at a time.
 
 A harness passes as well when its relation holds of no state, so the
 covers (`kani::cover!`) say which states it has. `covers.tsv` keeps each
