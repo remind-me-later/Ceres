@@ -194,7 +194,7 @@ def ScanRelated (line : Line) (s : NetSide × U8) (c : CeresSide) : Prop :=
   related s.1 c line s.2 = ok true ∧ 2 ≤ s.2.val
 
 /-- Past window 38: the tail's, not the step's. -/
-def ScanK (s : NetSide × U8) (_ : U8) : Prop := 38 < s.2.val
+def ScanK (s : NetSide × U8) (_ : CeresSide) (_ _ : U8) : Prop := 38 < s.2.val
 
 /-- The scan's window, as a block. -/
 -- @assumes scan-step-agrees
@@ -224,7 +224,7 @@ run's windows agree, or one of them is past 38. -/
 theorem scan_windows (kani : KaniScanStep) (line : Line) :
     Steps (iterate (scanNet line)) (iterate (scanCer line))
       (List.Forall₂ fun y y' => y = y') (List.Forall₂ fun _ _ => True)
-      (iterateK (scanNet line) ScanK) (ScanRelated line) :=
+      (iterateK (scanNet line) (scanCer line) ScanK) (ScanRelated line) :=
   (scan_steps kani line).iterate
 
 end ceres_core.scan

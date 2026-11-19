@@ -64,7 +64,7 @@ registers; its output, the pixel it drew if any and whether mode 3 ended. -/
 
 variable {Ln Lc DIn DIc DO : Type}
 variable {dotN : Ln → DIn → Result (DO × Ln)} {dotC : Lc → DIc → Result (DO × Lc)}
-variable {RDI : DIn → DIc → Prop} {KDot : Ln → DIn → Prop}
+variable {RDI : DIn → DIc → Prop} {KDot : Ln → Lc → DIn → DIc → Prop}
 variable {RL : Phase → Ln → Lc → Prop}
 
 /-! ### The CPU's locks on VRAM and OAM, from the PPU's state. -/
@@ -76,7 +76,7 @@ variable {Lk : Type} {locksN : Ln → Lk} {locksC : Lc → Lk}
 variable {Mn Mc AccN AccC MON MOC : Type}
 variable {memN : Mn → AccN × Lk → Result (MON × Mn)} {memC : Mc → AccC × Lk → Result (MOC × Mc)}
 variable {RAcc : AccN → AccC → Prop} {RMO : MON → MOC → Prop}
-variable {KMem : Mn → AccN × Lk → Prop} {RM : Mn → Mc → Prop}
+variable {KMem : Mn → Mc → AccN × Lk → AccC × Lk → Prop} {RM : Mn → Mc → Prop}
 
 /-! ### The M-cycle's dots, from the access and what the memory gives. -/
 
@@ -88,7 +88,7 @@ variable {ended : DO → Bool}
 variable {Pn Pc SeenN SeenC : Type}
 variable {perN : Pn → AccN × List Bool → Result (SeenN × Pn)}
 variable {perC : Pc → AccC × List Bool → Result (SeenC × Pc)}
-variable {RSeen : SeenN → SeenC → Prop} {KP : Pn → AccN × List Bool → Prop}
+variable {RSeen : SeenN → SeenC → Prop} {KP : Pn → Pc → AccN × List Bool → AccC × List Bool → Prop}
 variable {RP : Pn → Pc → Prop}
 
 /-! ### The rest of the bus: HRAM, boot ROM and undecoded I/O; the joypad
@@ -96,13 +96,13 @@ and the serial port; the APU. One step an M-cycle each, taking the access. -/
 
 variable {Bn Bc BON BOC : Type}
 variable {busN : Bn → AccN → Result (BON × Bn)} {busC : Bc → AccC → Result (BOC × Bc)}
-variable {RBO : BON → BOC → Prop} {KBus : Bn → AccN → Prop} {RB : Bn → Bc → Prop}
+variable {RBO : BON → BOC → Prop} {KBus : Bn → Bc → AccN → AccC → Prop} {RB : Bn → Bc → Prop}
 variable {Jn Jc JON JOC X : Type}
 variable {joyN : Jn → AccN × X → Result (JON × Jn)} {joyC : Jc → AccC × X → Result (JOC × Jc)}
-variable {RJO : JON → JOC → Prop} {KJoy : Jn → AccN × X → Prop} {RJ : Jn → Jc → Prop}
+variable {RJO : JON → JOC → Prop} {KJoy : Jn → Jc → AccN × X → AccC × X → Prop} {RJ : Jn → Jc → Prop}
 variable {An Ac AON AOC : Type}
 variable {apuN : An → AccN → Result (AON × An)} {apuC : Ac → AccC → Result (AOC × Ac)}
-variable {RAO : AON → AOC → Prop} {KApu : An → AccN → Prop} {RA : An → Ac → Prop}
+variable {RAO : AON → AOC → Prop} {KApu : An → Ac → AccN → AccC → Prop} {RA : An → Ac → Prop}
 
 /-! ### The CPU. It takes the outside input `X` (the joypad's buttons, the
 serial line), gives its access, and takes back everything the bus gave. -/
@@ -130,7 +130,8 @@ theorem video_steps
     (hDots : ∀ a b, RAcc a.1 b.1 ∧ RMO a.2 b.2 → List.Forall₂ RDI (dotsN a) (dotsC b)) :
     Steps (video locksN dotN dotsN memN) (video locksC dotC dotsC memC) RAcc
       (fun o p => o.1 = p.1 ∧ RMO o.2.1 p.2.1 ∧ List.Forall₂ (fun a b => a = b) o.2.2 p.2.2)
-      (feedbackK locksN memN (fun s x => iterateK dotN KDot s (dotsN x)) KMem)
+      (feedbackK locksN locksC memN memC
+        (fun s t x y => iterateK dotN dotC KDot s t (dotsN x) (dotsC y)) KMem)
       (fun n c => (∃ k, RL k n.1 c.1) ∧ RM n.2 c.2) :=
   Steps.feedback hLocks hMem
     (Steps.comap (Steps.iterate (Steps.phases hPhase)) dotsN dotsC hDots)
@@ -163,9 +164,10 @@ theorem ppu_steps
     Steps (ppu locksN dotN dotsN memN ended perN) (ppu locksC dotC dotsC memC ended perC) RAcc
       (fun o p => (o.1.1 = p.1.1 ∧ RMO o.1.2.1 p.1.2.1 ∧
         List.Forall₂ (fun a b => a = b) o.1.2.2 p.1.2.2) ∧ RSeen o.2 p.2)
-      (wireK (video locksN dotN dotsN memN)
-        (feedbackK locksN memN (fun s x => iterateK dotN KDot s (dotsN x)) KMem)
-        (fun s x => KP s (x.1, x.2.2.2.map ended)))
+      (wireK (video locksN dotN dotsN memN) (video locksC dotC dotsC memC)
+        (feedbackK locksN locksC memN memC
+          (fun s t x y => iterateK dotN dotC KDot s t (dotsN x) (dotsC y)) KMem)
+        (fun s t x y => KP s t (x.1, x.2.2.2.map ended) (y.1, y.2.2.2.map ended)))
       (fun n c => ((∃ k, RL k n.1.1 c.1.1) ∧ RM n.1.2 c.1.2) ∧ RP n.2 c.2) := by
   refine Steps.wire (video_steps hPhase hLocks hMem hDots) ?_
   refine Steps.comap hPer (fun x : AccN × (Lk × MON × List DO) => (x.1, x.2.2.2.map ended))
@@ -293,8 +295,8 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
     loop, in those phases, with the rest left alone (`hN`, `hC`, `hCs`,
     `hFrame`, the get-put laws), the dot's mode 3 input made from the
     M-cycle's (`hI`: the mixer's SCX, the two edges' inputs), and the known
-    difference, one-sided (the guard reads ceres's state, `Steps`'s `K`
-    does not: `hK`, `hKs`).
+    difference, the guard failing on the pair (`hK`, `hKs`: the line's
+    takes mode 3's).
   - `mode3` into `hblank`: Kani's (`mode3-end-background`); in
     `dmg_agrees_mode3`, `hEnd`: the ended pair is in HBlank's relation.
   - `hblank`, `vblank`, `off`: no claim; the scan's lead-in from a line's

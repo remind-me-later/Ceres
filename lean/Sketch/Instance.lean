@@ -69,7 +69,8 @@ def perCerReal (s : Pc) (y : CeresIn × List Bool) : Result (SeenC × Pc) :=
   ceresBlocks s (withEndC y)
 
 /-- The known differences on the flags' input. -/
-def BlocksKReal (s : Pn) (x : NetIn × List Bool) : Prop := BlocksK s (withEndN x)
+def BlocksKReal (s : Pn) (t : Pc) (x : NetIn × List Bool) (y : CeresIn × List Bool) : Prop :=
+  BlocksK s t (withEndN x) (withEndC y)
 
 theorem forall2_eq_list {α : Type} : ∀ {l1 l2 : List α},
     List.Forall₂ (fun o p => o = p) l1 l2 → l1 = l2 := by

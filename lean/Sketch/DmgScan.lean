@@ -39,7 +39,7 @@ open ceres_core.ppu.display.objects.relation
 latches and ceres's search, in the scan phase. -/
 structure ScanInLine {Ln Lc DIn DIc DO : Type}
     (dotN : Ln → DIn → Result (DO × Ln)) (dotC : Lc → DIc → Result (DO × Lc))
-    (RDI : DIn → DIc → Prop) (KDot : Ln → DIn → Prop) (RL : Phase → Ln → Lc → Prop) where
+    (RDI : DIn → DIc → Prop) (KDot : Ln → Lc → DIn → DIc → Prop) (RL : Phase → Ln → Lc → Prop) where
   lineN : Ln → Line
   lineC : Lc → Line
   pn : Ln → NetSide × I32
@@ -63,13 +63,13 @@ structure ScanInLine {Ln Lc DIn DIc DO : Type}
   hC : ∀ n c j, RL .scan n c →
     dotC c j = (do let (_, t) ← cerScan (lineC c) (pc c) (inC j); ok (out, setC c t))
   hEnd : ∀ n c s t, F n c → ScanEnd (lineN n) s t → RL .start (setN n s) (setC c t)
-  hK : ∀ n i, ScanDotK (lineN n) (pn n) (inN i) → KDot n i
+  hK : ∀ n c i j, ScanDotK (lineN n) (pn n) (pc c) (inN i) (inC j) → KDot n c i j
 
 section
 
 variable {Ln Lc DIn DIc DO : Type}
 variable {dotN : Ln → DIn → Result (DO × Ln)} {dotC : Lc → DIc → Result (DO × Lc)}
-variable {RDI : DIn → DIc → Prop} {KDot : Ln → DIn → Prop}
+variable {RDI : DIn → DIc → Prop} {KDot : Ln → Lc → DIn → DIc → Prop}
 variable {RL : Phase → Ln → Lc → Prop}
 
 /-! ### The CPU's locks on VRAM and OAM, from the PPU's state. -/
@@ -81,7 +81,7 @@ variable {Lk : Type} {locksN : Ln → Lk} {locksC : Lc → Lk}
 variable {Mn Mc AccN AccC MON MOC : Type}
 variable {memN : Mn → AccN × Lk → Result (MON × Mn)} {memC : Mc → AccC × Lk → Result (MOC × Mc)}
 variable {RAcc : AccN → AccC → Prop} {RMO : MON → MOC → Prop}
-variable {KMem : Mn → AccN × Lk → Prop} {RM : Mn → Mc → Prop}
+variable {KMem : Mn → Mc → AccN × Lk → AccC × Lk → Prop} {RM : Mn → Mc → Prop}
 
 /-! ### The M-cycle's dots, from the access and what the memory gives. -/
 
@@ -93,7 +93,7 @@ variable {ended : DO → Bool}
 variable {Pn Pc SeenN SeenC : Type}
 variable {perN : Pn → AccN × List Bool → Result (SeenN × Pn)}
 variable {perC : Pc → AccC × List Bool → Result (SeenC × Pc)}
-variable {RSeen : SeenN → SeenC → Prop} {KP : Pn → AccN × List Bool → Prop}
+variable {RSeen : SeenN → SeenC → Prop} {KP : Pn → Pc → AccN × List Bool → AccC × List Bool → Prop}
 variable {RP : Pn → Pc → Prop}
 
 /-! ### The rest of the bus: HRAM, boot ROM and undecoded I/O; the joypad
@@ -101,13 +101,13 @@ and the serial port; the APU. One step an M-cycle each, taking the access. -/
 
 variable {Bn Bc BON BOC : Type}
 variable {busN : Bn → AccN → Result (BON × Bn)} {busC : Bc → AccC → Result (BOC × Bc)}
-variable {RBO : BON → BOC → Prop} {KBus : Bn → AccN → Prop} {RB : Bn → Bc → Prop}
+variable {RBO : BON → BOC → Prop} {KBus : Bn → Bc → AccN → AccC → Prop} {RB : Bn → Bc → Prop}
 variable {Jn Jc JON JOC X : Type}
 variable {joyN : Jn → AccN × X → Result (JON × Jn)} {joyC : Jc → AccC × X → Result (JOC × Jc)}
-variable {RJO : JON → JOC → Prop} {KJoy : Jn → AccN × X → Prop} {RJ : Jn → Jc → Prop}
+variable {RJO : JON → JOC → Prop} {KJoy : Jn → Jc → AccN × X → AccC × X → Prop} {RJ : Jn → Jc → Prop}
 variable {An Ac AON AOC : Type}
 variable {apuN : An → AccN → Result (AON × An)} {apuC : Ac → AccC → Result (AOC × Ac)}
-variable {RAO : AON → AOC → Prop} {KApu : An → AccN → Prop} {RA : An → Ac → Prop}
+variable {RAO : AON → AOC → Prop} {KApu : An → Ac → AccN → AccC → Prop} {RA : An → Ac → Prop}
 
 /-! ### The CPU. It takes the outside input `X` (the joypad's buttons, the
 serial line), gives its access, and takes back everything the bus gave. -/
@@ -130,7 +130,7 @@ theorem scan_phase (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : Kani
   obtain ⟨hs, hf⟩ := (m.hRS n c).1 hr
   rcases scan_dot_steps kStep kLead kTail (m.lineN n) (m.pn n) (m.pc c) hs (m.inN i) (m.inC j)
       (m.hI i j hij) with k | ⟨o, s, p, t, hn, hc, -, hr'⟩
-  · exact Or.inl (m.hK n i k)
+  · exact Or.inl (m.hK n c i j k)
   · refine Or.inr ⟨m.out, m.setN n s, m.out, m.setC c t, ?_, ?_, rfl, ?_⟩
     · rw [m.hN n c i hr, hn]
       simp

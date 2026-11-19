@@ -31,11 +31,15 @@ def feedback {Sa Sb I Oa Pa Ob : Type} (outA : Sa → Oa)
   let (pa, sa) ← stepA s.1 (i, ob)
   ok ((oa, ob, pa), (sa, sb))
 
-/-- The loop's known differences: B's on A's Moore output, or A's on the
-output B gives. -/
-def feedbackK {Sa Sb I Oa Ob : Type} (outA : Sa → Oa) (b : Sb → I × Oa → Result (Ob × Sb))
-    (KA : Sa → I × Ob → Prop) (KB : Sb → I × Oa → Prop) : Sa × Sb → I → Prop :=
-  fun s i => KB s.2 (i, outA s.1) ∨ ∀ o s', b s.2 (i, outA s.1) = ok (o, s') → KA s.1 (i, o)
+/-- The loop's known differences: B's on A's Moore outputs, or A's on the
+outputs B gives. -/
+def feedbackK {Sa Sb Ta Tb I J Oa Pa Ob Qb : Type} (outA : Sa → Oa) (outC : Ta → Pa)
+    (b : Sb → I × Oa → Result (Ob × Sb)) (cb : Tb → J × Pa → Result (Qb × Tb))
+    (KA : Sa → Ta → I × Ob → J × Qb → Prop) (KB : Sb → Tb → I × Oa → J × Pa → Prop) :
+    Sa × Sb → Ta × Tb → I → J → Prop :=
+  fun s t i j => KB s.2 t.2 (i, outA s.1) (j, outC t.1) ∨
+    ∀ o s' p t', b s.2 (i, outA s.1) = ok (o, s') → cb t.2 (j, outC t.1) = ok (p, t') →
+      KA s.1 t.1 (i, o) (j, p)
 
 theorem Steps.feedback {Sna Snb Sca Scb In Ic Ona Oca Pna Pca Onb Ocb : Type}
     {outN : Sna → Ona} {outC : Sca → Oca}
@@ -43,14 +47,15 @@ theorem Steps.feedback {Sna Snb Sca Scb In Ic Ona Oca Pna Pca Onb Ocb : Type}
     {nb : Snb → In × Ona → Result (Onb × Snb)} {cb : Scb → Ic × Oca → Result (Ocb × Scb)}
     {RI : In → Ic → Prop} {RM : Ona → Oca → Prop} {RA : Pna → Pca → Prop}
     {RB : Onb → Ocb → Prop}
-    {KA : Sna → In × Onb → Prop} {KB : Snb → In × Ona → Prop}
+    {KA : Sna → Sca → In × Onb → Ic × Ocb → Prop}
+    {KB : Snb → Scb → In × Ona → Ic × Oca → Prop}
     {R1 : Sna → Sca → Prop} {R2 : Snb → Scb → Prop}
     (hM : ∀ n c, R1 n c → RM (outN n) (outC c))
     (hB : Steps nb cb (fun i j => RI i.1 j.1 ∧ RM i.2 j.2) RB KB R2)
     (hA : Steps na ca (fun i j => RI i.1 j.1 ∧ RB i.2 j.2) RA KA R1) :
     Steps (feedback outN na nb) (feedback outC ca cb) RI
       (fun o p => RM o.1 p.1 ∧ RB o.2.1 p.2.1 ∧ RA o.2.2 p.2.2)
-      (feedbackK outN nb KA KB) (fun n c => R1 n.1 c.1 ∧ R2 n.2 c.2) := by
+      (feedbackK outN outC nb cb KA KB) (fun n c => R1 n.1 c.1 ∧ R2 n.2 c.2) := by
   rintro ⟨sna, snb⟩ ⟨sca, scb⟩ ⟨hr1, hr2⟩ i j hij
   have hm := hM sna sca hr1
   rcases hB snb scb hr2 (i, outN sna) (j, outC sca) ⟨hij, hm⟩ with
@@ -59,9 +64,11 @@ theorem Steps.feedback {Sna Snb Sca Scb In Ic Ona Oca Pna Pca Onb Ocb : Type}
   rcases hA sna sca hr1 (i, ob) (j, pb) ⟨hij, hrb⟩ with
     kA | ⟨oa, sna', pa, sca', hna, hca, hra, hr1'⟩
   · refine Or.inl (Or.inr ?_)
-    intro o s' h
+    intro o s' p t' h hc
     rw [hnb, Result.ok.injEq] at h
+    rw [hcb, Result.ok.injEq] at hc
     cases h
+    cases hc
     exact kA
   · refine Or.inr ⟨(outN sna, ob, oa), (sna', snb'), (outC sca, pb, pa), (sca', scb'), ?_, ?_,
       ⟨hm, hrb, hra⟩, hr1', hr2'⟩
@@ -71,16 +78,16 @@ theorem Steps.feedback {Sna Snb Sca Scb In Ic Ona Oca Pna Pca Onb Ocb : Type}
 /-- One step from the states `R` relates into those `R'` relates. -/
 def StepsInto {Sn Sc In Ic On Oc : Type}
     (net : Sn → In → Result (On × Sn)) (cer : Sc → Ic → Result (Oc × Sc))
-    (RI : In → Ic → Prop) (RO : On → Oc → Prop) (K : Sn → In → Prop)
+    (RI : In → Ic → Prop) (RO : On → Oc → Prop) (K : Sn → Sc → In → Ic → Prop)
     (R R' : Sn → Sc → Prop) : Prop :=
-  ∀ n c, R n c → ∀ i j, RI i j → K n i ∨
+  ∀ n c, R n c → ∀ i j, RI i j → K n c i j ∨
     ∃ o n' p c', net n i = ok (o, n') ∧ cer c j = ok (p, c') ∧ RO o p ∧ R' n' c'
 
 /-- A block in phases: from each phase's states, a step reaches one of the
 phases'; then it steps under their union. -/
 theorem Steps.phases {Sn Sc In Ic On Oc ι : Type}
     {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
-    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → Sc → In → Ic → Prop}
     {R : ι → Sn → Sc → Prop}
     (h : ∀ k, StepsInto net cer RI RO K (R k) (fun n c => ∃ k', R k' n c)) :
     Steps net cer RI RO K (fun n c => ∃ k, R k n c) := by
@@ -99,7 +106,7 @@ Then the larger step carries the block's claim: from states whose blocks
 block's `R'`. -/
 theorem StepsInto.embed {Sn Sc In Ic On Oc Ln Lc DIn DIc DOn DOc : Type}
     {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
-    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → Sc → In → Ic → Prop}
     {R R' : Sn → Sc → Prop} (h : StepsInto net cer RI RO K R R')
     {dotN : Ln → DIn → Result (DOn × Ln)} {dotC : Lc → DIc → Result (DOc × Lc)}
     (pn : Ln → Sn) (pc : Lc → Sc) (setN : Ln → Sn → Ln) (setC : Lc → Sc → Lc)
@@ -112,7 +119,7 @@ theorem StepsInto.embed {Sn Sc In Ic On Oc Ln Lc DIn DIc DOn DOc : Type}
     {RI' : DIn → DIc → Prop} (hI : ∀ i j, RI' i j → RI (inN i) (inC j))
     {RO' : DOn → DOc → Prop} (hO : ∀ o p, RO o p → RO' (outN o) (outC p))
     (hQ' : ∀ n c s t, F n c → R' s t → Q' (setN n s) (setC c t)) :
-    StepsInto dotN dotC RI' RO' (fun n i => K (pn n) (inN i))
+    StepsInto dotN dotC RI' RO' (fun n c i j => K (pn n) (pc c) (inN i) (inC j))
       (fun n c => R (pn n) (pc c) ∧ F n c) Q' := by
   rintro n c ⟨hr, hf⟩ i j hij
   rcases h (pn n) (pc c) hr (inN i) (inC j) (hI i j hij) with k | ⟨o, s, p, t, hn, hc, ho, hr'⟩

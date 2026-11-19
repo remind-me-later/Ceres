@@ -27,7 +27,8 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
 
 - `Ceres/Bisim/Compose.lean`: `Agree`, the greatest relation such that,
   for related inputs, both steps succeed with related outputs and states
-  that agree again (a coinductive predicate); `Steps`, one step from the
+  that agree again, but for a known difference (`K`, on both sides' states
+  and inputs) (a coinductive predicate); `Steps`, one step from the
   states an invariant relates, as Kani proves it; `Steps.agree` (the
   coinduction), `Steps.wire` (block A's output wired into block B's input)
   and `Steps.map_cer` (ceres's side replaced by a step that does the same).
@@ -93,10 +94,10 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   `start_before` has it (`Starting`) into related states, mode 3 going on in
   the netlist. The harnesses are split by ceres's sleep and the window;
   `netlist_mode3_dot_split` checks that together they take every related
-  pair and every input the guard lets through. One thing is taken on trust:
-  the guard (quiet inputs, WX held, the lead-in matched) reads ceres's
-  state, so the block's known difference is the guard failing for some
-  ceres state related to the netlist's.
+  pair and every input the guard lets through. The block's known difference
+  is the guard (quiet inputs, WX held, the lead-in matched) failing on the
+  pair: the framework's known differences read both sides' states and
+  inputs.
 - `Ceres/Bisim/Line.lean`: a line's start, the OAM scan before mode 3. The
   scan is the proved one (`scan_agrees`), and mode 3's start a hypothesis
   (`hStart`: from the scan's end, ceres's first ten sprites in the

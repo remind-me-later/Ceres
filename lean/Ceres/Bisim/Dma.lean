@@ -55,7 +55,7 @@ theorem same_read_true' {a b : Option Std.U8}
 /-- The DMA's M-cycle, from every related pair (Kani's step). -/
 -- @assumes dma-step-agrees
 theorem dma_steps (kani : KaniDma) :
-    Steps netDma ceresDma (fun x y => x.1.dma = y.1.dma) DmaOut (fun _ _ => False)
+    Steps netDma ceresDma (fun x y => x.1.dma = y.1.dma) DmaOut (fun _ _ _ _ => False)
       (fun n c => memory.dma.relation.related n c = ok true) := by
   intro n c h x y hxy
   right
@@ -96,8 +96,8 @@ theorem timer_if_dma_agree (kt : KaniTimer) (ki : KaniIf) (ks : KaniSeq) (kd : K
     (hd : memory.dma.relation.related nd cd = ok true) :
     Agree (wire (wire netTimer netIf) netDma) (wire ceresJoint ceresDma) SameIn
       (fun o p => JointOut o.1 p.1 ∧ DmaOut o.2 p.2)
-      (wireK (wire netTimer netIf) (wireK netTimer TimerK (fun _ _ => False))
-        (fun _ _ => False)) ((n, nif), nd) ((c, cif), cd) := by
+      (wireK (wire netTimer netIf) ceresJoint
+        (wireK netTimer ceresTimer TimerK (fun _ _ _ _ => False)) (fun _ _ _ _ => False)) ((n, nif), nd) ((c, cif), cd) := by
   have steps := (timer_and_if_steps kt ki ks).wire
     ((dma_steps kd).weaken_in (fun x y hxy => hxy.1.2.2.1))
   refine steps.agree (n := ((n, nif), nd)) (c := ((c, cif), cd)) ?_

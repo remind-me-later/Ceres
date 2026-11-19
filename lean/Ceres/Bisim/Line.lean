@@ -57,7 +57,7 @@ theorem scan_into_mode3 (startN : NetSide → ceres_netlist.render_edge.NetPipel
     (count : U8) (ns : Bool) (held : U8) (line : Line) (ys : Std.Array U8 40#usize)
     (hc : count ≤ ceres_netlist.oam_scan.SLOTS) (hl : line.ly < 144#u8) :
     scan count ns held line ys ⦃ (net, ceres) => ∀ i,
-      ceres_core.mode3.StartK (startN net) i ∨
+      ceres_core.mode3.StartK (startN net) (startC ceres) i i ∨
       ∃ n' c', ceres_core.mode3.netStep (startN net) i = ok ((false, false), n') ∧
         ceres_core.mode3.cerStart (startC ceres) i = ok (false, c') ∧
         ceres_core.mode3.Related n' c' ⦄ :=

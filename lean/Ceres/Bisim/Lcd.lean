@@ -55,7 +55,7 @@ def LcdOut (o : Option Std.U8 × Array Bool 8#usize) (p : Option Std.U8 × Array
 /-- What the step leaves out: turning the LCD on with LYC 0, its enable on
 and the flag clear, and mode 3 ending where the pixel pipeline does not
 end it. -/
-def LcdK (n : NetLcd) (i : NetIn) : Prop :=
+def LcdK (n : NetLcd) (_ : CeresLcd) (i : NetIn) (_ : CeresIn) : Prop :=
   ppu.display.timing.relation.outside n i.lcd i.mode3End = ok true
 
 /-- What Kani proves. -/
@@ -131,8 +131,10 @@ def BlocksOut (o : ((Option Std.U8 × Array Bool 8#usize) ×
 /-- The known differences: the line timing's left-out STAT write, or the
 timer's. -/
 def BlocksK := wireK (wire netLcd (fun s x => wire netTimer netIf s (withStat x)))
-  (wireK netLcd LcdK (fun s x => wireK netTimer TimerK (fun _ _ => False) s (withStat x)))
-  (fun (_ : NetDma) _ => False)
+  (wire ceresLcd (fun s y => ceresJoint s (withStatC y)))
+  (wireK netLcd ceresLcd LcdK (fun s t x y =>
+    wireK netTimer ceresTimer TimerK (fun _ _ _ _ => False) s t (withStat x) (withStatC y)))
+  (fun (_ : NetDma) (_ : CeresDma) _ _ => False)
 
 /-- Every block's states related. -/
 def BlocksRelated (n : (NetLcd × (NetTimer × NetIf)) × NetDma)

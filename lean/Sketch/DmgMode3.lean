@@ -45,7 +45,7 @@ open ceres_core.ppu.display.background.relation ceres_netlist.render_edge
 loop, in the phases they run (`start`, `mode3`). -/
 structure Mode3InLine {Ln Lc DIn DIc DO : Type}
     (dotN : Ln → DIn → Result (DO × Ln)) (dotC : Lc → DIc → Result (DO × Lc))
-    (RDI : DIn → DIc → Prop) (KDot : Ln → DIn → Prop) (RL : Phase → Ln → Lc → Prop) where
+    (RDI : DIn → DIc → Prop) (KDot : Ln → Lc → DIn → DIc → Prop) (RL : Phase → Ln → Lc → Prop) where
   pn : Ln → NetPipeline
   pc : Lc → Mode3Loop
   setN : Ln → NetPipeline → Ln
@@ -67,14 +67,14 @@ structure Mode3InLine {Ln Lc DIn DIc DO : Type}
   hC : ∀ n c j, RL .mode3 n c →
     dotC c j = (do let (p, t) ← cerStep (pc c) (inC j); ok (endN p, setC c t))
   hEnd : ∀ n c s t, F n c → Ended s t → RL .hblank (setN n s) (setC c t)
-  hKs : ∀ n i, StartK (pn n) (inN i) → KDot n i
-  hK : ∀ n i, DotK (pn n) (inN i) → KDot n i
+  hKs : ∀ n c i j, StartK (pn n) (pc c) (inN i) (inC j) → KDot n c i j
+  hK : ∀ n c i j, DotK (pn n) (pc c) (inN i) (inC j) → KDot n c i j
 
 section
 
 variable {Ln Lc DIn DIc DO : Type}
 variable {dotN : Ln → DIn → Result (DO × Ln)} {dotC : Lc → DIc → Result (DO × Lc)}
-variable {RDI : DIn → DIc → Prop} {KDot : Ln → DIn → Prop}
+variable {RDI : DIn → DIc → Prop} {KDot : Ln → Lc → DIn → DIc → Prop}
 variable {RL : Phase → Ln → Lc → Prop}
 
 /-! ### The CPU's locks on VRAM and OAM, from the PPU's state. -/
@@ -86,7 +86,7 @@ variable {Lk : Type} {locksN : Ln → Lk} {locksC : Lc → Lk}
 variable {Mn Mc AccN AccC MON MOC : Type}
 variable {memN : Mn → AccN × Lk → Result (MON × Mn)} {memC : Mc → AccC × Lk → Result (MOC × Mc)}
 variable {RAcc : AccN → AccC → Prop} {RMO : MON → MOC → Prop}
-variable {KMem : Mn → AccN × Lk → Prop} {RM : Mn → Mc → Prop}
+variable {KMem : Mn → Mc → AccN × Lk → AccC × Lk → Prop} {RM : Mn → Mc → Prop}
 
 /-! ### The M-cycle's dots, from the access and what the memory gives. -/
 
@@ -98,7 +98,7 @@ variable {ended : DO → Bool}
 variable {Pn Pc SeenN SeenC : Type}
 variable {perN : Pn → AccN × List Bool → Result (SeenN × Pn)}
 variable {perC : Pc → AccC × List Bool → Result (SeenC × Pc)}
-variable {RSeen : SeenN → SeenC → Prop} {KP : Pn → AccN × List Bool → Prop}
+variable {RSeen : SeenN → SeenC → Prop} {KP : Pn → Pc → AccN × List Bool → AccC × List Bool → Prop}
 variable {RP : Pn → Pc → Prop}
 
 /-! ### The rest of the bus: HRAM, boot ROM and undecoded I/O; the joypad
@@ -106,13 +106,13 @@ and the serial port; the APU. One step an M-cycle each, taking the access. -/
 
 variable {Bn Bc BON BOC : Type}
 variable {busN : Bn → AccN → Result (BON × Bn)} {busC : Bc → AccC → Result (BOC × Bc)}
-variable {RBO : BON → BOC → Prop} {KBus : Bn → AccN → Prop} {RB : Bn → Bc → Prop}
+variable {RBO : BON → BOC → Prop} {KBus : Bn → Bc → AccN → AccC → Prop} {RB : Bn → Bc → Prop}
 variable {Jn Jc JON JOC X : Type}
 variable {joyN : Jn → AccN × X → Result (JON × Jn)} {joyC : Jc → AccC × X → Result (JOC × Jc)}
-variable {RJO : JON → JOC → Prop} {KJoy : Jn → AccN × X → Prop} {RJ : Jn → Jc → Prop}
+variable {RJO : JON → JOC → Prop} {KJoy : Jn → Jc → AccN × X → AccC × X → Prop} {RJ : Jn → Jc → Prop}
 variable {An Ac AON AOC : Type}
 variable {apuN : An → AccN → Result (AON × An)} {apuC : Ac → AccC → Result (AOC × Ac)}
-variable {RAO : AON → AOC → Prop} {KApu : An → AccN → Prop} {RA : An → Ac → Prop}
+variable {RAO : AON → AOC → Prop} {KApu : An → Ac → AccN → AccC → Prop} {RA : An → Ac → Prop}
 
 /-! ### The CPU. It takes the outside input `X` (the joypad's buttons, the
 serial line), gives its access, and takes back everything the bus gave. -/
@@ -143,7 +143,7 @@ theorem start_phase (kStart : KaniMode3Start) (m : Mode3InLine dotN dotC RDI KDo
       ⟨by rw [m.hGetN, m.hGetC]; exact hr, m.hFrame n c s t hf⟩⟩)
   intro n c hr i j hij
   rcases e n c ((m.hRS n c).1 hr) i j hij with k | x
-  · exact Or.inl (m.hKs n i k)
+  · exact Or.inl (m.hKs n c i j k)
   · exact Or.inr x
 
 /-- The mode 3 phase of the line, from Kani's dot harnesses: a dot from
@@ -166,7 +166,7 @@ theorem mode3_phase (kani : KaniMode3Dot) (m : Mode3InLine dotN dotC RDI KDot RL
       · exact ⟨.hblank, m.hEnd n c s t hf he⟩)
   intro n c hr i j hij
   rcases e n c ((m.hRL n c).1 hr) i j hij with k | x
-  · exact Or.inl (m.hK n i k)
+  · exact Or.inl (m.hK n c i j k)
   · exact Or.inr x
 
 /-- The outline's `hPhase` with mode 3's phases discharged: the other

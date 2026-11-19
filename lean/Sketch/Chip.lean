@@ -24,7 +24,7 @@ variable {M3n M3c DotN DotC : Type}
 variable (m3Net : M3n → DotN → Result (Bool × M3n))
 variable (m3Cer : M3c → DotC → Result (Bool × M3c))
 variable (RDot : DotN → DotC → Prop)
-variable (K3 : M3n → DotN → Prop)
+variable (K3 : M3n → M3c → DotN → DotC → Prop)
 variable (R3 : M3n → M3c → Prop)
 
 /-! ### The blocks proved one M-cycle at a time (timer, interrupts, DMA, LCD
@@ -36,7 +36,7 @@ variable (perNet : Pn → AccN × List Bool → Result (SeenN × Pn))
 variable (perCer : Pc → AccC × List Bool → Result (SeenC × Pc))
 variable (RAcc : AccN → AccC → Prop)
 variable (RSeen : SeenN → SeenC → Prop)
-variable (KP : Pn → AccN × List Bool → Prop)
+variable (KP : Pn → Pc → AccN × List Bool → AccC × List Bool → Prop)
 variable (RP : Pn → Pc → Prop)
 
 /-! ### How an M-cycle's access looks to mode 3, dot by dot. -/
@@ -72,8 +72,8 @@ theorem ppu_steps
     (hDots : ∀ a b, RAcc a b → List.Forall₂ RDot (dotsN a) (dotsC b)) :
     Steps (ppuNet m3Net perNet dotsN) (ppuCer m3Cer perCer dotsC) RAcc
       (fun o p => List.Forall₂ (fun a b => a = b) o.1 p.1 ∧ RSeen o.2 p.2)
-      (wireK (fun s a => iterate m3Net s (dotsN a))
-        (fun s a => iterateK m3Net K3 s (dotsN a)) KP)
+      (wireK (fun s a => iterate m3Net s (dotsN a)) (fun s a => iterate m3Cer s (dotsC a))
+        (fun s t a b => iterateK m3Net m3Cer K3 s t (dotsN a) (dotsC b)) KP)
       (fun n c => R3 n.1 c.1 ∧ RP n.2 c.2) :=
   Steps.wire (Steps.comap (Steps.iterate hM3) dotsN dotsC hDots) hPer
 
@@ -98,8 +98,10 @@ theorem chip_steps
     Steps (chipNet m3Net perNet dotsN outN nextN) (chipCer m3Cer perCer dotsC outC nextC)
       (fun x y => x = y)
       (fun o p => List.Forall₂ (fun a b => a = b) o.1 p.1 ∧ RSeen o.2 p.2)
-      (fun s x => wireK (fun s a => iterate m3Net s (dotsN a))
-        (fun s a => iterateK m3Net K3 s (dotsN a)) KP s.2 (outN s.1 x))
+      (fun s t x y => wireK (fun s a => iterate m3Net s (dotsN a))
+        (fun s a => iterate m3Cer s (dotsC a))
+        (fun s t a b => iterateK m3Net m3Cer K3 s t (dotsN a) (dotsC b)) KP s.2 t.2
+        (outN s.1 x) (outC t.1 y))
       (fun n c => RC n.1 c.1 ∧ (R3 n.2.1 c.2.1 ∧ RP n.2.2 c.2.2)) :=
   Steps.close (ppu_steps m3Net m3Cer RDot K3 R3 perNet perCer RAcc RSeen KP RP dotsN dotsC
       hM3 hPer hDots)
@@ -121,8 +123,10 @@ theorem chip_agrees
     Agree (chipNet m3Net perNet dotsN outN nextN) (chipCer m3Cer perCer dotsC outC nextC)
       (fun x y => x = y)
       (fun o p => List.Forall₂ (fun a b => a = b) o.1 p.1 ∧ RSeen o.2 p.2)
-      (fun s x => wireK (fun s a => iterate m3Net s (dotsN a))
-        (fun s a => iterateK m3Net K3 s (dotsN a)) KP s.2 (outN s.1 x)) n c :=
+      (fun s t x y => wireK (fun s a => iterate m3Net s (dotsN a))
+        (fun s a => iterate m3Cer s (dotsC a))
+        (fun s t a b => iterateK m3Net m3Cer K3 s t (dotsN a) (dotsC b)) KP s.2 t.2
+        (outN s.1 x) (outC t.1 y)) n c :=
   Steps.agree (chip_steps m3Net m3Cer RDot K3 R3 perNet perCer RAcc RSeen KP RP dotsN dotsC
     outN outC nextN nextC RC hOut hNext hM3 hPer hDots) hr
 

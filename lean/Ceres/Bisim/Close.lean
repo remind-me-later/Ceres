@@ -33,13 +33,13 @@ theorem Steps.close {Sdn Sdc Sbn Sbc Xn Xc In Ic On Oc : Type}
     {nextN : Sdn → Xn → On → Result Sdn} {nextC : Sdc → Xc → Oc → Result Sdc}
     {nb : Sbn → In → Result (On × Sbn)} {cb : Sbc → Ic → Result (Oc × Sbc)}
     {RX : Xn → Xc → Prop} {RI : In → Ic → Prop} {RO : On → Oc → Prop}
-    {K : Sbn → In → Prop} {RD : Sdn → Sdc → Prop} {RB : Sbn → Sbc → Prop}
+    {K : Sbn → Sbc → In → Ic → Prop} {RD : Sdn → Sdc → Prop} {RB : Sbn → Sbc → Prop}
     (hB : Steps nb cb RI RO K RB)
     (hOut : ∀ dn dc x y, RD dn dc → RX x y → RI (outN dn x) (outC dc y))
     (hNext : ∀ dn dc x y o p, RD dn dc → RX x y → RO o p →
       ∃ dn' dc', nextN dn x o = ok dn' ∧ nextC dc y p = ok dc' ∧ RD dn' dc') :
     Steps (close outN nextN nb) (close outC nextC cb) RX RO
-      (fun s x => K s.2 (outN s.1 x)) (fun n c => RD n.1 c.1 ∧ RB n.2 c.2) := by
+      (fun s t x y => K s.2 t.2 (outN s.1 x) (outC t.1 y)) (fun n c => RD n.1 c.1 ∧ RB n.2 c.2) := by
   rintro ⟨dn, bn⟩ ⟨dc, bc⟩ ⟨hd, hb⟩ x y hxy
   rcases hB bn bc hb (outN dn x) (outC dc y) (hOut dn dc x y hd hxy) with
     k | ⟨o, bn', p, bc', hn, hc, ho, hb'⟩

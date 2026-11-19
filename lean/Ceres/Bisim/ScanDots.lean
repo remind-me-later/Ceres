@@ -562,10 +562,10 @@ def ScanEnd (line : Line) (s : NetSide × I32) (t : CeresSide × I32) : Prop :=
   s.2 = t.2 ∧ s.2.val = 163 ∧ Ended line s.1 t.1
 
 /-- The scan's known differences: OAM gives a dot a Y that is not the one
-of the window it is in (some ceres state with the netlist's: the Ys are
-the pair's, not the netlist's alone). -/
-def ScanDotK (line : Line) (s : NetSide × I32) (i : ScanIn) : Prop :=
-  ∃ c, (∃ (k : Nat) (ys : LeadYs), k ≤ 6 ∧ s.2.val = 2 * (k : Int) - 7 ∧
+of the window it is in. -/
+def ScanDotK (line : Line) (s : NetSide × I32) (t : CeresSide × I32) (i _ : ScanIn) : Prop :=
+  let c := t.1
+  (∃ (k : Nat) (ys : LeadYs), k ≤ 6 ∧ s.2.val = 2 * (k : Int) - 7 ∧
       LeadW line k s.1 c ys ∧ ¬ leadFits k ys i) ∨
     (∃ j y, s.2.val = 4 * (j.val : Int) - 1 ∧ Mid1 line j s.1 c y ∧ i ≠ (y, y)) ∨
     (∃ j y, s.2.val = 4 * (j.val : Int) + 1 ∧ Mid3 line j s.1 c y ∧
@@ -593,13 +593,13 @@ theorem scan_dot_steps (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : 
       · obtain ⟨n', c', b, hn, hc, hb, hm'⟩ := lead_last kLead kStep i hw (by simpa using hh) hf
         exact ⟨(), (n', b), (), (c', b), hn, hc, trivial,
           Or.inl ⟨rfl, Or.inr (Or.inl ⟨2#u8, i.2, by simp [hb], hm'⟩)⟩⟩
-    · exact Or.inl ⟨c, Or.inl ⟨k, ys, hk, hh, hw, hf⟩⟩
+    · exact Or.inl (Or.inl ⟨k, ys, hk, hh, hw, hf⟩)
   · by_cases hf : i = (y, y)
     · subst hf
       obtain ⟨n', c', b, hn, hc, rfl, hb, hm'⟩ := mid1_dot kStep kTail hm hh
       exact Or.inr ⟨(), (n', b), (), (c', b), hn, hc, trivial,
         Or.inl ⟨rfl, Or.inr (Or.inr ⟨j, y, hb, hm'⟩)⟩⟩
-    · exact Or.inl ⟨c, Or.inr (Or.inl ⟨j, y, hh, hm, hf⟩)⟩
+    · exact Or.inl (Or.inr (Or.inl ⟨j, y, hh, hm, hf⟩))
   · by_cases hf : i.1 = y ∧ (38 ≤ j.val → i.2 = y)
     · obtain ⟨i1, i2⟩ := i
       obtain ⟨rfl, hf2⟩ := hf
@@ -608,7 +608,7 @@ theorem scan_dot_steps (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : 
       rcases hnext with ⟨j', hj', hm'⟩ | ⟨h40, he⟩
       · exact Or.inl ⟨rfl, Or.inr (Or.inl ⟨j', i2, by rw [hb, hj']; push_cast; ring, hm'⟩)⟩
       · exact Or.inr ⟨rfl, by rw [hb, h40]; rfl, he⟩
-    · exact Or.inl ⟨c, Or.inr (Or.inr ⟨j, y, hh, hm, hf⟩)⟩
+    · exact Or.inl (Or.inr (Or.inr ⟨j, y, hh, hm, hf⟩))
 
 /-- The scan's start: from the line's end, at half dot `-7`. -/
 theorem scan_starts {count ns held line n0 c0} {h : I32} (ys : LeadYs)

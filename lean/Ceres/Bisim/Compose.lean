@@ -7,7 +7,8 @@ open Aeneas Aeneas.Std Result
 A block is a step from an input to an output and the next state, as Aeneas
 translates one. Two blocks, the netlist's and ceres's, agree from a pair of
 states when, for every pair of inputs that `RI` relates, either the
-netlist's state and input are a known difference (`K`), or both steps
+two states and inputs are a known difference (`K`, which may read either
+side: a guard on ceres's state as well as the netlist's), or both steps
 succeed with outputs that `RO` relates and states that agree again: the
 greatest such relation, `Agree`.
 
@@ -31,10 +32,10 @@ namespace ceres_core.bisim
 
 coinductive Agree {Sn Sc In Ic On Oc : Type}
     (net : Sn → In → Result (On × Sn)) (cer : Sc → Ic → Result (Oc × Sc))
-    (RI : In → Ic → Prop) (RO : On → Oc → Prop) (K : Sn → In → Prop) :
+    (RI : In → Ic → Prop) (RO : On → Oc → Prop) (K : Sn → Sc → In → Ic → Prop) :
     Sn → Sc → Prop where
   | step (n : Sn) (c : Sc) :
-      (∀ i j, RI i j → K n i ∨
+      (∀ i j, RI i j → K n c i j ∨
         ∃ o n' p c', net n i = ok (o, n') ∧ cer c j = ok (p, c') ∧ RO o p ∧
           Agree net cer RI RO K n' c') →
       Agree net cer RI RO K n c
@@ -43,14 +44,14 @@ coinductive Agree {Sn Sc In Ic On Oc : Type}
 succeed with related outputs and states `R` relates. -/
 def Steps {Sn Sc In Ic On Oc : Type}
     (net : Sn → In → Result (On × Sn)) (cer : Sc → Ic → Result (Oc × Sc))
-    (RI : In → Ic → Prop) (RO : On → Oc → Prop) (K : Sn → In → Prop)
+    (RI : In → Ic → Prop) (RO : On → Oc → Prop) (K : Sn → Sc → In → Ic → Prop)
     (R : Sn → Sc → Prop) : Prop :=
-  ∀ n c, R n c → ∀ i j, RI i j → K n i ∨
+  ∀ n c, R n c → ∀ i j, RI i j → K n c i j ∨
     ∃ o n' p c', net n i = ok (o, n') ∧ cer c j = ok (p, c') ∧ RO o p ∧ R n' c'
 
 theorem Steps.agree {Sn Sc In Ic On Oc : Type}
     {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
-    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → Sc → In → Ic → Prop}
     {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R) {n : Sn} {c : Sc} (hr : R n c) :
     Agree net cer RI RO K n c :=
   Agree.coinduct _ _ _ _ _ R (fun n c hr i j hij => h n c hr i j hij) n c hr
@@ -81,30 +82,34 @@ theorem wire_eq_ok {Sa Sb I Oa Ob : Type} {a : Sa → I → Result (Oa × Sa)}
   obtain ⟨rfl, rfl⟩ := h
   exact ⟨ha, hb⟩
 
-/-- The pair's known differences: A's, or B's on the output A gives. -/
-def wireK {Sa Sb I Oa : Type} (a : Sa → I → Result (Oa × Sa))
-    (KA : Sa → I → Prop) (KB : Sb → I × Oa → Prop) : Sa × Sb → I → Prop :=
-  fun s i => KA s.1 i ∨ ∀ o s', a s.1 i = ok (o, s') → KB s.2 (i, o)
+/-- The pair's known differences: A's, or B's on the outputs A gives. -/
+def wireK {Sa Sb Ta Tb I J Oa Pa : Type} (a : Sa → I → Result (Oa × Sa))
+    (ca : Ta → J → Result (Pa × Ta)) (KA : Sa → Ta → I → J → Prop)
+    (KB : Sb → Tb → I × Oa → J × Pa → Prop) : Sa × Sb → Ta × Tb → I → J → Prop :=
+  fun s t i j => KA s.1 t.1 i j ∨
+    ∀ o s' p t', a s.1 i = ok (o, s') → ca t.1 j = ok (p, t') → KB s.2 t.2 (i, o) (j, p)
 
 theorem Steps.wire {Sna Snb Sca Scb In Ic Ona Onb Oca Ocb : Type}
     {na : Sna → In → Result (Ona × Sna)} {ca : Sca → Ic → Result (Oca × Sca)}
     {nb : Snb → In × Ona → Result (Onb × Snb)} {cb : Scb → Ic × Oca → Result (Ocb × Scb)}
     {RI : In → Ic → Prop} {RA : Ona → Oca → Prop} {RB : Onb → Ocb → Prop}
-    {KA : Sna → In → Prop} {KB : Snb → In × Ona → Prop}
+    {KA : Sna → Sca → In → Ic → Prop} {KB : Snb → Scb → In × Ona → Ic × Oca → Prop}
     {R1 : Sna → Sca → Prop} {R2 : Snb → Scb → Prop}
     (hA : Steps na ca RI RA KA R1)
     (hB : Steps nb cb (fun i j => RI i.1 j.1 ∧ RA i.2 j.2) RB KB R2) :
     Steps (wire na nb) (wire ca cb) RI (fun o p => RA o.1 p.1 ∧ RB o.2 p.2)
-      (wireK na KA KB) (fun n c => R1 n.1 c.1 ∧ R2 n.2 c.2) := by
+      (wireK na ca KA KB) (fun n c => R1 n.1 c.1 ∧ R2 n.2 c.2) := by
   rintro ⟨sna, snb⟩ ⟨sca, scb⟩ ⟨hr1, hr2⟩ i j hij
   rcases hA sna sca hr1 i j hij with kA | ⟨oa, sna', pa, sca', hna, hca, hra, hr1'⟩
   · exact Or.inl (Or.inl kA)
   rcases hB snb scb hr2 (i, oa) (j, pa) ⟨hij, hra⟩ with
     kB | ⟨ob, snb', pb, scb', hnb, hcb, hrb, hr2'⟩
   · refine Or.inl (Or.inr ?_)
-    intro o s' h
+    intro o s' p t' h hc
     rw [hna, Result.ok.injEq] at h
+    rw [hca, Result.ok.injEq] at hc
     cases h
+    cases hc
     exact kB
   · refine Or.inr ⟨(oa, ob), (sna', snb'), (pa, pb), (sca', scb'), ?_, ?_, ⟨hra, hrb⟩,
       hr1', hr2'⟩
@@ -116,7 +121,7 @@ stronger relation does (a block wired in that does not look at another's
 output). -/
 theorem Steps.weaken_in {Sn Sc In Ic On Oc : Type}
     {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
-    {RI RI' : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {RI RI' : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → Sc → In → Ic → Prop}
     {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R) (w : ∀ i j, RI' i j → RI i j) :
     Steps net cer RI' RO K R :=
   fun n c hr i j hij => h n c hr i j (w i j hij)
@@ -126,10 +131,11 @@ theorem Steps.weaken_in {Sn Sc In Ic On Oc : Type}
 STAT line's rises put into IF's input). -/
 theorem Steps.comap {Sn Sc In Ic In' Ic' On Oc : Type}
     {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
-    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → Sc → In → Ic → Prop}
     {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R) (f : In' → In) (g : Ic' → Ic)
     {RI' : In' → Ic' → Prop} (w : ∀ i j, RI' i j → RI (f i) (g j)) :
-    Steps (fun s i => net s (f i)) (fun s j => cer s (g j)) RI' RO (fun s i => K s (f i)) R :=
+    Steps (fun s i => net s (f i)) (fun s j => cer s (g j)) RI' RO
+      (fun s t i j => K s t (f i) (g j)) R :=
   fun n c hr i j hij => h n c hr (f i) (g j) (w i j hij)
 
 /-- Ceres's step replaced by `cer'`, which does what `cer` does from the
@@ -138,7 +144,7 @@ theorem Steps.map_cer {Sn Sc In Ic On Oc Oc' : Type}
     {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
     {cer' : Sc → Ic → Result (Oc' × Sc)}
     {RI : In → Ic → Prop} {RO : On → Oc → Prop} {RO' : On → Oc' → Prop}
-    {K : Sn → In → Prop} {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R)
+    {K : Sn → Sc → In → Ic → Prop} {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R)
     (f : Oc → Oc')
     (same : ∀ n c i j o p c', R n c → RI i j → RO o p → cer c j = ok (p, c') →
       cer' c j = ok (f p, c'))

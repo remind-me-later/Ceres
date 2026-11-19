@@ -24,20 +24,24 @@ def iterate {S I O : Type} (step : S → I → Result (O × S)) :
       let (os, s'') ← iterate step s' is
       ok (o :: os, s'')
 
-/-- A run's known differences: one of its steps is one. -/
-def iterateK {S I O : Type} (step : S → I → Result (O × S)) (K : S → I → Prop) :
-    S → List I → Prop
-  | _, [] => False
-  | s, i :: is => K s i ∨ ∀ o s', step s i = ok (o, s') → iterateK step K s' is
+/-- A run's known differences: one of its steps is one, the two sides
+stepped to it. -/
+def iterateK {S T I J O P : Type} (step : S → I → Result (O × S))
+    (cstep : T → J → Result (P × T)) (K : S → T → I → J → Prop) :
+    S → T → List I → List J → Prop
+  | s, t, i :: is, j :: js => K s t i j ∨
+      ∀ o s' p t', step s i = ok (o, s') → cstep t j = ok (p, t') →
+        iterateK step cstep K s' t' is js
+  | _, _, _, _ => False
 
 /-- If a step agrees from the states `R` relates, so does a run of steps
 over inputs related one by one. -/
 theorem Steps.iterate {Sn Sc In Ic On Oc : Type}
     {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
-    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → Sc → In → Ic → Prop}
     {R : Sn → Sc → Prop} (h : Steps net cer RI RO K R) :
     Steps (iterate net) (iterate cer) (List.Forall₂ RI) (List.Forall₂ RO)
-      (iterateK net K) R := by
+      (iterateK net cer K) R := by
   intro n c hr is js hij
   induction hij generalizing n c with
   | nil =>
@@ -49,9 +53,11 @@ theorem Steps.iterate {Sn Sc In Ic On Oc : Type}
     · exact Or.inl (Or.inl hk)
     rcases ih n' c' hr' with hK | ⟨os, n'', ps, c'', hn2, hc2, hos, hr2⟩
     · refine Or.inl (Or.inr ?_)
-      intro o2 s2 h2
+      intro o2 s2 p2 t2 h2 hc2
       simp only [hn, Result.ok.injEq, Prod.mk.injEq] at h2
+      simp only [hc, Result.ok.injEq, Prod.mk.injEq] at hc2
       obtain ⟨-, rfl⟩ := h2
+      obtain ⟨-, rfl⟩ := hc2
       exact hK
     · refine Or.inr ⟨o :: os, n'', p :: ps, c'', ?_, ?_, List.Forall₂.cons ho hos, hr2⟩
       · unfold ceres_core.bisim.iterate

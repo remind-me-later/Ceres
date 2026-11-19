@@ -22,9 +22,9 @@ pins, and the shapes it requires, `relation::shaped`).
 `mode3_dot` takes the claim apart into the two sides' steps, the netlist's two
 edges (`netDot`) and ceres's dot (`cerDot`), as a block's step would be.
 The guard reads ceres's state as well as the netlist's (the loop's enables
-and mixer SCX), where the framework's known differences (`Steps`'s `K`)
-see only the netlist's: so the dot is stated with the guard as a
-hypothesis, not yet as a `Steps`.
+and mixer SCX); the framework's known differences (`Steps`'s `K`) read
+both, so the dot as a block (`mode3_dot_steps`) has the guard failing on
+the pair itself as its known difference (`DotK`).
 -/
 
 namespace ceres_core.mode3
@@ -165,12 +165,10 @@ def Related (net : NetPipeline) (l : Mode3Loop) : Prop := ∃ g, related l net g
 def Ended (net : NetPipeline) (l : Mode3Loop) : Prop :=
   drawn l.pace = ok true ∧ NetPipeline.stop_mode3 net = ok true
 
-/-- The known differences: the guard turns the input away, for a ceres
-state related to the netlist's. (The guard reads ceres's state too, which
-`Steps`'s known differences do not see: this is the netlist's side of it,
-weaker than the guard on the pair.) -/
-def DotK (net : NetPipeline) (i : DotIn) : Prop :=
-  ∃ l g, related l net g = ok true ∧ guard l net i.1 i.2.1 i.2.2 = ok false
+/-- The known differences: the guard turns the pair's input away (it reads
+ceres's state as well as the netlist's). -/
+def DotK (net : NetPipeline) (l : Mode3Loop) (i _ : DotIn) : Prop :=
+  guard l net i.1 i.2.1 i.2.2 = ok false
 
 /-- Mode 3's dot as a block: from related states, a dot leaves them related
 or ends the line. -/
@@ -185,7 +183,7 @@ theorem mode3_dot_steps (kani : KaniMode3Dot) :
   obtain ⟨l', net', k⟩ := kani l net g mixer rising falling hr
   obtain ⟨b, hb⟩ := guard_ok k
   cases b with
-  | false => exact Or.inl ⟨l, g, hr, hb⟩
+  | false => exact Or.inl hb
   | true =>
     right
     obtain ⟨s1, s2, net2, d, l2, hn, hc, h⟩ := mode3_dot kani hr hb
@@ -281,11 +279,10 @@ def cerStart (l : Mode3Loop) (i : DotIn) : Result (Bool × Mode3Loop) := do
 has it. -/
 def Starting (net : NetPipeline) (l : Mode3Loop) : Prop := start_before l net = ok true
 
-/-- The first dot's known differences: the guard turns the input away, for
-a ceres state at the start with the netlist's (the netlist's side of it, as
-`DotK`). -/
-def StartK (net : NetPipeline) (i : DotIn) : Prop :=
-  ∃ l, Starting net l ∧ startGuard l net i.2.1 i.2.2 = ok false
+/-- The first dot's known differences: the start's guard turns the pair's
+input away. -/
+def StartK (net : NetPipeline) (l : Mode3Loop) (i _ : DotIn) : Prop :=
+  startGuard l net i.2.1 i.2.2 = ok false
 
 /-- The first dot as a block: from the scan's end, the netlist's dot (the
 same as in the rest of mode 3, `netStep`) and ceres's first (`cerStart`)
@@ -307,7 +304,7 @@ theorem mode3_start_steps (kani : KaniMode3Start) :
     exact ⟨_, by simp only [startGuard, hb, hb1, hb2, hb3, hb4, hb5, bind_ok]; rfl⟩
   obtain ⟨b, hb⟩ := hg
   cases b with
-  | false => exact Or.inl ⟨l, hs, hb⟩
+  | false => exact Or.inl hb
   | true =>
     obtain ⟨l2, net2, hc, hn, hr⟩ := mode3_start kani (mixer := mixer) hb
     exact Or.inr ⟨(false, false), net2, false, l2, hn, by simp [cerStart, hc],
