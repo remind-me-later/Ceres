@@ -28,6 +28,7 @@ const OAM_SCAN_UNLOCK_INDEX: u8 = 37;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(u8)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(crate) enum State {
     // The first line after the LCD is turned on: no OAM scan.
     #[default]

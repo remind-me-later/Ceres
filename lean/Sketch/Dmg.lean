@@ -278,8 +278,8 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
     the pixels' values not compared). To plug in: the line's state taken
     apart into the netlist's pipeline and ceres's loop, the dot's input
     made from the M-cycle's; its known difference is one-sided (the guard
-    reads ceres's state, `Steps`'s `K` does not), and that the harnesses
-    together take every related pair is argued, not checked.
+    reads ceres's state, `Steps`'s `K` does not; that the harnesses together
+    take every related pair is Kani's, `netlist_mode3_dot_split`).
   - `mode3` into `hblank`: Kani's (`mode3-end-background`).
   - `hblank`, `vblank`, `off`: no claim; the scan's lead-in from a line's
     end is Kani's (`netlist_scan_lead_in`).

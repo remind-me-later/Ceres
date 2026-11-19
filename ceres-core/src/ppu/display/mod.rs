@@ -72,6 +72,7 @@ pub(super) const LINES_PER_FRAME: u8 = LAST_LINE + 1;
 /// pixels) only reads it, as the PPU keeps it apart from the rest
 /// (`Ppu::pace`, beside `PpuCore`), and the hooks are the core's.
 #[derive(Clone, Default)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct Pace {
     /// The sleep the state machine is in.
     state: State,
@@ -150,7 +151,9 @@ impl Pace {
     /// Sleep for `n` dots that count towards the length of the line.
     #[inline]
     pub(super) const fn sleep_in_line(&mut self, id: State, n: i32) {
-        self.cfl += n;
+        // Wrapping, though a line never gets near it: mode 3's proofs take
+        // any count (lean/: a panic would be a step that fails).
+        self.cfl = self.cfl.wrapping_add(n);
         self.sleep(id, n);
     }
 

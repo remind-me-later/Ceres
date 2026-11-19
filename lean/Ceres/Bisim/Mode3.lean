@@ -14,7 +14,10 @@ inputs, the CPU's writes as `writes` has them, WX held, the lead-in's
 match) leaves the pair related, mode 3 going on in both; or, once ceres
 has drawn the line, the netlist's mode 3 stops at the dot's second edge.
 `KaniMode3Dot` is that claim, which the harnesses make in parts, one per
-sleep of ceres's loop and where the window is.
+sleep of ceres's loop and where the window is; `netlist_mode3_dot_split`
+checks that the parts take every related pair, with every input the guard
+lets through (each state the harnesses build free but for what `related`
+pins, and the shapes it requires, `relation::shaped`).
 
 `mode3_dot` takes the claim apart into the two sides' steps, the netlist's two
 edges (`netDot`) and ceres's dot (`cerDot`), as a block's step would be.
@@ -29,7 +32,8 @@ namespace ceres_core.mode3
 open ceres_core.ppu.display.background.relation
 open ceres_netlist.render_edge
 
-/-- What Kani's dot harnesses prove, together. -/
+/-- What Kani's dot harnesses prove, together (`netlist_mode3_dot_split`:
+they take every related pair). -/
 def KaniMode3Dot : Prop :=
   ∀ l net g mixer rising falling, related l net g = ok true →
     ∃ l' net', step_agrees l net g mixer rising falling = ok (true, l', net')
@@ -213,8 +217,8 @@ theorem mode3_dot_steps (kani : KaniMode3Dot) :
           exact ht2
       · exact Or.inl ⟨g', hr'⟩
 
-/-- What Kani proves of the loop's first dot (`netlist_mode3_start`: its
-loop's object counts bounded, as `start_before` requires them). -/
+/-- What Kani proves of the loop's first dot (`netlist_mode3_start`; its
+loop as `start_before` takes it, `netlist_mode3_dot_split`). -/
 def KaniMode3Start : Prop :=
   ∀ l net last_scx rising falling, ∃ l' net',
     start_agrees l net last_scx rising falling = ok (true, l', net')
@@ -226,7 +230,10 @@ def startGuard (l : Mode3Loop) (net : NetPipeline) (last_scx : U8)
   let b1 ← writes.quiet rising l
   let b2 ← writes.quiet falling l
   let b3 ← writes.writes net rising falling last_scx
-  ok ((((b && rising.clk) && (¬ falling.clk)) && b1) && b2 && b3)
+  let b4 ← window.holds_wx net.inputs rising
+  let b5 ← window.holds_wx rising falling
+  ok ((((((b && rising.clk) && (¬ falling.clk)) && b1) && b2) && b3) &&
+    ((¬ l.window_enabled) || (b4 && b5)))
 
 /-- The loop's first dot, from the netlist's state at the end of the dot
 before (`before_start`, `mapping-mode3-start`) and the scan's objects:
@@ -244,8 +251,10 @@ theorem mode3_start (kani : KaniMode3Start) {l net last_scx rising falling}
   obtain ⟨b1, hb1, hg⟩ := bind_eq_ok hg
   obtain ⟨b2, hb2, hg⟩ := bind_eq_ok hg
   obtain ⟨b3, hb3, hg⟩ := bind_eq_ok hg
+  obtain ⟨b4, hb4, hg⟩ := bind_eq_ok hg
+  obtain ⟨b5, hb5, hg⟩ := bind_eq_ok hg
   rw [Result.ok.injEq] at hg
-  simp only [hb, hb1, hb2, hb3, bind_ok, Bool.and_assoc] at k hg
+  simp only [hb, hb1, hb2, hb3, hb4, hb5, bind_ok, Bool.and_assoc] at k hg
   simp only [hg, ↓reduceIte] at k
   obtain ⟨snap, -, k⟩ := bind_eq_ok k
   obtain ⟨l1, hl1, k⟩ := bind_eq_ok k
@@ -253,9 +262,9 @@ theorem mode3_start (kani : KaniMode3Start) {l net last_scx rising falling}
   obtain ⟨n2, hn2, k⟩ := bind_eq_ok k
   obtain ⟨g0, -, k⟩ := bind_eq_ok k
   obtain ⟨g1, -, k⟩ := bind_eq_ok k
-  obtain ⟨b4, hb4, k⟩ := bind_eq_ok k
+  obtain ⟨b6, hb6, k⟩ := bind_eq_ok k
   simp only [Result.ok.injEq, Prod.mk.injEq] at k
   obtain ⟨rfl, rfl, rfl⟩ := k
-  exact ⟨l1, n2, hl1, by simp [hn1, hn2], g1, hb4⟩
+  exact ⟨l1, n2, hl1, by simp [hn1, hn2], g1, hb6⟩
 
 end ceres_core.mode3

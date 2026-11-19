@@ -21,6 +21,7 @@ const TILE_DATA_SIGNED: u16 = 0x1000;
 /// The steps of the fetcher, two dots each but the last (SameBoy's
 /// `fetcher_step_t`).
 #[derive(Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) enum FetcherStep {
     #[default]
     GetTileT1,

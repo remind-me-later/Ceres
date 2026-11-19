@@ -98,13 +98,25 @@ pub(super) const fn window_starting(
     let first = (position + 1 + len_at(fine) as i16 <= 0) & !rerun;
     let px = if lead { 0 } else { l.wx.wrapping_add(1) };
     if dot == 1 {
+        // The netlist's window has not matched WX yet: its flip-flops at
+        // rest (`net_window_waits`).
+        let waiting = NetPipeline {
+            pyco: false,
+            nunu: false,
+            nopa: false,
+            in_window: false,
+            rydy: false,
+            sovy: false,
+            win_x: 0,
+            ..*net
+        };
         if at_line_start {
             // The lead-in's second dot: its first fetch restarted.
-            pipeline_at(LEAD_IN, 6, true, net)
+            pipeline_at(LEAD_IN, 6, true, &waiting)
         } else {
             first_dot_after(
                 l,
-                pipeline_at(position + 1, len_at(fine), first, net),
+                pipeline_at(position + 1, len_at(fine), first, &waiting),
                 first,
                 g,
             )
@@ -519,6 +531,8 @@ pub(super) const fn ceres_window_waits(l: &Mode3Loop, wy_triggered: bool, starte
         & !w.enable_pending
         & !w.wy_just_checked
         & !w.wx_just_changed
+        // The CGB's WX glitch, which the DMG never sets.
+        & !w.cgb_wx_glitch
 }
 
 /// The ghost before the window starts: no dot counted.
@@ -542,12 +556,20 @@ pub(super) const fn window_agrees(l: &Mode3Loop, net: &NetPipeline, g: Ghost) ->
                 & window_unstarted(g)
                 & net_window_waits(net)
                 & wx_held
-                & (signed(l.pace.bg.position) + WX_AHEAD <= l.wx as i16)
+                // At WX the check fires before an object's fetch at the
+                // position: ceres fetches one only short of it.
+                & ((signed(l.pace.bg.position) + WX_AHEAD < l.wx as i16)
+                    | (signed(l.pace.bg.position) + WX_AHEAD == l.wx as i16) & !fetching(&l.pace))
         }
-        // The netlist's window is `expected`'s there.
-        WindowPhase::Starting { .. } | WindowPhase::Inside => {
-            ceres_window_waits(l, true, true) & wx_held
+        // The netlist's window is `expected`'s there. In the start's nine
+        // dots ceres reads no object: one it stops for waits for the
+        // window's first tile past them.
+        WindowPhase::Starting { .. } => {
+            ceres_window_waits(l, true, true)
+                & wx_held
+                & (!fetching(&l.pace) | matches!(l.pace.state, State::Mode3ObjectWait))
         }
+        WindowPhase::Inside => ceres_window_waits(l, true, true) & wx_held,
     }
 }
 

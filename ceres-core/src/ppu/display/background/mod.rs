@@ -29,6 +29,7 @@ const LAST_LOGICAL_POSITION: u8 = 167;
 
 /// The background pipeline's state.
 #[derive(Clone)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct Background {
     /// SameBoy's `position_in_line`: wraps like its `uint8_t` (240..=255 is
     /// -16..=-1, the lead-in).

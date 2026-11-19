@@ -1,6 +1,7 @@
 //! The background and object pixel FIFOs.
 
 #[derive(Clone, Copy, Default)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct Item {
     pub pixel: u8,
     pub palette: u8,
@@ -10,6 +11,7 @@ pub(super) struct Item {
 
 /// An 8-entry ring, like SameBoy's `GB_fifo_t`.
 #[derive(Clone, Copy, Default)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct Fifo {
     items: [Item; 8],
     read_end: u8,
@@ -23,6 +25,13 @@ impl Fifo {
 
     pub(super) const fn is_empty(&self) -> bool {
         self.size == 0
+    }
+
+    /// Its front and length within its eight items, as the FIFO keeps them
+    /// (mode 3's relation, which runs under Kani and in lean/ only).
+    #[cfg_attr(not(kani), expect(dead_code, reason = "the relation's, Kani's only"))]
+    pub(super) const fn sound(&self) -> bool {
+        self.read_end < 8 && self.size <= 8
     }
 
     /// The window insertion glitch (SameBoy's issue 278): the pixel before

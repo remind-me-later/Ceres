@@ -78,9 +78,10 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   netlist's two edges against ceres's dot, from related states into related
   ones or the line's end (ceres drawn, the netlist's mode 3 stopped at the
   dot's second edge); `netlist_mode3_start` (`KaniMode3Start`) gives
-  `mode3_start`, the loop's first dot into related states. Two things are
-  taken on trust: that the harnesses, split by ceres's sleep and the window,
-  together take every related pair; and the guard (quiet inputs, WX held, the
+  `mode3_start`, the loop's first dot into related states. The harnesses are
+  split by ceres's sleep and the window; `netlist_mode3_dot_split` checks
+  that together they take every related pair and every input the guard lets
+  through. One thing is taken on trust: the guard (quiet inputs, WX held, the
   lead-in matched) reads ceres's state, so the block's known difference is
   the guard failing for some ceres state related to the netlist's.
 - `Ceres/Bisim/Line.lean`: a line's start, the OAM scan before mode 3. The

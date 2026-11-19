@@ -9,7 +9,7 @@ use super::*;
 /// The netlist's inputs in mode 3: no reset, no line start, the scan
 /// stopped (CENO low), the objects and the window on or off as ceres has
 /// them; with the window on, not in VBlank and WX not written.
-pub(super) const fn quiet(i: &EdgeInputs, l: &Mode3Loop) -> bool {
+pub(crate) const fn quiet(i: &EdgeInputs, l: &Mode3Loop) -> bool {
     !i.ppu_reset
         & !i.hard_reset
         & !i.line_start

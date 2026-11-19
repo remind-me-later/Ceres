@@ -219,6 +219,13 @@ pub(super) fn reachable(l: &Mode3Loop, latched: u8, g: Ghost) -> bool {
     if g.blank & !matches!(window_phase(l, g), WindowPhase::Inside) {
         return false;
     }
+    // Ceres waits for SCX's discard as its check fires at WX 0, the window
+    // armed until it starts.
+    if matches!(l.pace.state, State::Mode3WindowDelay)
+        & !matches!(window_phase(l, g), WindowPhase::Armed)
+    {
+        return false;
+    }
     match window_phase(l, g) {
         WindowPhase::Starting { dot, fine } => {
             return window_starting_ok(l, latched, g, dot, fine);

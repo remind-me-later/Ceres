@@ -96,7 +96,7 @@ mod pipeline;
 mod window;
 mod writes;
 
-pub(crate) use {ghost::*, pipeline::*, window::*};
+pub(crate) use {ghost::*, pipeline::*, window::*, writes::quiet};
 #[cfg_attr(
     not(test),
     expect(clippy::wildcard_imports, reason = "the check's parts share its items")
@@ -304,7 +304,8 @@ pub(crate) fn start_agrees(
         & !falling.clk
         & quiet(&rising, l)
         & quiet(&falling, l)
-        & writes(net, &rising, &falling, last_scx))
+        & writes(net, &rising, &falling, last_scx)
+        & (!l.window_enabled | holds_wx(&net.inputs, &rising) & holds_wx(&rising, &falling)))
     {
         return true;
     }
@@ -325,15 +326,19 @@ pub(crate) fn start_agrees(
 /// objects, and the window off or armed on both sides (`window_agrees`: the
 /// line starts armed when WY matched in the frame on both, task 1.3).
 pub(crate) fn start_before(l: &Mode3Loop, net: &NetPipeline) -> bool {
-    !net.inputs.clk
-        & quiet(&net.inputs, l)
-        & latch_holds(net)
-        & (*net == before_start(net))
-        & (l.pace.bg.position == pos(-16))
-        & !l.pace.bg.insert_blank
-        & store_holds(net)
-        & window_agrees(l, net, Ghost::at_rest(&l.pace.bg))
-        & starting_objects(l, net)
+    objects_fit(l) & l.pace.bg.fifo.sound()
+        && (!net.inputs.clk
+            // The scan's end sleeps two dots into the loop's first.
+            & matches!(l.pace.state, State::Mode3Start)
+            & (l.pace.wait == 1)
+            & quiet(&net.inputs, l)
+            & latch_holds(net)
+            & (*net == before_start(net))
+            & (l.pace.bg.position == pos(-16))
+            & !l.pace.bg.insert_blank
+            & store_holds(net)
+            & window_agrees(l, net, Ghost::at_rest(&l.pace.bg))
+            & starting_objects(l, net))
 }
 
 /// The last WX the armed window takes, from 0. At 0 ceres's check fires at
@@ -357,18 +362,20 @@ pub(crate) fn related(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
 
 /// `related` but for the pipeline's own flip-flops, which `expected` gives
 /// from ceres's loop, the ghost and what it carries over from `net` (the
-/// latches, the sprite store, the window's flip-flops, the inputs).
+/// latches, the sprite store, the window's flip-flops, the inputs), in the
+/// shapes it takes (`shaped`).
 pub(crate) fn related_but_pipeline(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
-    !net.inputs.clk
-        & quiet(&net.inputs, l)
-        & latch_holds(net)
-        & store_holds(net)
-        & window_agrees(l, net, g)
-        & between_dots(&l.pace)
-        & (drawn(&l.pace) == (l.pace.bg.position == PX_WIDTH))
-        & !l.pace.object_fetch_aborted
-        & reachable(l, net.scx, g)
-        & objects_agree(l, net, g)
+    shaped(l, g)
+        && (!net.inputs.clk
+            & quiet(&net.inputs, l)
+            & latch_holds(net)
+            & store_holds(net)
+            & window_agrees(l, net, g)
+            & between_dots(&l.pace)
+            & (drawn(&l.pace) == (l.pace.bg.position == PX_WIDTH))
+            & !l.pace.object_fetch_aborted
+            & reachable(l, net.scx, g)
+            & objects_agree(l, net, g))
 }
 
 /// A dot from related states (the caller's to check), with the mixer's SCX
@@ -408,4 +415,25 @@ pub(crate) fn step_agrees(
     } else {
         !stopped_early & !net.stop_mode3() & related(l, net, g.after(before, &l.pace))
     }
+}
+
+/// The shapes the relation's checks take, checked before them: the
+/// ghost's counts in their ranges, the objects `objects_fit`, and the FIFO
+/// within its eight items. Past them the checks' own arithmetic and reads
+/// would fail (in Lean, a relation that fails rather than holds), as would
+/// ceres's pop; the dot harnesses build these shapes only
+/// (`netlist_mode3_dot_split`).
+pub(crate) const fn shaped(l: &Mode3Loop, g: Ghost) -> bool {
+    (g.since_push <= 2)
+        & (g.extra <= 2)
+        & (g.age <= 7)
+        & (g.window <= INSIDE)
+        & (g.window_fine <= 7)
+        & objects_fit(l)
+        & l.pace.bg.fifo.sound()
+}
+
+/// The objects left within those the search found, within a line's ten.
+pub(crate) const fn objects_fit(l: &Mode3Loop) -> bool {
+    (l.pace.objs.count <= l.pace.objs.found) & (l.pace.objs.found <= MAX_OBJECTS)
 }

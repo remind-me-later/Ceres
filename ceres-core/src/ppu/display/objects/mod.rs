@@ -23,6 +23,7 @@ const MAX_OBJECTS_PER_LINE: usize = 10;
 
 /// An object on the line.
 #[derive(Clone, Copy, Default)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct Entry {
     /// Its OAM index.
     pub index: u8,
@@ -32,6 +33,7 @@ pub(super) struct Entry {
 
 /// The mode 2 object search.
 #[derive(Clone)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct ObjectSearch {
     /// The objects left to draw: mode 3 drops them from the end.
     pub count: usize,
@@ -77,6 +79,7 @@ impl OamLatches {
 /// the size at line cycles `2 * index` and `2 * index + 1` on gambatte's
 /// clock and is large if either sample is; the samples after `lc` see `new`.
 #[derive(Clone, Copy)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct SizeChange {
     pub line: u8,
     pub lc: i64,

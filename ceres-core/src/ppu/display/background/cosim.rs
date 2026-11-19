@@ -111,6 +111,9 @@ impl Walk {
     /// lead-in's start, the window armed if it is on.
     fn start(line: &Line<'_>) -> Self {
         let mut pace = Pace::default();
+        // The scan's end sleeps two dots into the loop's first.
+        pace.state = State::Mode3Start;
+        pace.wait = 1;
         let armed = line.wx.is_some();
         pace.window.wy_triggered = armed;
         let mut xs = [NO_X; SLOTS];

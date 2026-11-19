@@ -393,7 +393,7 @@ structure memory.dma.relation.CeresOut where
   twice : Bool
 
 /-- [ceres_core::ppu::display::fifo::Item]
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 4:0-9:1 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 5:0-10:1 -/
 structure ppu.display.fifo.Item where
   pixel : Std.U8
   palette : Std.U8
@@ -401,14 +401,14 @@ structure ppu.display.fifo.Item where
   bg_priority : Bool
 
 /-- [ceres_core::ppu::display::fifo::Fifo]
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 13:0-17:1 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 15:0-19:1 -/
 structure ppu.display.fifo.Fifo where
   items : Array ppu.display.fifo.Item 8#usize
   read_end : Std.U8
   size : Std.U8
 
 /-- [ceres_core::ppu::display::fetcher::FetcherStep]
-    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 24:0-33:1 -/
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 25:0-34:1 -/
 @[discriminant isize]
 inductive ppu.display.fetcher.FetcherStep where
 | GetTileT1 : ppu.display.fetcher.FetcherStep
@@ -420,7 +420,7 @@ inductive ppu.display.fetcher.FetcherStep where
 | Push : ppu.display.fetcher.FetcherStep
 
 /-- [ceres_core::ppu::display::background::Background]
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 32:0-45:1 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 33:0-46:1 -/
 structure ppu.display.background.Background where
   position : Std.U8
   fractional : Bool
@@ -429,7 +429,7 @@ structure ppu.display.background.Background where
   step : ppu.display.fetcher.FetcherStep
 
 /-- [ceres_core::ppu::display::background::Popped]
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 49:0-57:1 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 50:0-58:1 -/
 @[discriminant isize]
 inductive ppu.display.background.Popped where
 | Restarted : ppu.display.background.Popped
@@ -437,7 +437,7 @@ inductive ppu.display.background.Popped where
 | Shown : ppu.display.background.Popped
 
 /-- [ceres_core::ppu::display::fetcher::Row]
-    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 86:0-89:1 -/
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 87:0-90:1 -/
 structure ppu.display.fetcher.Row where
   attributes : Std.U8
   data : Array Std.U8 2#usize
@@ -455,7 +455,7 @@ structure ppu.display.background.relation.ghost.Ghost where
   blank : Bool
 
 /-- [ceres_core::ppu::display::state::State]
-    Source: 'ceres-core/src/ppu/display/state.rs', lines 31:0-88:1 -/
+    Source: 'ceres-core/src/ppu/display/state.rs', lines 32:0-89:1 -/
 @[discriminant u8 [0,23,2,34,37,38,35,6,7,201,8,10,32,200,42,27,41,20,39,40,21,22,33,36,11,31,9,43,28,210,26,12,24,13,220,19,14,15,16,29,17]]
 inductive ppu.display.state.State where
 | LcdOn : ppu.display.state.State
@@ -510,7 +510,7 @@ structure ppu.display.background.relation.ghost.Before where
   window_started : Bool
 
 /-- [ceres_core::ppu::display::fetcher::Fetcher]
-    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 64:0-82:1 -/
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 65:0-83:1 -/
 structure ppu.display.fetcher.Fetcher where
   tile : Std.U8
   attributes : Std.U8
@@ -525,7 +525,7 @@ structure ppu.display.fetcher.Fetcher where
   tile_sel_glitch : Bool
 
 /-- [ceres_core::ppu::display::window::Window]
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 19:0-56:1 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 20:0-57:1 -/
 structure ppu.display.window.Window where
   line : Std.U8
   tile_x : Std.U8
@@ -547,21 +547,21 @@ structure ppu.display.window.Window where
     ppu.display.fetcher.Fetcher)
 
 /-- [ceres_core::ppu::display::objects::SizeChange]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 80:0-84:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 83:0-87:1 -/
 structure ppu.display.objects.SizeChange where
   line : Std.U8
   lc : Std.I64
   new : Bool
 
 /-- [ceres_core::ppu::display::objects::Entry]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 26:0-31:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 27:0-32:1 -/
 structure ppu.display.objects.Entry where
   index : Std.U8
   x : Std.U8
   y : Std.U8
 
 /-- [ceres_core::ppu::display::objects::ObjectSearch]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 35:0-49:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 37:0-51:1 -/
 structure ppu.display.objects.ObjectSearch where
   count : Std.Usize
   found : Std.Usize
@@ -571,7 +571,7 @@ structure ppu.display.objects.ObjectSearch where
   size_change : Option ppu.display.objects.SizeChange
 
 /-- [ceres_core::ppu::display::Pace]
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 75:0-89:1 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 76:0-90:1 -/
 structure ppu.display.Pace where
   state : ppu.display.state.State
   wait : Std.I32
@@ -593,7 +593,7 @@ structure ppu.display.background.relation.Mode3Loop where
   wx : Std.U8
 
 /-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::ObjectSearch}::next::{closure}]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 129:38-129:57 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 132:38-132:57 -/
 @[reducible]
 def ppu.display.objects.ObjectSearch.next.closure :=
   ppu.display.objects.ObjectSearch
@@ -611,7 +611,7 @@ inductive ppu.display.background.relation.window.WindowPhase where
 | Inside : ppu.display.background.relation.window.WindowPhase
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window::{closure}]
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 297:44-297:92 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 298:44-298:92 -/
 def ppu.display.window.Pace.mode3_window.closure :=
   ppu.display.fifo.Fifo × ppu.display.fetcher.FetcherStep ×
   ppu.display.fetcher.Fetcher
@@ -698,7 +698,7 @@ inductive ppu.display.background.relation.pipeline.SpritePhase where
 | High : ppu.display.background.relation.pipeline.SpritePhase
 
 /-- [ceres_core::ppu::display::objects::OamLatches]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 57:0-60:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 59:0-62:1 -/
 structure ppu.display.objects.OamLatches where
   y : Std.U8
   x : Std.U8

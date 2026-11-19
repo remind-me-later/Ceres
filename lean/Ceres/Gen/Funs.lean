@@ -3533,7 +3533,7 @@ def memory.dma.relation.step_agrees
 def ppu.display.background.LAST_LOGICAL_POSITION : Std.U8 := 167#u8
 
 /-- [ceres_core::ppu::display::background::{impl core::cmp::PartialEq<ceres_core::ppu::display::background::Popped> for ceres_core::ppu::display::background::Popped}::eq]:
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 48:22-48:31
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 49:22-49:31
     Visibility: public -/
 def ppu.display.background.Popped.Insts.CoreCmpPartialEqPopped.eq
   (self : ppu.display.background.Popped)
@@ -3545,7 +3545,7 @@ def ppu.display.background.Popped.Insts.CoreCmpPartialEqPopped.eq
   ok (self1 = other1)
 
 /-- Trait implementation: [ceres_core::ppu::display::background::{impl core::cmp::PartialEq<ceres_core::ppu::display::background::Popped> for ceres_core::ppu::display::background::Popped}]
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 48:22-48:31 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 49:22-49:31 -/
 @[reducible]
 impl_def ppu.display.background.Popped.Insts.CoreCmpPartialEqPopped :
   core.cmp.PartialEq ppu.display.background.Popped
@@ -3556,7 +3556,7 @@ impl_def ppu.display.background.Popped.Insts.CoreCmpPartialEqPopped :
 }
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::push_bg_row]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 57:8-75:9 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 66:8-84:9 -/
 @[rust_loop_body]
 def ppu.display.fifo.Fifo.push_bg_row_loop.body
   (palette : Std.U8) (bg_priority : Bool) (flip_x : Bool)
@@ -3597,7 +3597,7 @@ def ppu.display.fifo.Fifo.push_bg_row_loop.body
     ok (cont (iter1, a1, lower1, upper1))
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::push_bg_row]: loop 0:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 57:8-75:9 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 66:8-84:9 -/
 @[rust_loop]
 def ppu.display.fifo.Fifo.push_bg_row_loop
   (iter : core.ops.range.Range Std.Usize)
@@ -3612,7 +3612,7 @@ def ppu.display.fifo.Fifo.push_bg_row_loop
     (iter, a, lower, upper)
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::push_bg_row]:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 48:4-76:5 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 57:4-85:5 -/
 def ppu.display.fifo.Fifo.push_bg_row
   (self : ppu.display.fifo.Fifo) (lower : Std.U8) (upper : Std.U8)
   (palette : Std.U8) (bg_priority : Bool) (flip_x : Bool) :
@@ -3625,13 +3625,13 @@ def ppu.display.fifo.Fifo.push_bg_row
   ok { self with items := a, size := 8#u8 }
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::clear]:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 36:4-39:5 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 45:4-48:5 -/
 def ppu.display.fifo.Fifo.clear
   (self : ppu.display.fifo.Fifo) : Result ppu.display.fifo.Fifo := do
   ok { self with read_end := 0#u8, size := 0#u8 }
 
 /-- [ceres_core::ppu::display::background::{ceres_core::ppu::display::background::Background}::start]:
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 74:4-78:5 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 75:4-79:5 -/
 def ppu.display.background.Background.start
   (self : ppu.display.background.Background) :
   Result ppu.display.background.Background
@@ -3642,7 +3642,7 @@ def ppu.display.background.Background.start
     { self with fifo := f1, step := ppu.display.fetcher.FetcherStep.GetTileT1 }
 
 /-- [ceres_core::ppu::display::background::{ceres_core::ppu::display::background::Background}::object_match_x]:
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 82:4-85:5 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 83:4-86:5 -/
 def ppu.display.background.Background.object_match_x
   (self : ppu.display.background.Background) : Result Std.U8 := do
   let x ← lift (core.num.U8.wrapping_add self.position 8#u8)
@@ -3656,12 +3656,12 @@ def ppu.display.background.Background.object_match_x
 @[global_simps, irreducible] def ppu.PX_WIDTH : Std.U8 := 160#u8
 
 /-- [ceres_core::ppu::display::pos]:
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 138:0-140:1 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 139:0-141:1 -/
 def ppu.display.pos (signed : Std.I8) : Result Std.U8 := do
   core.num.I8.cast_unsigned signed
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::pop]:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 41:4-46:5 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 50:4-55:5 -/
 def ppu.display.fifo.Fifo.pop
   (self : ppu.display.fifo.Fifo) :
   Result (ppu.display.fifo.Item × ppu.display.fifo.Fifo)
@@ -3674,7 +3674,7 @@ def ppu.display.fifo.Fifo.pop
   ok (item, { self with read_end := i2, size := i3 })
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::is_empty]:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 24:4-26:5 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 26:4-28:5 -/
 def ppu.display.fifo.Fifo.is_empty
   (self : ppu.display.fifo.Fifo) : Result Bool := do
   ok (self.size = 0#u8)
@@ -3694,7 +3694,7 @@ def ppu.display.fifo.Item.Insts.CoreDefaultDefault.default
     }
 
 /-- [ceres_core::ppu::display::background::{ceres_core::ppu::display::background::Background}::pop]:
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 103:4-141:5 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 104:4-142:5 -/
 def ppu.display.background.Background.pop
   (self : ppu.display.background.Background) (scx : Std.U8)
   (window_fetched : Bool) :
@@ -3863,7 +3863,7 @@ def ppu.display.background.Background.pop
           { self with position := i1, insert_blank := b1, fifo := f })
 
 /-- [ceres_core::ppu::display::fetcher::{ceres_core::ppu::display::fetcher::FetcherStep}::next]:
-    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 48:4-57:5 -/
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 49:4-58:5 -/
 def ppu.display.fetcher.FetcherStep.next
   (self : ppu.display.fetcher.FetcherStep) :
   Result ppu.display.fetcher.FetcherStep
@@ -3897,7 +3897,7 @@ def ppu.display.fetcher.FetcherStep.next
 @[global_simps, irreducible] def ppu.ATTR_PRIORITY_B : Std.U8 := 128#u8
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::rewind_to_blank_pixel]:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 30:4-34:5 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 39:4-43:5 -/
 def ppu.display.fifo.Fifo.rewind_to_blank_pixel
   (self : ppu.display.fifo.Fifo) : Result ppu.display.fifo.Fifo := do
   let i ← lift (core.num.U8.wrapping_sub self.read_end 1#u8)
@@ -3908,7 +3908,7 @@ def ppu.display.fifo.Fifo.rewind_to_blank_pixel
   ok { items := a, read_end := i1, size := 1#u8 }
 
 /-- [ceres_core::ppu::display::background::{ceres_core::ppu::display::background::Background}::push]:
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 157:4-183:5 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 158:4-184:5 -/
 def ppu.display.background.Background.push
   (self : ppu.display.background.Background) (insertion_wx : Option Std.U8)
   (row : ppu.display.fetcher.Row) :
@@ -3963,7 +3963,7 @@ def ppu.display.background.Background.push
   else ok { self with step := ppu.display.fetcher.FetcherStep.Push }
 
 /-- [ceres_core::ppu::display::background::{ceres_core::ppu::display::background::Background}::advance]:
-    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 147:4-153:5 -/
+    Source: 'ceres-core/src/ppu/display/background/mod.rs', lines 148:4-154:5 -/
 def ppu.display.background.Background.advance
   (self : ppu.display.background.Background) (cgb_wx_glitch : Bool)
   (insertion_wx : Option Std.U8) (row : ppu.display.fetcher.Row) :
@@ -4037,7 +4037,7 @@ def ppu.display.background.relation.ghost.Ghost.Insts.CoreCmpPartialEqGhost.eq
   else ok false
 
 /-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::len]:
-    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 20:4-22:5 -/
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 22:4-24:5 -/
 def ppu.display.fifo.Fifo.len
   (self : ppu.display.fifo.Fifo) : Result Std.U8 := do
   ok self.size
@@ -4534,12 +4534,12 @@ def ppu.display.background.relation.ghost.Ghost.after
             }
 
 /-- [ceres_core::ppu::display::background::relation::WX_AHEAD]
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 347:0-347:24 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 352:0-352:24 -/
 @[global_simps, irreducible]
 def ppu.display.background.relation.WX_AHEAD : Std.I16 := 7#i16
 
 /-- [ceres_core::ppu::display::background::relation::window::start_position]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 235:0-238:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 247:0-250:1 -/
 def ppu.display.background.relation.window.start_position
   (wx : Std.U8) (dot : Std.U8) : Result Std.I16 := do
   let drawn ← lift (core.num.U8.saturating_sub dot 6#u8)
@@ -4549,7 +4549,7 @@ def ppu.display.background.relation.window.start_position
   i1 + i2
 
 /-- [ceres_core::ppu::display::background::relation::window::first_pixel_held]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 570:0-573:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 592:0-595:1 -/
 def ppu.display.background.relation.window.first_pixel_held
   (l : ppu.display.background.relation.Mode3Loop) : Result Bool := do
   let p ← ppu.display.background.relation.pipeline.signed l.pace.bg.position
@@ -4562,7 +4562,7 @@ def ppu.display.background.relation.window.first_pixel_held
 def ppu.display.background.relation.LAST_DISCARDED : Std.I16 := (-6)#i16
 
 /-- [ceres_core::ppu::display::background::relation::window::blank_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 273:0-278:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 285:0-290:1 -/
 def ppu.display.background.relation.window.blank_ok
   (l : ppu.display.background.relation.Mode3Loop)
   (g : ppu.display.background.relation.ghost.Ghost) :
@@ -4576,7 +4576,7 @@ def ppu.display.background.relation.window.blank_ok
     ppu.display.background.relation.FULL)))))
 
 /-- [ceres_core::ppu::display::background::relation::window::counted_len]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 267:0-269:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 279:0-281:1 -/
 def ppu.display.background.relation.window.counted_len
   (l : ppu.display.background.relation.Mode3Loop)
   (g : ppu.display.background.relation.ghost.Ghost) :
@@ -4592,7 +4592,7 @@ def ppu.display.background.relation.window.counted_len
 def ppu.display.background.relation.LEAD_IN : Std.I16 := (-16)#i16
 
 /-- [ceres_core::ppu::display::background::relation::window::lead_position]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 243:0-245:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 255:0-257:1 -/
 def ppu.display.background.relation.window.lead_position
   (dot : Std.U8) : Result Std.I16 := do
   let i ← lift (core.num.U8.saturating_sub dot 6#u8)
@@ -4625,7 +4625,7 @@ def ppu.display.background.relation.pipeline.step_for
   | _ => ok ppu.display.fetcher.FetcherStep.Push
 
 /-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::ObjectSearch}::next::{impl core::ops::function::FnOnce<(usize,), ceres_core::ppu::display::objects::Entry> for ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::ObjectSearch}::next::{closure}<'_0>}::call_once]:
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 129:38-129:57 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 132:38-132:57 -/
 def
   ppu.display.objects.ObjectSearch.next.closure.Insts.CoreOpsFunctionFnOnceTupleUsizeEntry.call_once
   (c : ppu.display.objects.ObjectSearch.next.closure) (tupled_args : Std.Usize)
@@ -4635,7 +4635,7 @@ def
   Array.index_usize c.entries tupled_args
 
 /-- Trait implementation: [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::ObjectSearch}::next::{impl core::ops::function::FnOnce<(usize,), ceres_core::ppu::display::objects::Entry> for ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::ObjectSearch}::next::{closure}<'_0>}]
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 129:38-129:57 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 132:38-132:57 -/
 @[reducible]
 def
   ppu.display.objects.ObjectSearch.next.closure.Insts.CoreOpsFunctionFnOnceTupleUsizeEntry
@@ -4646,7 +4646,7 @@ def
 }
 
 /-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::ObjectSearch}::next]:
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 128:4-130:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 131:4-133:5 -/
 def ppu.display.objects.ObjectSearch.next
   (self : ppu.display.objects.ObjectSearch) :
   Result (Option ppu.display.objects.Entry)
@@ -4808,12 +4808,12 @@ def ppu.display.background.relation.objects.objects_ok
     ppu.display.background.relation.FULL) && b2)))
 
 /-- [ceres_core::ppu::display::background::relation::WIN_X_MASK]
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 350:0-350:28 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 355:0-355:28 -/
 @[global_simps, irreducible]
 def ppu.display.background.relation.WIN_X_MASK : Std.U8 := 31#u8
 
 /-- [ceres_core::ppu::display::background::relation::ghost::ghost_rests]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 371:0-379:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 378:0-386:1 -/
 def ppu.display.background.relation.ghost.ghost_rests
   (l : ppu.display.background.relation.Mode3Loop)
   (g : ppu.display.background.relation.ghost.Ghost) :
@@ -4836,7 +4836,7 @@ def ppu.display.background.relation.ghost.ghost_rests
 def ppu.display.background.relation.LAST_UNMATCHED : Std.I16 := (-9)#i16
 
 /-- [ceres_core::ppu::display::background::relation::ghost::pending_compares]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 570:0-592:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 577:0-599:1 -/
 def ppu.display.background.relation.ghost.pending_compares
   (p : Std.I16) (len : Std.U8) (latched : Std.U8) (mixer_scx : Std.U8)
   (rerun : Bool) :
@@ -4865,7 +4865,7 @@ def ppu.display.background.relation.ghost.pending_compares
         i4))) && ((i6 = i7) = (p = i8)))
 
 /-- [ceres_core::ppu::display::background::relation::ghost::lead_in_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 333:0-341:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 340:0-348:1 -/
 def ppu.display.background.relation.ghost.lead_in_ok
   (p : Std.I16) (len : Std.U8) (latched : Std.U8) (mixer_scx : Std.U8)
   (rerun : Bool) :
@@ -4905,7 +4905,7 @@ def ppu.display.background.relation.pipeline.bit (b : Bool) : Result Bool := do
   ok b
 
 /-- [ceres_core::ppu::display::background::relation::ghost::fetcher_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 516:0-562:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 523:0-569:1 -/
 def ppu.display.background.relation.ghost.fetcher_ok
   (pace : ppu.display.Pace) (g : ppu.display.background.relation.ghost.Ghost) :
   Result Bool
@@ -4969,7 +4969,7 @@ def ppu.display.background.relation.ghost.fetcher_ok
                   (¬ g.rerun)))))
 
 /-- [ceres_core::ppu::display::background::relation::ghost::fetch_age_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 435:0-509:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 442:0-516:1 -/
 def ppu.display.background.relation.ghost.fetch_age_ok
   (pace : ppu.display.Pace) (g : ppu.display.background.relation.ghost.Ghost) :
   Result Bool
@@ -5331,7 +5331,7 @@ def ppu.display.background.relation.ghost.fetch_age_ok
             else ok true
 
 /-- [ceres_core::ppu::display::background::relation::ghost::ghost_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 384:0-429:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 391:0-436:1 -/
 def ppu.display.background.relation.ghost.ghost_ok
   (pace : ppu.display.Pace) (g : ppu.display.background.relation.ghost.Ghost) :
   Result Bool
@@ -5666,7 +5666,7 @@ def ppu.display.background.relation.ghost.ghost_ok
       else ok ((g.extra = 0#u8) && (¬ g.frozen))
 
 /-- [ceres_core::ppu::display::background::relation::ghost::history_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 273:0-308:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 280:0-315:1 -/
 def ppu.display.background.relation.ghost.history_ok
   (pace : ppu.display.Pace) (g : ppu.display.background.relation.ghost.Ghost) :
   Result Bool
@@ -5702,7 +5702,7 @@ def ppu.display.background.relation.ghost.history_ok
     2#u8) && (g.extra = 0#u8)) && (¬ g.frozen))) || b)) && b4) && b5)
 
 /-- [ceres_core::ppu::display::background::relation::window::window_inside_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 437:0-488:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 449:0-500:1 -/
 def ppu.display.background.relation.window.window_inside_ok
   (l : ppu.display.background.relation.Mode3Loop) (latched : Std.U8)
   (g : ppu.display.background.relation.ghost.Ghost) :
@@ -5775,7 +5775,7 @@ def ppu.display.background.relation.pipeline.len_at
   else ok len
 
 /-- [ceres_core::ppu::display::background::relation::window::start_history_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 416:0-431:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 428:0-443:1 -/
 def ppu.display.background.relation.window.start_history_ok
   (l : ppu.display.background.relation.Mode3Loop)
   (g : ppu.display.background.relation.ghost.Ghost) (dot : Std.U8) :
@@ -5800,7 +5800,7 @@ def ppu.display.background.relation.window.start_history_ok
   | _ => ppu.display.background.relation.ghost.ghost_rests l g
 
 /-- [ceres_core::ppu::display::background::relation::window::in_lead]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 249:0-251:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 261:0-263:1 -/
 def ppu.display.background.relation.window.in_lead
   (l : ppu.display.background.relation.Mode3Loop) (dot : Std.U8) :
   Result Bool
@@ -5810,7 +5810,7 @@ def ppu.display.background.relation.window.in_lead
   ok ((l.wx = 0#u8) && (i < i1))
 
 /-- [ceres_core::ppu::display::background::relation::window::window_starting_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 334:0-406:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 346:0-418:1 -/
 def ppu.display.background.relation.window.window_starting_ok
   (l : ppu.display.background.relation.Mode3Loop) (latched : Std.U8)
   (g : ppu.display.background.relation.ghost.Ghost) (dot : Std.U8)
@@ -6076,7 +6076,7 @@ def ppu.display.background.relation.objects.lead_in_objects
     false 0#usize
 
 /-- [ceres_core::ppu::display::background::relation::ghost::window_delay_ok]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 347:0-368:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 354:0-375:1 -/
 def ppu.display.background.relation.ghost.window_delay_ok
   (l : ppu.display.background.relation.Mode3Loop)
   (g : ppu.display.background.relation.ghost.Ghost) :
@@ -6101,7 +6101,7 @@ def ppu.display.background.relation.ghost.window_delay_ok
     (l.pace.window.tile_x = 0#u8)) && (i1 != 0#u8)) && b2) && b3)
 
 /-- [ceres_core::ppu::display::background::relation::ghost::lead_in_compares]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 316:0-326:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 323:0-333:1 -/
 def ppu.display.background.relation.ghost.lead_in_compares
   (pace : ppu.display.Pace) (g : ppu.display.background.relation.ghost.Ghost)
   (latched : Std.U8) (mixer_scx : Std.U8) :
@@ -6122,7 +6122,7 @@ def ppu.display.background.relation.ghost.lead_in_compares
       g.rerun
 
 /-- [ceres_core::ppu::display::background::relation::ghost::reachable]:
-    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 211:0-268:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/ghost.rs', lines 211:0-275:1 -/
 def ppu.display.background.relation.ghost.reachable
   (l : ppu.display.background.relation.Mode3Loop) (latched : Std.U8)
   (g : ppu.display.background.relation.ghost.Ghost) :
@@ -6142,239 +6142,116 @@ def ppu.display.background.relation.ghost.reachable
     if g.blank && (¬ b)
     then ok false
     else
-      match wp with
-      | ppu.display.background.relation.window.WindowPhase.Off =>
-        let p ←
-          ppu.display.background.relation.pipeline.signed l.pace.bg.position
-        let len ← ppu.display.fifo.Fifo.len l.pace.bg.fifo
-        let i ← ppu.display.background.relation.pipeline.wide ppu.PX_WIDTH
-        let b1 ← ppu.display.background.relation.objects.lead_in_objects l
-        let i1 ← ppu.display.background.relation.FIRST_OBJECT_X - 1#u8
-        let g1 ←
-          ppu.display.background.relation.ghost.Ghost.at_rest l.pace.bg
-        let b2 ←
-          ppu.display.background.relation.ghost.Ghost.Insts.CoreCmpPartialEqGhost.eq
-            g { g1 with rerun := g.rerun }
-        let (s, wait) ←
-          match l.pace.state with
-          | ppu.display.state.State.LcdOn =>
-            ok (ppu.display.state.State.LcdOn, false)
-          | ppu.display.state.State.FirstLine =>
-            ok (ppu.display.state.State.FirstLine, false)
-          | ppu.display.state.State.FirstLineOamLock =>
-            ok (ppu.display.state.State.FirstLineOamLock, false)
-          | ppu.display.state.State.FirstLineMode3 =>
-            ok (ppu.display.state.State.FirstLineMode3, false)
-          | ppu.display.state.State.FirstLinePalettesLock =>
-            ok (ppu.display.state.State.FirstLinePalettesLock, false)
-          | ppu.display.state.State.FirstLineVramLock =>
-            ok (ppu.display.state.State.FirstLineVramLock, false)
-          | ppu.display.state.State.LineOamWriteLock =>
-            ok (ppu.display.state.State.LineOamWriteLock, false)
-          | ppu.display.state.State.LineLy =>
-            ok (ppu.display.state.State.LineLy, false)
-          | ppu.display.state.State.OamScanStart =>
-            ok (ppu.display.state.State.OamScanStart, false)
-          | ppu.display.state.State.OamScanNext =>
-            ok (ppu.display.state.State.OamScanNext, false)
-          | ppu.display.state.State.OamScanObject =>
-            ok (ppu.display.state.State.OamScanObject, false)
-          | ppu.display.state.State.Mode3PalettesLock =>
-            ok (ppu.display.state.State.Mode3PalettesLock, false)
-          | ppu.display.state.State.Mode3Start =>
-            ok (ppu.display.state.State.Mode3Start, false)
-          | ppu.display.state.State.Mode3 =>
-            ok (ppu.display.state.State.Mode3, false)
-          | ppu.display.state.State.Mode3WindowDelay =>
-            ok (ppu.display.state.State.Mode3WindowDelay, false)
-          | ppu.display.state.State.Mode3ObjectWait =>
-            ok (ppu.display.state.State.Mode3ObjectWait, true)
-          | ppu.display.state.State.Mode3ObjectFetch =>
-            ok (ppu.display.state.State.Mode3ObjectFetch, false)
-          | ppu.display.state.State.Mode3ObjectAttributes =>
-            ok (ppu.display.state.State.Mode3ObjectAttributes, false)
-          | ppu.display.state.State.Mode3ObjectLow =>
-            ok (ppu.display.state.State.Mode3ObjectLow, false)
-          | ppu.display.state.State.Mode3ObjectHigh =>
-            ok (ppu.display.state.State.Mode3ObjectHigh, false)
-          | ppu.display.state.State.Mode3Pixel =>
-            ok (ppu.display.state.State.Mode3Pixel, false)
-          | ppu.display.state.State.HBlankStart =>
-            ok (ppu.display.state.State.HBlankStart, false)
-          | ppu.display.state.State.HBlankHdma =>
-            ok (ppu.display.state.State.HBlankHdma, false)
-          | ppu.display.state.State.HBlankPalettesUnlock =>
-            ok (ppu.display.state.State.HBlankPalettesUnlock, false)
-          | ppu.display.state.State.LineEnd =>
-            ok (ppu.display.state.State.LineEnd, false)
-          | ppu.display.state.State.NextLine =>
-            ok (ppu.display.state.State.NextLine, false)
-          | ppu.display.state.State.Mode3Abort =>
-            ok (ppu.display.state.State.Mode3Abort, false)
-          | ppu.display.state.State.LongLineEnd =>
-            ok (ppu.display.state.State.LongLineEnd, false)
-          | ppu.display.state.State.AbortedLineStart =>
-            ok (ppu.display.state.State.AbortedLineStart, false)
-          | ppu.display.state.State.VBlankLine =>
-            ok (ppu.display.state.State.VBlankLine, false)
-          | ppu.display.state.State.VBlankLy =>
-            ok (ppu.display.state.State.VBlankLy, false)
-          | ppu.display.state.State.VBlankLyCompare =>
-            ok (ppu.display.state.State.VBlankLyCompare, false)
-          | ppu.display.state.State.VBlankLineRest =>
-            ok (ppu.display.state.State.VBlankLineRest, false)
-          | ppu.display.state.State.VBlankLineEnd =>
-            ok (ppu.display.state.State.VBlankLineEnd, false)
-          | ppu.display.state.State.Line153 =>
-            ok (ppu.display.state.State.Line153, false)
-          | ppu.display.state.State.Line153Ly =>
-            ok (ppu.display.state.State.Line153Ly, false)
-          | ppu.display.state.State.Line153LyZero =>
-            ok (ppu.display.state.State.Line153LyZero, false)
-          | ppu.display.state.State.Line153Compare =>
-            ok (ppu.display.state.State.Line153Compare, false)
-          | ppu.display.state.State.Line153CompareZero =>
-            ok (ppu.display.state.State.Line153CompareZero, false)
-          | ppu.display.state.State.Line153LycGlitch =>
-            ok (ppu.display.state.State.Line153LycGlitch, false)
-          | ppu.display.state.State.FrameEnd =>
-            ok (ppu.display.state.State.FrameEnd, false)
-        let b3 ←
-          ppu.display.background.relation.pipeline.matches_step l.pace.bg.step
-            ppu.display.fetcher.FetcherStep.GetTileT2
-        let b4 ←
-          ppu.display.background.relation.pipeline.matches_step l.pace.bg.step
-            ppu.display.fetcher.FetcherStep.DataLowT1
-        let i2 ← if wait && b3
-                   then ok 1#u8
-                   else ok 2#u8
-        let b5 ←
-          ppu.display.background.relation.ghost.fetching
-            { l.pace with state := s }
-        let b6 ←
-          ppu.display.background.relation.ghost.lead_in_compares
-            { l.pace with state := s } g latched l.mixer_scx
-        let b7 ←
-          ppu.display.background.relation.ghost.history_ok
-            { l.pace with state := s } g
-        let b8 ←
-          ppu.display.background.relation.objects.objects_ok
-            { l with pace := { l.pace with state := s } } g
-        let i3 ← ppu.display.background.relation.LAST_DISCARDED - 1#i16
-        let i4 ← ppu.display.background.relation.FULL - 1#u8
-        ok ((((((((((len >= 1#u8) && (len <=
-          ppu.display.background.relation.FULL)) && (¬
-          l.pace.bg.insert_blank)) && (p >=
-          ppu.display.background.relation.LEAD_IN)) && (p <= i)) && (b6 ||
-          (((((((l.objects_enabled && b1) && ((¬ l.window_enabled) || (
-          l.wx >= i1))) && (¬ g.rerun)) && (p =
-          ppu.display.background.relation.LEAD_IN)) && (len =
-          ppu.display.background.relation.FULL)) && b5) && ((g.extra = i2) &&
-          (g.frozen != ((wait && b3) || (wait && b4))))))) && (((p >= 0#i16) ||
-          ((l.objects_enabled && b1) && ((¬ l.window_enabled) || (l.wx >=
-          i1)))) || b2)) && b7) && b8) && (((¬ l.window_enabled) || (
-          l.wx != 0#u8)) || ((p = i3) && (len = i4))))
-      | ppu.display.background.relation.window.WindowPhase.Armed =>
-        let (s, b1) ←
-          match l.pace.state with
-          | ppu.display.state.State.LcdOn =>
-            ok (ppu.display.state.State.LcdOn, false)
-          | ppu.display.state.State.FirstLine =>
-            ok (ppu.display.state.State.FirstLine, false)
-          | ppu.display.state.State.FirstLineOamLock =>
-            ok (ppu.display.state.State.FirstLineOamLock, false)
-          | ppu.display.state.State.FirstLineMode3 =>
-            ok (ppu.display.state.State.FirstLineMode3, false)
-          | ppu.display.state.State.FirstLinePalettesLock =>
-            ok (ppu.display.state.State.FirstLinePalettesLock, false)
-          | ppu.display.state.State.FirstLineVramLock =>
-            ok (ppu.display.state.State.FirstLineVramLock, false)
-          | ppu.display.state.State.LineOamWriteLock =>
-            ok (ppu.display.state.State.LineOamWriteLock, false)
-          | ppu.display.state.State.LineLy =>
-            ok (ppu.display.state.State.LineLy, false)
-          | ppu.display.state.State.OamScanStart =>
-            ok (ppu.display.state.State.OamScanStart, false)
-          | ppu.display.state.State.OamScanNext =>
-            ok (ppu.display.state.State.OamScanNext, false)
-          | ppu.display.state.State.OamScanObject =>
-            ok (ppu.display.state.State.OamScanObject, false)
-          | ppu.display.state.State.Mode3PalettesLock =>
-            ok (ppu.display.state.State.Mode3PalettesLock, false)
-          | ppu.display.state.State.Mode3Start =>
-            ok (ppu.display.state.State.Mode3Start, false)
-          | ppu.display.state.State.Mode3 =>
-            ok (ppu.display.state.State.Mode3, false)
-          | ppu.display.state.State.Mode3WindowDelay =>
-            ok (ppu.display.state.State.Mode3WindowDelay, true)
-          | ppu.display.state.State.Mode3ObjectWait =>
-            ok (ppu.display.state.State.Mode3ObjectWait, false)
-          | ppu.display.state.State.Mode3ObjectFetch =>
-            ok (ppu.display.state.State.Mode3ObjectFetch, false)
-          | ppu.display.state.State.Mode3ObjectAttributes =>
-            ok (ppu.display.state.State.Mode3ObjectAttributes, false)
-          | ppu.display.state.State.Mode3ObjectLow =>
-            ok (ppu.display.state.State.Mode3ObjectLow, false)
-          | ppu.display.state.State.Mode3ObjectHigh =>
-            ok (ppu.display.state.State.Mode3ObjectHigh, false)
-          | ppu.display.state.State.Mode3Pixel =>
-            ok (ppu.display.state.State.Mode3Pixel, false)
-          | ppu.display.state.State.HBlankStart =>
-            ok (ppu.display.state.State.HBlankStart, false)
-          | ppu.display.state.State.HBlankHdma =>
-            ok (ppu.display.state.State.HBlankHdma, false)
-          | ppu.display.state.State.HBlankPalettesUnlock =>
-            ok (ppu.display.state.State.HBlankPalettesUnlock, false)
-          | ppu.display.state.State.LineEnd =>
-            ok (ppu.display.state.State.LineEnd, false)
-          | ppu.display.state.State.NextLine =>
-            ok (ppu.display.state.State.NextLine, false)
-          | ppu.display.state.State.Mode3Abort =>
-            ok (ppu.display.state.State.Mode3Abort, false)
-          | ppu.display.state.State.LongLineEnd =>
-            ok (ppu.display.state.State.LongLineEnd, false)
-          | ppu.display.state.State.AbortedLineStart =>
-            ok (ppu.display.state.State.AbortedLineStart, false)
-          | ppu.display.state.State.VBlankLine =>
-            ok (ppu.display.state.State.VBlankLine, false)
-          | ppu.display.state.State.VBlankLy =>
-            ok (ppu.display.state.State.VBlankLy, false)
-          | ppu.display.state.State.VBlankLyCompare =>
-            ok (ppu.display.state.State.VBlankLyCompare, false)
-          | ppu.display.state.State.VBlankLineRest =>
-            ok (ppu.display.state.State.VBlankLineRest, false)
-          | ppu.display.state.State.VBlankLineEnd =>
-            ok (ppu.display.state.State.VBlankLineEnd, false)
-          | ppu.display.state.State.Line153 =>
-            ok (ppu.display.state.State.Line153, false)
-          | ppu.display.state.State.Line153Ly =>
-            ok (ppu.display.state.State.Line153Ly, false)
-          | ppu.display.state.State.Line153LyZero =>
-            ok (ppu.display.state.State.Line153LyZero, false)
-          | ppu.display.state.State.Line153Compare =>
-            ok (ppu.display.state.State.Line153Compare, false)
-          | ppu.display.state.State.Line153CompareZero =>
-            ok (ppu.display.state.State.Line153CompareZero, false)
-          | ppu.display.state.State.Line153LycGlitch =>
-            ok (ppu.display.state.State.Line153LycGlitch, false)
-          | ppu.display.state.State.FrameEnd =>
-            ok (ppu.display.state.State.FrameEnd, false)
-        if b1
-        then
-          ppu.display.background.relation.ghost.window_delay_ok
-            { l with pace := { l.pace with state := s } } g
-        else
+      let (s, b1) ←
+        match l.pace.state with
+        | ppu.display.state.State.LcdOn =>
+          ok (ppu.display.state.State.LcdOn, false)
+        | ppu.display.state.State.FirstLine =>
+          ok (ppu.display.state.State.FirstLine, false)
+        | ppu.display.state.State.FirstLineOamLock =>
+          ok (ppu.display.state.State.FirstLineOamLock, false)
+        | ppu.display.state.State.FirstLineMode3 =>
+          ok (ppu.display.state.State.FirstLineMode3, false)
+        | ppu.display.state.State.FirstLinePalettesLock =>
+          ok (ppu.display.state.State.FirstLinePalettesLock, false)
+        | ppu.display.state.State.FirstLineVramLock =>
+          ok (ppu.display.state.State.FirstLineVramLock, false)
+        | ppu.display.state.State.LineOamWriteLock =>
+          ok (ppu.display.state.State.LineOamWriteLock, false)
+        | ppu.display.state.State.LineLy =>
+          ok (ppu.display.state.State.LineLy, false)
+        | ppu.display.state.State.OamScanStart =>
+          ok (ppu.display.state.State.OamScanStart, false)
+        | ppu.display.state.State.OamScanNext =>
+          ok (ppu.display.state.State.OamScanNext, false)
+        | ppu.display.state.State.OamScanObject =>
+          ok (ppu.display.state.State.OamScanObject, false)
+        | ppu.display.state.State.Mode3PalettesLock =>
+          ok (ppu.display.state.State.Mode3PalettesLock, false)
+        | ppu.display.state.State.Mode3Start =>
+          ok (ppu.display.state.State.Mode3Start, false)
+        | ppu.display.state.State.Mode3 =>
+          ok (ppu.display.state.State.Mode3, false)
+        | ppu.display.state.State.Mode3WindowDelay =>
+          ok (ppu.display.state.State.Mode3WindowDelay, true)
+        | ppu.display.state.State.Mode3ObjectWait =>
+          ok (ppu.display.state.State.Mode3ObjectWait, false)
+        | ppu.display.state.State.Mode3ObjectFetch =>
+          ok (ppu.display.state.State.Mode3ObjectFetch, false)
+        | ppu.display.state.State.Mode3ObjectAttributes =>
+          ok (ppu.display.state.State.Mode3ObjectAttributes, false)
+        | ppu.display.state.State.Mode3ObjectLow =>
+          ok (ppu.display.state.State.Mode3ObjectLow, false)
+        | ppu.display.state.State.Mode3ObjectHigh =>
+          ok (ppu.display.state.State.Mode3ObjectHigh, false)
+        | ppu.display.state.State.Mode3Pixel =>
+          ok (ppu.display.state.State.Mode3Pixel, false)
+        | ppu.display.state.State.HBlankStart =>
+          ok (ppu.display.state.State.HBlankStart, false)
+        | ppu.display.state.State.HBlankHdma =>
+          ok (ppu.display.state.State.HBlankHdma, false)
+        | ppu.display.state.State.HBlankPalettesUnlock =>
+          ok (ppu.display.state.State.HBlankPalettesUnlock, false)
+        | ppu.display.state.State.LineEnd =>
+          ok (ppu.display.state.State.LineEnd, false)
+        | ppu.display.state.State.NextLine =>
+          ok (ppu.display.state.State.NextLine, false)
+        | ppu.display.state.State.Mode3Abort =>
+          ok (ppu.display.state.State.Mode3Abort, false)
+        | ppu.display.state.State.LongLineEnd =>
+          ok (ppu.display.state.State.LongLineEnd, false)
+        | ppu.display.state.State.AbortedLineStart =>
+          ok (ppu.display.state.State.AbortedLineStart, false)
+        | ppu.display.state.State.VBlankLine =>
+          ok (ppu.display.state.State.VBlankLine, false)
+        | ppu.display.state.State.VBlankLy =>
+          ok (ppu.display.state.State.VBlankLy, false)
+        | ppu.display.state.State.VBlankLyCompare =>
+          ok (ppu.display.state.State.VBlankLyCompare, false)
+        | ppu.display.state.State.VBlankLineRest =>
+          ok (ppu.display.state.State.VBlankLineRest, false)
+        | ppu.display.state.State.VBlankLineEnd =>
+          ok (ppu.display.state.State.VBlankLineEnd, false)
+        | ppu.display.state.State.Line153 =>
+          ok (ppu.display.state.State.Line153, false)
+        | ppu.display.state.State.Line153Ly =>
+          ok (ppu.display.state.State.Line153Ly, false)
+        | ppu.display.state.State.Line153LyZero =>
+          ok (ppu.display.state.State.Line153LyZero, false)
+        | ppu.display.state.State.Line153Compare =>
+          ok (ppu.display.state.State.Line153Compare, false)
+        | ppu.display.state.State.Line153CompareZero =>
+          ok (ppu.display.state.State.Line153CompareZero, false)
+        | ppu.display.state.State.Line153LycGlitch =>
+          ok (ppu.display.state.State.Line153LycGlitch, false)
+        | ppu.display.state.State.FrameEnd =>
+          ok (ppu.display.state.State.FrameEnd, false)
+      let wp1 ←
+        ppu.display.background.relation.window.window_phase
+          { l with pace := { l.pace with state := s } } g
+      let b2 ←
+        match wp1 with
+        | ppu.display.background.relation.window.WindowPhase.Off => ok false
+        | ppu.display.background.relation.window.WindowPhase.Armed => ok true
+        | ppu.display.background.relation.window.WindowPhase.Starting _ _ =>
+          ok false
+        | ppu.display.background.relation.window.WindowPhase.Inside => ok false
+      if b1 && (¬ b2)
+      then ok false
+      else
+        match wp1 with
+        | ppu.display.background.relation.window.WindowPhase.Off =>
           let p ←
             ppu.display.background.relation.pipeline.signed l.pace.bg.position
           let len ← ppu.display.fifo.Fifo.len l.pace.bg.fifo
           let i ← ppu.display.background.relation.pipeline.wide ppu.PX_WIDTH
-          let b2 ←
+          let b3 ←
             ppu.display.background.relation.objects.lead_in_objects
               { l with pace := { l.pace with state := s } }
           let i1 ← ppu.display.background.relation.FIRST_OBJECT_X - 1#u8
           let g1 ←
             ppu.display.background.relation.ghost.Ghost.at_rest l.pace.bg
-          let b3 ←
+          let b4 ←
             ppu.display.background.relation.ghost.Ghost.Insts.CoreCmpPartialEqGhost.eq
               g { g1 with rerun := g.rerun }
           let wait ←
@@ -6420,25 +6297,25 @@ def ppu.display.background.relation.ghost.reachable
             | ppu.display.state.State.Line153CompareZero => ok false
             | ppu.display.state.State.Line153LycGlitch => ok false
             | ppu.display.state.State.FrameEnd => ok false
-          let b4 ←
-            ppu.display.background.relation.pipeline.matches_step
-              l.pace.bg.step ppu.display.fetcher.FetcherStep.GetTileT2
           let b5 ←
             ppu.display.background.relation.pipeline.matches_step
+              l.pace.bg.step ppu.display.fetcher.FetcherStep.GetTileT2
+          let b6 ←
+            ppu.display.background.relation.pipeline.matches_step
               l.pace.bg.step ppu.display.fetcher.FetcherStep.DataLowT1
-          let i2 ← if wait && b4
+          let i2 ← if wait && b5
                      then ok 1#u8
                      else ok 2#u8
-          let b6 ←
+          let b7 ←
             ppu.display.background.relation.ghost.fetching
               { l.pace with state := s }
-          let b7 ←
+          let b8 ←
             ppu.display.background.relation.ghost.lead_in_compares
               { l.pace with state := s } g latched l.mixer_scx
-          let b8 ←
+          let b9 ←
             ppu.display.background.relation.ghost.history_ok
               { l.pace with state := s } g
-          let b9 ←
+          let b10 ←
             ppu.display.background.relation.objects.objects_ok
               { l with pace := { l.pace with state := s } } g
           let i3 ← ppu.display.background.relation.LAST_DISCARDED - 1#i16
@@ -6446,23 +6323,168 @@ def ppu.display.background.relation.ghost.reachable
           ok ((((((((((len >= 1#u8) && (len <=
             ppu.display.background.relation.FULL)) && (¬
             l.pace.bg.insert_blank)) && (p >=
-            ppu.display.background.relation.LEAD_IN)) && (p <= i)) && (b7 ||
-            (((((((l.objects_enabled && b2) && ((¬ l.window_enabled) || (
+            ppu.display.background.relation.LEAD_IN)) && (p <= i)) && (b8 ||
+            (((((((l.objects_enabled && b3) && ((¬ l.window_enabled) || (
             l.wx >= i1))) && (¬ g.rerun)) && (p =
             ppu.display.background.relation.LEAD_IN)) && (len =
-            ppu.display.background.relation.FULL)) && b6) && ((g.extra = i2) &&
-            (g.frozen != ((wait && b4) || (wait && b5))))))) && (((p >= 0#i16)
-            || ((l.objects_enabled && b2) && ((¬ l.window_enabled) || (
-            l.wx >= i1)))) || b3)) && b8) && b9) && (((¬ l.window_enabled) ||
+            ppu.display.background.relation.FULL)) && b7) && ((g.extra = i2) &&
+            (g.frozen != ((wait && b5) || (wait && b6))))))) && (((p >= 0#i16)
+            || ((l.objects_enabled && b3) && ((¬ l.window_enabled) || (
+            l.wx >= i1)))) || b4)) && b9) && b10) && (((¬ l.window_enabled) ||
             (l.wx != 0#u8)) || ((p = i3) && (len = i4))))
-      | ppu.display.background.relation.window.WindowPhase.Starting dot fine =>
-        ppu.display.background.relation.window.window_starting_ok l latched g
-          dot fine
-      | ppu.display.background.relation.window.WindowPhase.Inside =>
-        ppu.display.background.relation.window.window_inside_ok l latched g
+        | ppu.display.background.relation.window.WindowPhase.Armed =>
+          let b3 ←
+            match s with
+            | ppu.display.state.State.LcdOn => ok false
+            | ppu.display.state.State.FirstLine => ok false
+            | ppu.display.state.State.FirstLineOamLock => ok false
+            | ppu.display.state.State.FirstLineMode3 => ok false
+            | ppu.display.state.State.FirstLinePalettesLock => ok false
+            | ppu.display.state.State.FirstLineVramLock => ok false
+            | ppu.display.state.State.LineOamWriteLock => ok false
+            | ppu.display.state.State.LineLy => ok false
+            | ppu.display.state.State.OamScanStart => ok false
+            | ppu.display.state.State.OamScanNext => ok false
+            | ppu.display.state.State.OamScanObject => ok false
+            | ppu.display.state.State.Mode3PalettesLock => ok false
+            | ppu.display.state.State.Mode3Start => ok false
+            | ppu.display.state.State.Mode3 => ok false
+            | ppu.display.state.State.Mode3WindowDelay => ok true
+            | ppu.display.state.State.Mode3ObjectWait => ok false
+            | ppu.display.state.State.Mode3ObjectFetch => ok false
+            | ppu.display.state.State.Mode3ObjectAttributes => ok false
+            | ppu.display.state.State.Mode3ObjectLow => ok false
+            | ppu.display.state.State.Mode3ObjectHigh => ok false
+            | ppu.display.state.State.Mode3Pixel => ok false
+            | ppu.display.state.State.HBlankStart => ok false
+            | ppu.display.state.State.HBlankHdma => ok false
+            | ppu.display.state.State.HBlankPalettesUnlock => ok false
+            | ppu.display.state.State.LineEnd => ok false
+            | ppu.display.state.State.NextLine => ok false
+            | ppu.display.state.State.Mode3Abort => ok false
+            | ppu.display.state.State.LongLineEnd => ok false
+            | ppu.display.state.State.AbortedLineStart => ok false
+            | ppu.display.state.State.VBlankLine => ok false
+            | ppu.display.state.State.VBlankLy => ok false
+            | ppu.display.state.State.VBlankLyCompare => ok false
+            | ppu.display.state.State.VBlankLineRest => ok false
+            | ppu.display.state.State.VBlankLineEnd => ok false
+            | ppu.display.state.State.Line153 => ok false
+            | ppu.display.state.State.Line153Ly => ok false
+            | ppu.display.state.State.Line153LyZero => ok false
+            | ppu.display.state.State.Line153Compare => ok false
+            | ppu.display.state.State.Line153CompareZero => ok false
+            | ppu.display.state.State.Line153LycGlitch => ok false
+            | ppu.display.state.State.FrameEnd => ok false
+          if b3
+          then
+            ppu.display.background.relation.ghost.window_delay_ok
+              { l with pace := { l.pace with state := s } } g
+          else
+            let p ←
+              ppu.display.background.relation.pipeline.signed
+                l.pace.bg.position
+            let len ← ppu.display.fifo.Fifo.len l.pace.bg.fifo
+            let i ←
+              ppu.display.background.relation.pipeline.wide ppu.PX_WIDTH
+            let b4 ←
+              ppu.display.background.relation.objects.lead_in_objects
+                { l with pace := { l.pace with state := s } }
+            let i1 ← ppu.display.background.relation.FIRST_OBJECT_X - 1#u8
+            let g1 ←
+              ppu.display.background.relation.ghost.Ghost.at_rest l.pace.bg
+            let b5 ←
+              ppu.display.background.relation.ghost.Ghost.Insts.CoreCmpPartialEqGhost.eq
+                g { g1 with rerun := g.rerun }
+            let wait ←
+              match s with
+              | ppu.display.state.State.LcdOn => ok false
+              | ppu.display.state.State.FirstLine => ok false
+              | ppu.display.state.State.FirstLineOamLock => ok false
+              | ppu.display.state.State.FirstLineMode3 => ok false
+              | ppu.display.state.State.FirstLinePalettesLock => ok false
+              | ppu.display.state.State.FirstLineVramLock => ok false
+              | ppu.display.state.State.LineOamWriteLock => ok false
+              | ppu.display.state.State.LineLy => ok false
+              | ppu.display.state.State.OamScanStart => ok false
+              | ppu.display.state.State.OamScanNext => ok false
+              | ppu.display.state.State.OamScanObject => ok false
+              | ppu.display.state.State.Mode3PalettesLock => ok false
+              | ppu.display.state.State.Mode3Start => ok false
+              | ppu.display.state.State.Mode3 => ok false
+              | ppu.display.state.State.Mode3WindowDelay => ok false
+              | ppu.display.state.State.Mode3ObjectWait => ok true
+              | ppu.display.state.State.Mode3ObjectFetch => ok false
+              | ppu.display.state.State.Mode3ObjectAttributes => ok false
+              | ppu.display.state.State.Mode3ObjectLow => ok false
+              | ppu.display.state.State.Mode3ObjectHigh => ok false
+              | ppu.display.state.State.Mode3Pixel => ok false
+              | ppu.display.state.State.HBlankStart => ok false
+              | ppu.display.state.State.HBlankHdma => ok false
+              | ppu.display.state.State.HBlankPalettesUnlock => ok false
+              | ppu.display.state.State.LineEnd => ok false
+              | ppu.display.state.State.NextLine => ok false
+              | ppu.display.state.State.Mode3Abort => ok false
+              | ppu.display.state.State.LongLineEnd => ok false
+              | ppu.display.state.State.AbortedLineStart => ok false
+              | ppu.display.state.State.VBlankLine => ok false
+              | ppu.display.state.State.VBlankLy => ok false
+              | ppu.display.state.State.VBlankLyCompare => ok false
+              | ppu.display.state.State.VBlankLineRest => ok false
+              | ppu.display.state.State.VBlankLineEnd => ok false
+              | ppu.display.state.State.Line153 => ok false
+              | ppu.display.state.State.Line153Ly => ok false
+              | ppu.display.state.State.Line153LyZero => ok false
+              | ppu.display.state.State.Line153Compare => ok false
+              | ppu.display.state.State.Line153CompareZero => ok false
+              | ppu.display.state.State.Line153LycGlitch => ok false
+              | ppu.display.state.State.FrameEnd => ok false
+            let b6 ←
+              ppu.display.background.relation.pipeline.matches_step
+                l.pace.bg.step ppu.display.fetcher.FetcherStep.GetTileT2
+            let b7 ←
+              ppu.display.background.relation.pipeline.matches_step
+                l.pace.bg.step ppu.display.fetcher.FetcherStep.DataLowT1
+            let i2 ← if wait && b6
+                       then ok 1#u8
+                       else ok 2#u8
+            let b8 ←
+              ppu.display.background.relation.ghost.fetching
+                { l.pace with state := s }
+            let b9 ←
+              ppu.display.background.relation.ghost.lead_in_compares
+                { l.pace with state := s } g latched l.mixer_scx
+            let b10 ←
+              ppu.display.background.relation.ghost.history_ok
+                { l.pace with state := s } g
+            let b11 ←
+              ppu.display.background.relation.objects.objects_ok
+                { l with pace := { l.pace with state := s } } g
+            let i3 ← ppu.display.background.relation.LAST_DISCARDED - 1#i16
+            let i4 ← ppu.display.background.relation.FULL - 1#u8
+            ok ((((((((((len >= 1#u8) && (len <=
+              ppu.display.background.relation.FULL)) && (¬
+              l.pace.bg.insert_blank)) && (p >=
+              ppu.display.background.relation.LEAD_IN)) && (p <= i)) && (b9 ||
+              (((((((l.objects_enabled && b4) && ((¬ l.window_enabled) ||
+              (l.wx >= i1))) && (¬ g.rerun)) && (p =
+              ppu.display.background.relation.LEAD_IN)) && (len =
+              ppu.display.background.relation.FULL)) && b8) && ((g.extra = i2)
+              && (g.frozen != ((wait && b6) || (wait && b7))))))) && (((p >=
+              0#i16) || ((l.objects_enabled && b4) && ((¬ l.window_enabled) ||
+              (l.wx >= i1)))) || b5)) && b10) && b11) && (((¬
+              l.window_enabled) || (l.wx != 0#u8)) || ((p = i3) && (len =
+              i4))))
+        | ppu.display.background.relation.window.WindowPhase.Starting dot fine
+          =>
+          ppu.display.background.relation.window.window_starting_ok
+            { l with pace := { l.pace with state := s } } latched g dot fine
+        | ppu.display.background.relation.window.WindowPhase.Inside =>
+          ppu.display.background.relation.window.window_inside_ok
+            { l with pace := { l.pace with state := s } } latched g
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window_activated]:
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 327:4-331:5 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 328:4-332:5 -/
 def ppu.display.window.Pace.mode3_window_activated
   (self : ppu.display.Pace) : Result ppu.display.Pace := do
   ok
@@ -6476,7 +6498,7 @@ def ppu.display.window.Pace.mode3_window_activated
     }
 
 /-- [ceres_core::ppu::display::fetcher::{impl core::clone::Clone for ceres_core::ppu::display::fetcher::Fetcher}::clone]:
-    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 62:9-62:14
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 63:9-63:14
     Visibility: public -/
 def ppu.display.fetcher.Fetcher.Insts.CoreCloneClone.clone
   (self : ppu.display.fetcher.Fetcher) :
@@ -6509,7 +6531,7 @@ def ppu.display.fetcher.Fetcher.Insts.CoreCloneClone.clone
     }
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window::{impl core::ops::function::FnOnce<(), (ceres_core::ppu::display::fifo::Fifo, ceres_core::ppu::display::fetcher::FetcherStep, ceres_core::ppu::display::fetcher::Fetcher)> for ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window::{closure}<'_0, '_1, '_2>}::call_once]:
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 297:44-297:92 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 298:44-298:92 -/
 def
   ppu.display.window.Pace.mode3_window.closure.Insts.CoreOpsFunctionFnOnceTupleTupleFifoFetcherStepFetcher.call_once
   (c : ppu.display.window.Pace.mode3_window.closure) (_ : Unit) :
@@ -6521,7 +6543,7 @@ def
   ok (f, fs, f2)
 
 /-- Trait implementation: [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window::{impl core::ops::function::FnOnce<(), (ceres_core::ppu::display::fifo::Fifo, ceres_core::ppu::display::fetcher::FetcherStep, ceres_core::ppu::display::fetcher::Fetcher)> for ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window::{closure}<'_0, '_1, '_2>}]
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 297:44-297:92 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 298:44-298:92 -/
 @[reducible]
 def
   ppu.display.window.Pace.mode3_window.closure.Insts.CoreOpsFunctionFnOnceTupleTupleFifoFetcherStepFetcher
@@ -6533,7 +6555,7 @@ def
 }
 
 /-- [ceres_core::ppu::display::{ceres_core::ppu::display::Pace}::sleep]:
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 145:4-148:5 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 146:4-149:5 -/
 def ppu.display.Pace.sleep
   (self : ppu.display.Pace) (id : ppu.display.state.State) (n : Std.I32) :
   Result ppu.display.Pace
@@ -6541,16 +6563,16 @@ def ppu.display.Pace.sleep
   ok { self with state := id, wait := n }
 
 /-- [ceres_core::ppu::display::{ceres_core::ppu::display::Pace}::sleep_in_line]:
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 152:4-155:5 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 153:4-158:5 -/
 def ppu.display.Pace.sleep_in_line
   (self : ppu.display.Pace) (id : ppu.display.state.State) (n : Std.I32) :
   Result ppu.display.Pace
   := do
-  let i ← self.cfl + n
+  let i ← lift (core.num.I32.wrapping_add self.cfl n)
   ppu.display.Pace.sleep { self with cfl := i } id n
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::mode3_window]:
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 254:4-325:5 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 255:4-326:5 -/
 def ppu.display.window.Pace.mode3_window
   (self : ppu.display.Pace) (enabled : Bool) (wx : Std.U8) (mixer_scx : Std.U8)
   (hw : Bool) (fetcher : ppu.display.fetcher.Fetcher) :
@@ -6841,7 +6863,7 @@ def ppu.display.fetcher.FetcherStep.Insts.CoreCmpPartialEqFetcherStep.eq
   ok (self1 = other1)
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::window_pixel_insertion]:
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 187:4-207:5 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 188:4-208:5 -/
 def ppu.display.window.Pace.window_pixel_insertion
   (self : ppu.display.Pace) (wx : Std.U8) (scx : Std.U8) (hw : Bool) :
   Result ppu.display.Pace
@@ -7028,7 +7050,7 @@ def
   else ok step
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::fetcher_glitches]:
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 232:4-248:5 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 233:4-249:5 -/
 def ppu.display.window.Pace.fetcher_glitches
   (self : ppu.display.Pace) (enabled : Bool) (wx : Std.U8) (hw : Bool) :
   Result (Bool × (Option Std.U8))
@@ -7047,7 +7069,7 @@ def ppu.display.window.Pace.fetcher_glitches
   else ok (self.window.cgb_wx_glitch, none)
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::update_wx_glitch]:
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 158:4-177:5 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 159:4-178:5 -/
 def ppu.display.window.Pace.update_wx_glitch
   (self : ppu.display.Pace) (enabled : Bool) (wx : Std.U8) (hw : Bool) :
   Result ppu.display.Pace
@@ -7101,7 +7123,7 @@ def ppu.display.window.Pace.update_wx_glitch
   else ok self
 
 /-- [ceres_core::ppu::display::window::{ceres_core::ppu::display::Pace}::window_before_fetch]:
-    Source: 'ceres-core/src/ppu/display/window.rs', lines 213:4-226:5 -/
+    Source: 'ceres-core/src/ppu/display/window.rs', lines 214:4-227:5 -/
 def ppu.display.window.Pace.window_before_fetch
   (self : ppu.display.Pace) (enabled : Bool) (wx : Std.U8) (hw : Bool) :
   Result ppu.display.Pace
@@ -7123,7 +7145,7 @@ def ppu.display.window.Pace.window_before_fetch
   | ppu.display.fetcher.FetcherStep.Push => ok self
 
 /-- [ceres_core::ppu::display::fetcher::{ceres_core::ppu::display::fetcher::Fetcher}::row]:
-    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 92:4-97:5 -/
+    Source: 'ceres-core/src/ppu/display/fetcher.rs', lines 93:4-98:5 -/
 def ppu.display.fetcher.Fetcher.row
   (self : ppu.display.fetcher.Fetcher) : Result ppu.display.fetcher.Row := do
   ok { attributes := self.attributes, data := self.data }
@@ -7793,7 +7815,7 @@ def ppu.display.background.relation.Mode3Loop.run
   ok (flow, { self with pace := p, fetcher := hooks.fetcher })
 
 /-- [ceres_core::ppu::display::{ceres_core::ppu::display::Pace}::wake]:
-    Source: 'ceres-core/src/ppu/display/mod.rs', lines 160:4-165:5 -/
+    Source: 'ceres-core/src/ppu/display/mod.rs', lines 163:4-168:5 -/
 def ppu.display.Pace.wake
   (self : ppu.display.Pace) : Result (Bool × ppu.display.Pace) := do
   let i ← if self.wait > 0#i32
@@ -8047,8 +8069,19 @@ def ppu.display.background.relation.writes.quiet
     i.mode1) && (¬ (i.cpu_wr_sync && (i.addr =
     ppu.display.background.relation.WX))))))
 
+/-- [ceres_core::ppu::display::background::relation::window::holds_wx]:
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 505:0-507:1 -/
+def ppu.display.background.relation.window.holds_wx
+  (before : ceres_netlist.render_edge.EdgeInputs)
+  (now : ceres_netlist.render_edge.EdgeInputs) :
+  Result Bool
+  := do
+  ok ((¬ now.cpu_wr_sync) || ((before.addr !=
+    ppu.display.background.relation.WX) && (now.addr !=
+    ppu.display.background.relation.WX)))
+
 /-- [ceres_core::ppu::display::background::relation::window::window_ryfa_held]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 579:0-581:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 601:0-603:1 -/
 def ppu.display.background.relation.window.window_ryfa_held
   (l : ppu.display.background.relation.Mode3Loop) (net_p : Std.I16) :
   Result Bool
@@ -8057,7 +8090,7 @@ def ppu.display.background.relation.window.window_ryfa_held
   ok ((net_p >= 0#i16) && (net_p = i))
 
 /-- [ceres_core::ppu::display::background::relation::window::wx_matched]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 256:0-258:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 268:0-270:1 -/
 def ppu.display.background.relation.window.wx_matched
   (l : ppu.display.background.relation.Mode3Loop) (position : Std.I16) :
   Result Bool
@@ -8370,7 +8403,7 @@ def ppu.display.background.relation.pipeline.background
     ok { e2 with sprite := nsf }
 
 /-- [ceres_core::ppu::display::background::relation::window::window_inside]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 286:0-325:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 298:0-337:1 -/
 def ppu.display.background.relation.window.window_inside
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)
@@ -8436,7 +8469,7 @@ def ppu.display.background.relation.window.window_inside
     }
 
 /-- [ceres_core::ppu::display::background::relation::window::first_dot_after]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 216:0-230:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 228:0-242:1 -/
 def ppu.display.background.relation.window.first_dot_after
   (l : ppu.display.background.relation.Mode3Loop)
   (e : ceres_netlist.render_edge.NetPipeline) (first : Bool)
@@ -8463,7 +8496,7 @@ def ppu.display.background.relation.window.first_dot_after
     ok { e2 with sprite := nsf }
 
 /-- [ceres_core::ppu::display::background::relation::window::first_tile_fetched]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 175:0-210:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 187:0-222:1 -/
 def ppu.display.background.relation.window.first_tile_fetched
   (l : ppu.display.background.relation.Mode3Loop)
   (base : ceres_netlist.render_edge.NetPipeline) (dot : Std.U8)
@@ -8500,7 +8533,7 @@ def ppu.display.background.relation.window.first_tile_fetched
       }
 
 /-- [ceres_core::ppu::display::background::relation::window::window_starting]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 64:0-171:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 64:0-183:1 -/
 def ppu.display.background.relation.window.window_starting
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline) (dot : Std.U8) (fine : Std.U8)
@@ -8530,11 +8563,33 @@ def ppu.display.background.relation.window.window_starting
     if l.wx = 0#u8
     then
       ppu.display.background.relation.pipeline.pipeline_at
-        ppu.display.background.relation.LEAD_IN 6#u8 true net
+        ppu.display.background.relation.LEAD_IN 6#u8 true
+        {
+          net
+            with
+            pyco := false,
+            nunu := false,
+            nopa := false,
+            in_window := false,
+            win_x := 0#u8,
+            rydy := false,
+            sovy := false
+        }
     else
       let np ←
         ppu.display.background.relation.pipeline.pipeline_at i i1 ((i3 <=
-          0#i16) && (¬ g.rerun)) net
+          0#i16) && (¬ g.rerun))
+          {
+            net
+              with
+              pyco := false,
+              nunu := false,
+              nopa := false,
+              in_window := false,
+              win_x := 0#u8,
+              rydy := false,
+              sovy := false
+          }
       ppu.display.background.relation.window.first_dot_after l np ((i3 <=
         0#i16) && (¬ g.rerun)) g
   else
@@ -8717,46 +8772,46 @@ def ppu.display.background.relation.writes.latch_holds
   ok ((¬ b) || (net.inputs.data = net.scx))
 
 /-- [ceres_core::ppu::display::background::relation::window::window_unstarted]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 525:0-527:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 539:0-541:1 -/
 def ppu.display.background.relation.window.window_unstarted
   (g : ppu.display.background.relation.ghost.Ghost) : Result Bool := do
   ok ((g.window = 0#u8) && (g.window_fine = 0#u8))
 
 /-- [ceres_core::ppu::display::background::relation::window::ceres_window_waits]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 512:0-522:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 524:0-536:1 -/
 def ppu.display.background.relation.window.ceres_window_waits
   (l : ppu.display.background.relation.Mode3Loop) (wy_triggered : Bool)
   (started : Bool) :
   Result Bool
   := do
-  ok ((((((((l.pace.window.wy_triggered = wy_triggered) &&
+  ok (((((((((l.pace.window.wy_triggered = wy_triggered) &&
     (l.pace.window.wx_triggered = started)) && (started || (¬
     l.pace.window.being_fetched))) && (¬ l.pace.window.started_after_line)) &&
     (¬ l.pace.window.wx_166_interrupt_glitch)) && (¬
     l.pace.window.enable_pending)) && (¬ l.pace.window.wy_just_checked)) &&
-    (¬ l.pace.window.wx_just_changed))
+    (¬ l.pace.window.wx_just_changed)) && (¬ l.pace.window.cgb_wx_glitch))
 
 /-- [ceres_core::ppu::display::background::relation::window::net_window_waits]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 505:0-507:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 517:0-519:1 -/
 def ppu.display.background.relation.window.net_window_waits
   (net : ceres_netlist.render_edge.NetPipeline) : Result Bool := do
   ok (((((((¬ net.pyco) && (¬ net.nunu)) && (¬ net.nopa)) && (¬
     net.in_window)) && (¬ net.rydy)) && (¬ net.sovy)) && (net.win_x = 0#u8))
 
 /-- [ceres_core::ppu::display::background::relation::window::net_window_off]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 499:0-501:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 511:0-513:1 -/
 def ppu.display.background.relation.window.net_window_off
   (net : ceres_netlist.render_edge.NetPipeline) : Result Bool := do
   let b ← ppu.display.background.relation.window.net_window_waits net
   ok (((¬ net.sary) && (¬ net.wy_latch)) && b)
 
 /-- [ceres_core::ppu::display::background::relation::LAST_WX]
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 344:0-344:24 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 349:0-349:24 -/
 @[global_simps, irreducible]
 def ppu.display.background.relation.LAST_WX : Std.U8 := 165#u8
 
 /-- [ceres_core::ppu::display::background::relation::window::window_agrees]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 534:0-552:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 548:0-574:1 -/
 def ppu.display.background.relation.window.window_agrees
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)
@@ -8780,13 +8835,61 @@ def ppu.display.background.relation.window.window_agrees
       ppu.display.background.relation.pipeline.signed l.pace.bg.position
     let i1 ← i + ppu.display.background.relation.WX_AHEAD
     let i2 ← lift (UScalar.hcast .I16 l.wx)
+    let i3 ← i + ppu.display.background.relation.WX_AHEAD
+    let i4 ← lift (UScalar.hcast .I16 l.wx)
+    let b3 ← ppu.display.background.relation.ghost.fetching l.pace
     ok ((((b && b1) && b2) && ((net.wy_latch && (net.wx = l.wx)) && (
-      l.wx <= ppu.display.background.relation.LAST_WX))) && (i1 <= i2))
+      l.wx <= ppu.display.background.relation.LAST_WX))) && ((i1 < i2) || ((i3
+      = i4) && (¬ b3))))
   | ppu.display.background.relation.window.WindowPhase.Starting _ _ =>
     let b ←
       ppu.display.background.relation.window.ceres_window_waits l true true
-    ok (b && ((net.wy_latch && (net.wx = l.wx)) && (l.wx <=
-      ppu.display.background.relation.LAST_WX)))
+    let b1 ← ppu.display.background.relation.ghost.fetching l.pace
+    let b2 ←
+      match l.pace.state with
+      | ppu.display.state.State.LcdOn => ok false
+      | ppu.display.state.State.FirstLine => ok false
+      | ppu.display.state.State.FirstLineOamLock => ok false
+      | ppu.display.state.State.FirstLineMode3 => ok false
+      | ppu.display.state.State.FirstLinePalettesLock => ok false
+      | ppu.display.state.State.FirstLineVramLock => ok false
+      | ppu.display.state.State.LineOamWriteLock => ok false
+      | ppu.display.state.State.LineLy => ok false
+      | ppu.display.state.State.OamScanStart => ok false
+      | ppu.display.state.State.OamScanNext => ok false
+      | ppu.display.state.State.OamScanObject => ok false
+      | ppu.display.state.State.Mode3PalettesLock => ok false
+      | ppu.display.state.State.Mode3Start => ok false
+      | ppu.display.state.State.Mode3 => ok false
+      | ppu.display.state.State.Mode3WindowDelay => ok false
+      | ppu.display.state.State.Mode3ObjectWait => ok true
+      | ppu.display.state.State.Mode3ObjectFetch => ok false
+      | ppu.display.state.State.Mode3ObjectAttributes => ok false
+      | ppu.display.state.State.Mode3ObjectLow => ok false
+      | ppu.display.state.State.Mode3ObjectHigh => ok false
+      | ppu.display.state.State.Mode3Pixel => ok false
+      | ppu.display.state.State.HBlankStart => ok false
+      | ppu.display.state.State.HBlankHdma => ok false
+      | ppu.display.state.State.HBlankPalettesUnlock => ok false
+      | ppu.display.state.State.LineEnd => ok false
+      | ppu.display.state.State.NextLine => ok false
+      | ppu.display.state.State.Mode3Abort => ok false
+      | ppu.display.state.State.LongLineEnd => ok false
+      | ppu.display.state.State.AbortedLineStart => ok false
+      | ppu.display.state.State.VBlankLine => ok false
+      | ppu.display.state.State.VBlankLy => ok false
+      | ppu.display.state.State.VBlankLyCompare => ok false
+      | ppu.display.state.State.VBlankLineRest => ok false
+      | ppu.display.state.State.VBlankLineEnd => ok false
+      | ppu.display.state.State.Line153 => ok false
+      | ppu.display.state.State.Line153Ly => ok false
+      | ppu.display.state.State.Line153LyZero => ok false
+      | ppu.display.state.State.Line153Compare => ok false
+      | ppu.display.state.State.Line153CompareZero => ok false
+      | ppu.display.state.State.Line153LycGlitch => ok false
+      | ppu.display.state.State.FrameEnd => ok false
+    ok ((b && ((net.wy_latch && (net.wx = l.wx)) && (l.wx <=
+      ppu.display.background.relation.LAST_WX))) && ((¬ b1) || b2))
   | ppu.display.background.relation.window.WindowPhase.Inside =>
     let b ←
       ppu.display.background.relation.window.ceres_window_waits l true true
@@ -9292,28 +9395,60 @@ def ppu.display.background.relation.objects.objects_agree
       g.window g.window_fine g.blank ok1 l.pace.objs 0#usize
   else ok true
 
+/-- [ceres_core::ppu::display::fifo::{ceres_core::ppu::display::fifo::Fifo}::sound]:
+    Source: 'ceres-core/src/ppu/display/fifo.rs', lines 33:4-35:5 -/
+def ppu.display.fifo.Fifo.sound
+  (self : ppu.display.fifo.Fifo) : Result Bool := do
+  if self.read_end < 8#u8
+  then ok (self.size <= 8#u8)
+  else ok false
+
+/-- [ceres_core::ppu::display::background::relation::objects_fit]:
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 437:0-439:1 -/
+def ppu.display.background.relation.objects_fit
+  (l : ppu.display.background.relation.Mode3Loop) : Result Bool := do
+  ok ((l.pace.objs.count <= l.pace.objs.found) && (l.pace.objs.found <=
+    ppu.display.background.relation.MAX_OBJECTS))
+
+/-- [ceres_core::ppu::display::background::relation::shaped]:
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 426:0-434:1 -/
+def ppu.display.background.relation.shaped
+  (l : ppu.display.background.relation.Mode3Loop)
+  (g : ppu.display.background.relation.ghost.Ghost) :
+  Result Bool
+  := do
+  let b ← ppu.display.background.relation.objects_fit l
+  let b1 ← ppu.display.fifo.Fifo.sound l.pace.bg.fifo
+  ok (((((((g.since_push <= 2#u8) && (g.extra <= 2#u8)) && (g.age <= 7#u8)) &&
+    (g.window <= ppu.display.background.relation.window.INSIDE)) &&
+    (g.window_fine <= 7#u8)) && b) && b1)
+
 /-- [ceres_core::ppu::display::background::relation::related_but_pipeline]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 361:0-372:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 367:0-379:1 -/
 def ppu.display.background.relation.related_but_pipeline
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)
   (g : ppu.display.background.relation.ghost.Ghost) :
   Result Bool
   := do
-  let b ← ppu.display.background.relation.writes.quiet net.inputs l
-  let b1 ← ppu.display.background.relation.writes.latch_holds net
-  let b2 ← ppu.display.background.relation.objects.store_holds net
-  let b3 ← ppu.display.background.relation.window.window_agrees l net g
-  let b4 ← ppu.display.background.relation.between_dots l.pace
-  let b5 ← ppu.display.background.relation.drawn l.pace
-  let b6 ← ppu.display.background.relation.ghost.reachable l net.scx g
-  let b7 ← ppu.display.background.relation.objects.objects_agree l net g
-  ok ((((((((((¬ net.inputs.clk) && b) && b1) && b2) && b3) && b4) && (b5 =
-    (l.pace.bg.position = ppu.PX_WIDTH))) && (¬ l.pace.object_fetch_aborted))
-    && b6) && b7)
+  let b ← ppu.display.background.relation.shaped l g
+  if b
+  then
+    let b1 ← ppu.display.background.relation.writes.quiet net.inputs l
+    let b2 ← ppu.display.background.relation.writes.latch_holds net
+    let b3 ← ppu.display.background.relation.objects.store_holds net
+    let b4 ← ppu.display.background.relation.window.window_agrees l net g
+    let b5 ← ppu.display.background.relation.between_dots l.pace
+    let b6 ← ppu.display.background.relation.drawn l.pace
+    let b7 ← ppu.display.background.relation.ghost.reachable l net.scx g
+    let b8 ← ppu.display.background.relation.objects.objects_agree l net g
+    ok ((((((((((¬ net.inputs.clk) && b1) && b2) && b3) && b4) && b5) && (b6 =
+      (l.pace.bg.position = ppu.PX_WIDTH))) && (¬
+      l.pace.object_fetch_aborted)) && b7) && b8)
+  else ok false
 
 /-- [ceres_core::ppu::display::background::relation::related]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 354:0-356:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 359:0-361:1 -/
 def ppu.display.background.relation.related
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)
@@ -9373,28 +9508,124 @@ def ppu.display.background.relation.objects.starting_objects
     ((¬ l.objects_enabled) || b1))
 
 /-- [ceres_core::ppu::display::background::relation::start_before]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 327:0-337:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 328:0-342:1 -/
 def ppu.display.background.relation.start_before
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline) :
   Result Bool
   := do
-  let b ← ppu.display.background.relation.writes.quiet net.inputs l
-  let b1 ← ppu.display.background.relation.writes.latch_holds net
-  let np ← ppu.display.background.relation.pipeline.before_start net
-  let b2 ←
-    ceres_netlist.render_edge.NetPipeline.Insts.CoreCmpPartialEqNetPipeline.eq
-      net np
-  let i ← ppu.display.pos (-16)#i8
-  let b3 ← ppu.display.background.relation.objects.store_holds net
-  let g ← ppu.display.background.relation.ghost.Ghost.at_rest l.pace.bg
-  let b4 ← ppu.display.background.relation.window.window_agrees l net g
-  let b5 ← ppu.display.background.relation.objects.starting_objects l net
-  ok (((((((((¬ net.inputs.clk) && b) && b1) && b2) && (l.pace.bg.position =
-    i)) && (¬ l.pace.bg.insert_blank)) && b3) && b4) && b5)
+  let b ← ppu.display.background.relation.objects_fit l
+  let b1 ← ppu.display.fifo.Fifo.sound l.pace.bg.fifo
+  if b && b1
+  then
+    let (s, b2) ←
+      match l.pace.state with
+      | ppu.display.state.State.LcdOn =>
+        ok (ppu.display.state.State.LcdOn, false)
+      | ppu.display.state.State.FirstLine =>
+        ok (ppu.display.state.State.FirstLine, false)
+      | ppu.display.state.State.FirstLineOamLock =>
+        ok (ppu.display.state.State.FirstLineOamLock, false)
+      | ppu.display.state.State.FirstLineMode3 =>
+        ok (ppu.display.state.State.FirstLineMode3, false)
+      | ppu.display.state.State.FirstLinePalettesLock =>
+        ok (ppu.display.state.State.FirstLinePalettesLock, false)
+      | ppu.display.state.State.FirstLineVramLock =>
+        ok (ppu.display.state.State.FirstLineVramLock, false)
+      | ppu.display.state.State.LineOamWriteLock =>
+        ok (ppu.display.state.State.LineOamWriteLock, false)
+      | ppu.display.state.State.LineLy =>
+        ok (ppu.display.state.State.LineLy, false)
+      | ppu.display.state.State.OamScanStart =>
+        ok (ppu.display.state.State.OamScanStart, false)
+      | ppu.display.state.State.OamScanNext =>
+        ok (ppu.display.state.State.OamScanNext, false)
+      | ppu.display.state.State.OamScanObject =>
+        ok (ppu.display.state.State.OamScanObject, false)
+      | ppu.display.state.State.Mode3PalettesLock =>
+        ok (ppu.display.state.State.Mode3PalettesLock, false)
+      | ppu.display.state.State.Mode3Start =>
+        ok (ppu.display.state.State.Mode3Start, true)
+      | ppu.display.state.State.Mode3 =>
+        ok (ppu.display.state.State.Mode3, false)
+      | ppu.display.state.State.Mode3WindowDelay =>
+        ok (ppu.display.state.State.Mode3WindowDelay, false)
+      | ppu.display.state.State.Mode3ObjectWait =>
+        ok (ppu.display.state.State.Mode3ObjectWait, false)
+      | ppu.display.state.State.Mode3ObjectFetch =>
+        ok (ppu.display.state.State.Mode3ObjectFetch, false)
+      | ppu.display.state.State.Mode3ObjectAttributes =>
+        ok (ppu.display.state.State.Mode3ObjectAttributes, false)
+      | ppu.display.state.State.Mode3ObjectLow =>
+        ok (ppu.display.state.State.Mode3ObjectLow, false)
+      | ppu.display.state.State.Mode3ObjectHigh =>
+        ok (ppu.display.state.State.Mode3ObjectHigh, false)
+      | ppu.display.state.State.Mode3Pixel =>
+        ok (ppu.display.state.State.Mode3Pixel, false)
+      | ppu.display.state.State.HBlankStart =>
+        ok (ppu.display.state.State.HBlankStart, false)
+      | ppu.display.state.State.HBlankHdma =>
+        ok (ppu.display.state.State.HBlankHdma, false)
+      | ppu.display.state.State.HBlankPalettesUnlock =>
+        ok (ppu.display.state.State.HBlankPalettesUnlock, false)
+      | ppu.display.state.State.LineEnd =>
+        ok (ppu.display.state.State.LineEnd, false)
+      | ppu.display.state.State.NextLine =>
+        ok (ppu.display.state.State.NextLine, false)
+      | ppu.display.state.State.Mode3Abort =>
+        ok (ppu.display.state.State.Mode3Abort, false)
+      | ppu.display.state.State.LongLineEnd =>
+        ok (ppu.display.state.State.LongLineEnd, false)
+      | ppu.display.state.State.AbortedLineStart =>
+        ok (ppu.display.state.State.AbortedLineStart, false)
+      | ppu.display.state.State.VBlankLine =>
+        ok (ppu.display.state.State.VBlankLine, false)
+      | ppu.display.state.State.VBlankLy =>
+        ok (ppu.display.state.State.VBlankLy, false)
+      | ppu.display.state.State.VBlankLyCompare =>
+        ok (ppu.display.state.State.VBlankLyCompare, false)
+      | ppu.display.state.State.VBlankLineRest =>
+        ok (ppu.display.state.State.VBlankLineRest, false)
+      | ppu.display.state.State.VBlankLineEnd =>
+        ok (ppu.display.state.State.VBlankLineEnd, false)
+      | ppu.display.state.State.Line153 =>
+        ok (ppu.display.state.State.Line153, false)
+      | ppu.display.state.State.Line153Ly =>
+        ok (ppu.display.state.State.Line153Ly, false)
+      | ppu.display.state.State.Line153LyZero =>
+        ok (ppu.display.state.State.Line153LyZero, false)
+      | ppu.display.state.State.Line153Compare =>
+        ok (ppu.display.state.State.Line153Compare, false)
+      | ppu.display.state.State.Line153CompareZero =>
+        ok (ppu.display.state.State.Line153CompareZero, false)
+      | ppu.display.state.State.Line153LycGlitch =>
+        ok (ppu.display.state.State.Line153LycGlitch, false)
+      | ppu.display.state.State.FrameEnd =>
+        ok (ppu.display.state.State.FrameEnd, false)
+    let b3 ←
+      ppu.display.background.relation.writes.quiet net.inputs
+        { l with pace := { l.pace with state := s } }
+    let b4 ← ppu.display.background.relation.writes.latch_holds net
+    let np ← ppu.display.background.relation.pipeline.before_start net
+    let b5 ←
+      ceres_netlist.render_edge.NetPipeline.Insts.CoreCmpPartialEqNetPipeline.eq
+        net np
+    let i ← ppu.display.pos (-16)#i8
+    let b6 ← ppu.display.background.relation.objects.store_holds net
+    let g ← ppu.display.background.relation.ghost.Ghost.at_rest l.pace.bg
+    let b7 ←
+      ppu.display.background.relation.window.window_agrees
+        { l with pace := { l.pace with state := s } } net g
+    let b8 ←
+      ppu.display.background.relation.objects.starting_objects
+        { l with pace := { l.pace with state := s } } net
+    ok (((((((((((¬ net.inputs.clk) && b2) && (l.pace.wait = 1#i32)) && b3) &&
+      b4) && b5) && (l.pace.bg.position = i)) && (¬ l.pace.bg.insert_blank))
+      && b6) && b7) && b8)
+  else ok false
 
 /-- [ceres_core::ppu::display::background::relation::start_agrees]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 295:0-320:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 295:0-321:1 -/
 def ppu.display.background.relation.start_agrees
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline) (last_scx : Std.U8)
@@ -9408,7 +9639,10 @@ def ppu.display.background.relation.start_agrees
   let b2 ← ppu.display.background.relation.writes.quiet falling l
   let b3 ←
     ppu.display.background.relation.writes.writes net rising falling last_scx
-  if ((((b && rising.clk) && (¬ falling.clk)) && b1) && b2) && b3
+  let b4 ← ppu.display.background.relation.window.holds_wx net.inputs rising
+  let b5 ← ppu.display.background.relation.window.holds_wx rising falling
+  if (((((b && rising.clk) && (¬ falling.clk)) && b1) && b2) && b3) && ((¬
+    l.window_enabled) || (b4 && b5))
   then
     let snapshot ← ppu.display.background.relation.ghost.Before.of l.pace
     let l1 ← ppu.display.background.relation.ceres_first_dot l
@@ -9418,12 +9652,12 @@ def ppu.display.background.relation.start_agrees
     let g1 ←
       ppu.display.background.relation.ghost.Ghost.after { g with age := 0#u8 }
         snapshot l1.pace
-    let b4 ← ppu.display.background.relation.related l1 net2 g1
-    ok (b4, l1, net2)
+    let b6 ← ppu.display.background.relation.related l1 net2 g1
+    ok (b6, l1, net2)
   else ok (true, l, net)
 
 /-- [ceres_core::ppu::display::background::relation::window::lead_in_matches]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 559:0-566:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 581:0-588:1 -/
 def ppu.display.background.relation.window.lead_in_matches
   (l : ppu.display.background.relation.Mode3Loop) (mixer_scx : Std.U8) :
   Result Bool
@@ -9433,19 +9667,8 @@ def ppu.display.background.relation.window.lead_in_matches
   ok ((¬ (((l.window_enabled && (l.wx = 0#u8)) && l.pace.window.wx_triggered)
     && (i = ppu.display.background.relation.LAST_UNMATCHED))) || (i1 = 7#u8))
 
-/-- [ceres_core::ppu::display::background::relation::window::holds_wx]:
-    Source: 'ceres-core/src/ppu/display/background/relation/window.rs', lines 493:0-495:1 -/
-def ppu.display.background.relation.window.holds_wx
-  (before : ceres_netlist.render_edge.EdgeInputs)
-  (now : ceres_netlist.render_edge.EdgeInputs) :
-  Result Bool
-  := do
-  ok ((¬ now.cpu_wr_sync) || ((before.addr !=
-    ppu.display.background.relation.WX) && (now.addr !=
-    ppu.display.background.relation.WX)))
-
 /-- [ceres_core::ppu::display::background::relation::step_agrees]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 379:0-411:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 386:0-418:1 -/
 def ppu.display.background.relation.step_agrees
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)
@@ -9510,7 +9733,7 @@ def ppu.display.background.relation.step_agrees
 def ppu.display.objects.MAX_OBJECTS_PER_LINE : Std.Usize := 10#usize
 
 /-- [ceres_core::ppu::display::objects::{ceres_core::ppu::display::objects::OamLatches}::latch]:
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 67:4-73:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 69:4-75:5 -/
 def ppu.display.objects.OamLatches.latch
   (self : ppu.display.objects.OamLatches) (read : Option (Std.U8 × Std.U8)) :
   Result ((Std.U8 × Std.U8) × ppu.display.objects.OamLatches)
@@ -9521,7 +9744,7 @@ def ppu.display.objects.OamLatches.latch
               ok (p, { y, x })
 
 /-- [ceres_core::ppu::display::objects::on_line]:
-    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 95:0-99:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 98:0-102:1 -/
 def ppu.display.objects.on_line
   (y : Std.U8) (line : Std.U8) (height_16 : Bool) : Result Bool := do
   let i ← lift (UScalar.hcast .I32 y)

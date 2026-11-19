@@ -16,6 +16,7 @@ use {
     reason = "Independent trigger and glitch flags"
 )]
 #[derive(Clone)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
 pub(super) struct Window {
     /// The window line being drawn (`Window::NO_LINE` before the first one).
     pub line: u8,
