@@ -161,9 +161,18 @@ def DotOut (s : Bool × Bool) (d : Bool) : Prop :=
 /-- The states mode 3's dots relate: some ghost relates them. -/
 def Related (net : NetPipeline) (l : Mode3Loop) : Prop := ∃ g, related l net g = ok true
 
-/-- The line drawn: ceres in `HBlankStart`, the netlist's mode 3 stopped. -/
+/-- The netlist's pipeline after mode 3's last dot: from a pair related
+where ceres has drawn the line, the dot's two edges on inputs the guard
+lets through (what HBlank's first dot starts from, `Rest.lean`). -/
+def Stops (net : NetPipeline) : Prop :=
+  ∃ l net0 g mixer rising falling n1, related l net0 g = ok true ∧ drawn l.pace = ok true ∧
+    guard l net0 mixer rising falling = ok true ∧
+    NetPipeline.edge net0 rising = ok n1 ∧ NetPipeline.edge n1 falling = ok net
+
+/-- The line drawn: ceres in `HBlankStart`, the netlist's mode 3 stopped,
+after a dot from a related pair. -/
 def Ended (net : NetPipeline) (l : Mode3Loop) : Prop :=
-  drawn l.pace = ok true ∧ NetPipeline.stop_mode3 net = ok true
+  drawn l.pace = ok true ∧ NetPipeline.stop_mode3 net = ok true ∧ Stops net
 
 /-- The known differences: the guard turns the pair's input away (it reads
 ceres's state as well as the netlist's). -/
@@ -193,8 +202,17 @@ theorem mode3_dot_steps (kani : KaniMode3Dot) :
       · exact Or.inr ⟨h1, h2, h3⟩
     · rcases h with ⟨rfl, -, rfl⟩ | ⟨rfl, -, -, g', hr'⟩
       · right
-        refine ⟨?_, ?_⟩
-        · unfold cerDot at hc
+        have hd : drawn l.pace = ok true := by
+          unfold cerDot at hc
+          obtain ⟨d0, hd0, hc⟩ := bind_eq_ok hc
+          cases d0 with
+          | true => exact hd0
+          | false =>
+            simp only [Bool.false_eq_true, ↓reduceIte] at hc
+            obtain ⟨l1, -, hc⟩ := bind_eq_ok hc
+            simp at hc
+        have hd2 : drawn l2.pace = ok true := by
+          unfold cerDot at hc
           obtain ⟨d0, hd0, hc⟩ := bind_eq_ok hc
           cases d0 with
           | true =>
@@ -205,14 +223,14 @@ theorem mode3_dot_steps (kani : KaniMode3Dot) :
             simp only [Bool.false_eq_true, ↓reduceIte] at hc
             obtain ⟨l1, -, hc⟩ := bind_eq_ok hc
             simp at hc
-        · unfold netDot at hn
-          obtain ⟨n1, -, hn⟩ := bind_eq_ok hn
-          obtain ⟨t1, -, hn⟩ := bind_eq_ok hn
-          obtain ⟨n2, -, hn⟩ := bind_eq_ok hn
-          obtain ⟨t2, ht2, hn⟩ := bind_eq_ok hn
-          simp only [Result.ok.injEq, Prod.mk.injEq] at hn
-          obtain ⟨⟨-, rfl⟩, rfl⟩ := hn
-          exact ht2
+        unfold netDot at hn
+        obtain ⟨n1, hn1, hn⟩ := bind_eq_ok hn
+        obtain ⟨t1, -, hn⟩ := bind_eq_ok hn
+        obtain ⟨n2, hn2, hn⟩ := bind_eq_ok hn
+        obtain ⟨t2, ht2, hn⟩ := bind_eq_ok hn
+        simp only [Result.ok.injEq, Prod.mk.injEq] at hn
+        obtain ⟨⟨-, rfl⟩, rfl⟩ := hn
+        exact ⟨hd2, ht2, l, net, g, mixer, rising, falling, n1, hr, hd, hb, hn1, hn2⟩
       · exact Or.inl ⟨g', hr'⟩
 
 /-- What Kani proves of the loop's first dot (`netlist_mode3_start`; its

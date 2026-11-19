@@ -3,6 +3,7 @@ import Sketch.Dmg
 import Sketch.DmgReal
 import Sketch.DmgMode3
 import Sketch.DmgScan
+import Sketch.DmgHBlank
 
 /-! The outline's theorems rest on Lean's own axioms and on their
 hypotheses (the blocks' claims) only: the build of `Sketch` fails if one
@@ -37,3 +38,9 @@ info: 'ceres_core.sketch.dmg.dmg_agrees_scan' depends on axioms: [propext, Class
 -/
 #guard_msgs in
 #print axioms ceres_core.sketch.dmg.dmg_agrees_scan
+
+/--
+info: 'ceres_core.sketch.dmg.dmg_agrees_hblank' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.sketch.dmg.dmg_agrees_hblank

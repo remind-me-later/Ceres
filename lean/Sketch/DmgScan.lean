@@ -1,5 +1,6 @@
 import Sketch.DmgMode3
 import Ceres.Bisim.ScanDots
+import Ceres.Bisim.Rest
 open Aeneas Aeneas.Std Result
 
 /-!
@@ -11,24 +12,29 @@ claims, a dot at a time: `Ceres/Bisim/ScanDots.lean`), leaving how the line
 holds the scan's blocks (`ScanInLine`):
 
 - `hN`, `hC`: in the scan, the line's dot is the scan's (the netlist's two
-  edges, ceres's read at the dots that have one) for the line being
-  scanned (`lineN`, `lineC`: LY and LCDC bit 2, the same on both sides,
-  `hLine`), on the line's state taken apart (`pn`, `pc`) and put back
+  edges, ceres's read at the dots that have one), and the netlist's pixel
+  pipeline's two edges beside it (`pipeScan`, fed the scan's outputs as
+  `scan_inputs` has them, which Kani's `netlist_scan_*_outputs` show the
+  scan gives; `pp`, `setP`, with LCDC, LY, hclk, VBlank and the CPU's bus
+  free, `freeN`), for the line being scanned (`lineN`, `lineC`: LY and
+  LCDC bit 2, the same on both sides, `hLine`), on the line's state taken apart (`pn`, `pc`) and put back
   (`setN`, `setC`: `hGetN`, `hGetC`, which keep the line, `hKeepN`,
   `hKeepC`), the rest left alone (`hFrame`); the dot draws nothing and
   mode 3 does not end in it (`out`).
 - `hI`: related dot inputs make the same Ys, OAM's at the scan's index.
-- `hRS`: the scan phase's relation is the scan's (`ScanRel`) with the rest
-  of the line's (`F`).
+- `hRS`: the scan phase's relation is the scan's (`ScanRel`) and the
+  pipeline's (`PipeAt`, Kani's `pipe_at` a half dot behind the scan's next
+  edge) with the rest of the line's (`F`).
 - `hEnd`: once the scan's last edge has run (`ScanEnd`: the netlist's slots
-  hold ceres's first ten sprites, `scan_end_saves`), the line is at mode
-  3's start, as `RL start` has it: the store's mapping onto mode 3's
-  pipeline and loop (`scan_into_mode3`'s `hStart`).
+  hold ceres's first ten sprites, `scan_end_saves`, and the pipeline is as
+  `before_start` has it, `pipe_scan_dot`), the line is at mode 3's start,
+  as `RL start` has it: the store's mapping onto mode 3's pipeline and loop
+  (`scan_into_mode3`'s `hStart`).
 - `hK`: the line's known difference takes the scan's (`ScanDotK`: OAM gives
   a dot a Y that is not its window's).
 
 Where the scan starts, the line's end (`scan_starts`), is HBlank's or
-VBlank's phase to reach, still open.
+VBlank's phase to reach (`DmgHBlank.lean`'s `hNext`).
 -/
 
 namespace ceres_core.sketch.dmg
@@ -49,20 +55,35 @@ structure ScanInLine {Ln Lc DIn DIc DO : Type}
   inN : DIn → ScanIn
   inC : DIc → ScanIn
   out : DO
+  pp : Ln → ceres_netlist.render_edge.NetPipeline
+  setP : Ln → ceres_netlist.render_edge.NetPipeline → Ln
+  freeN : DIn → ceres_core.ppu.display.background.relation.rest.Free ×
+    ceres_core.ppu.display.background.relation.rest.Free
   F : Ln → Lc → Prop
   hGetN : ∀ n s, pn (setN n s) = s
+  hGetP : ∀ n p, pp (setP n p) = p
+  hPN : ∀ n p, pn (setP n p) = pn n
+  hLP : ∀ n p, lineN (setP n p) = lineN n
+  hFrameP : ∀ n c p, F n c → F (setP n p) c
   hGetC : ∀ c t, pc (setC c t) = t
   hKeepN : ∀ n s, lineN (setN n s) = lineN n
   hKeepC : ∀ c t, lineC (setC c t) = lineC c
   hLine : ∀ n c, F n c → lineN n = lineC c
   hI : ∀ i j, RDI i j → inN i = inC j
-  hRS : ∀ n c, RL .scan n c ↔ ScanRel (lineN n) (pn n) (pc c) ∧ F n c
+  hRS : ∀ n c, RL .scan n c ↔
+    ScanRel (lineN n) (pn n) (pc c) ∧ ceres_core.rest.PipeAt (pp n, (pn n).2) ∧ F n c
   hFrame : ∀ n c s t, F n c → F (setN n s) (setC c t)
   hN : ∀ n c i, RL .scan n c →
-    dotN n i = (do let (_, s) ← netScan (lineN n) (pn n) (inN i); ok (out, setN n s))
+    dotN n i = (do
+      let (_, s) ← netScan (lineN n) (pn n) (inN i)
+      let (_, q) ← ceres_core.rest.pipeScan (pp n, (pn n).2) (freeN i)
+      ok (out, setP (setN n s) q.1))
   hC : ∀ n c j, RL .scan n c →
     dotC c j = (do let (_, t) ← cerScan (lineC c) (pc c) (inC j); ok (out, setC c t))
-  hEnd : ∀ n c s t, F n c → ScanEnd (lineN n) s t → RL .start (setN n s) (setC c t)
+  hEnd : ∀ n c s t p, F n c → ScanEnd (lineN n) s t →
+    (∃ q, ceres_core.ppu.display.background.relation.pipeline.before_start p = ok q ∧
+      ceres_netlist.render_edge.NetPipeline.Insts.CoreCmpPartialEqNetPipeline.eq p q = ok true) →
+    RL .start (setP (setN n s) p) (setC c t)
   hK : ∀ n c i j, ScanDotK (lineN n) (pn n) (pc c) (inN i) (inC j) → KDot n c i j
 
 section
@@ -123,29 +144,39 @@ run, at mode 3's start. -/
 -- @assumes scan-step-agrees
 -- @assumes scan-tail-agrees
 theorem scan_phase (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : KaniScanTail)
-    (m : ScanInLine dotN dotC RDI KDot RL) :
+    (kRest : ceres_core.rest.KaniRestScan) (m : ScanInLine dotN dotC RDI KDot RL) :
     StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL .scan)
       (fun n c => ∃ k', RL k' n c) := by
   intro n c hr i j hij
-  obtain ⟨hs, hf⟩ := (m.hRS n c).1 hr
+  obtain ⟨hs, hp, hf⟩ := (m.hRS n c).1 hr
+  have hrange := ceres_core.rest.scan_rel_range hs
   rcases scan_dot_steps kStep kLead kTail (m.lineN n) (m.pn n) (m.pc c) hs (m.inN i) (m.inC j)
       (m.hI i j hij) with k | ⟨o, s, p, t, hn, hc, -, hr'⟩
   · exact Or.inl (m.hK n c i j k)
-  · refine Or.inr ⟨m.out, m.setN n s, m.out, m.setC c t, ?_, ?_, rfl, ?_⟩
+  · obtain ⟨q, hq, hqv, hqp, hq163⟩ :=
+      ceres_core.rest.pipe_scan_dot kRest hp hrange.1 hrange.2 (m.freeN i)
+    have hsv := ceres_core.rest.netScan_next hn (by omega)
+    have hqs : q.2 = s.2 := IScalar.eq_of_val_eq (by simp only at hqv; omega)
+    refine Or.inr ⟨m.out, m.setP (m.setN n s) q.1, m.out, m.setC c t, ?_, ?_, rfl, ?_⟩
     · rw [m.hN n c i hr, hn]
-      simp
+      simp [hq]
     · rw [m.hC n c j hr, ← m.hLine n c hf, hc]
       simp
     · rcases hr' with hr' | he
-      · refine ⟨.scan, (m.hRS _ _).2 ⟨?_, m.hFrame n c s t hf⟩⟩
-        rw [m.hGetN, m.hGetC, m.hKeepN]
-        exact hr'
-      · exact ⟨.start, m.hEnd n c s t hf he⟩
+      · refine ⟨.scan, (m.hRS _ _).2 ⟨?_, ?_, m.hFrameP _ _ _ (m.hFrame n c s t hf)⟩⟩
+        · rw [m.hLP, m.hPN, m.hGetN, m.hGetC, m.hKeepN]
+          exact hr'
+        · rw [m.hGetP, m.hPN, m.hGetN, ← hqs]
+          exact hqp
+      · refine ⟨.start, m.hEnd n c s t q.1 hf he (hq163 ?_)⟩
+        rw [hqs]
+        exact he.2.1
 
 /-- The outline's `hPhase` with the scan's and mode 3's phases discharged:
 the other phases' claims (`hOther`: HBlank, VBlank, the LCD off, line 0)
 and how the line holds the scan's and mode 3's blocks give it all. -/
 theorem phases_with_scan (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : KaniScanTail)
+    (kRest : ceres_core.rest.KaniRestScan)
     (kani : ceres_core.mode3.KaniMode3Dot) (kStart : ceres_core.mode3.KaniMode3Start)
     (ms : ScanInLine dotN dotC RDI KDot RL) (m : Mode3InLine dotN dotC RDI KDot RL)
     (hOther : ∀ k, k ≠ .scan → k ≠ .start → k ≠ .mode3 →
@@ -154,7 +185,7 @@ theorem phases_with_scan (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail 
       (fun n c => ∃ k', RL k' n c) :=
   phases_with_mode3 kani kStart m fun k h1 h2 => by
     cases k with
-    | scan => exact scan_phase kStep kLead kTail ms
+    | scan => exact scan_phase kStep kLead kTail kRest ms
     | start => exact absurd rfl h1
     | mode3 => exact absurd rfl h2
     | hblank => exact hOther _ (by intro h; cases h) h1 h2
@@ -165,6 +196,7 @@ theorem phases_with_scan (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail 
 /-- `dmg_agrees` with the line's scan and mode 3 phases taken from Kani's
 harnesses (`phases_with_scan`). -/
 theorem dmg_agrees_scan (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : KaniScanTail)
+    (kRest : ceres_core.rest.KaniRestScan)
     (kani : ceres_core.mode3.KaniMode3Dot) (kStart : ceres_core.mode3.KaniMode3Start)
     (ms : ScanInLine dotN dotC RDI KDot RL) (m : Mode3InLine dotN dotC RDI KDot RL)
     (hOther : ∀ k, k ≠ .scan → k ≠ .start → k ≠ .mode3 →
@@ -192,7 +224,7 @@ theorem dmg_agrees_scan (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail :
         (close (fun d x => (outC d x, x)) nextC
           (bus locksC dotC dotsC memC ended perC busC joyC apuC))
         (fun x y => x = y) (BusOut RMO RSeen RBO RJO RAO) K n c :=
-  dmg_agrees (phases_with_scan kStep kLead kTail kani kStart ms m hOther) hLocks hMem hDots hPer
+  dmg_agrees (phases_with_scan kStep kLead kTail kRest kani kStart ms m hOther) hLocks hMem hDots hPer
     hBusSide hJoySerial hApu hOut hNext
 
 end

@@ -196,20 +196,10 @@ theorem pipe_idle_dot (k : KaniRestHBlank) {p : NetPipeline} (hp : hblank_rest p
   obtain ⟨p2, e2, r2⟩ := hblank_edge k r1 h2
   exact ⟨p2, by simp [pipeIdle, e1, e2], r2⟩
 
-/-- The pipeline after mode 3's last dot: from a pair related where ceres
-has drawn the line, the dot's two edges on inputs the guard lets through
-(mode 3's stop, `mode3_dot`). -/
-def Stopping (p : NetPipeline) : Prop :=
-  ∃ l net g mixer rising falling n1,
-    ceres_core.ppu.display.background.relation.related l net g = ok true ∧
-    ceres_core.ppu.display.background.relation.drawn l.pace = ok true ∧
-    ceres_core.mode3.guard l net mixer rising falling = ok true ∧
-    NetPipeline.edge net rising = ok n1 ∧ NetPipeline.edge n1 falling = ok p
-
 /-- HBlank's first dot, from mode 3's stop: the pipeline rests. -/
 -- @assumes pipeline-rests
 theorem pipe_end_dot (kEnd : KaniRestEnd) (kH : KaniRestHBlank) {p : NetPipeline}
-    (hs : Stopping p) {i : EdgeInputs × EdgeInputs} (hc : i.1.clk = true)
+    (hs : ceres_core.mode3.Stops p) {i : EdgeInputs × EdgeInputs} (hc : i.1.clk = true)
     (h1 : idle_inputs i.1 = ok true) (h2 : idle_inputs i.2 = ok true) :
     ∃ p', pipeIdle p i = ok ((), p') ∧ hblank_rest p' = ok true := by
   obtain ⟨l, net, g, mixer, rising, falling, n1, hr, hd, hg, e1, e2⟩ := hs
@@ -224,7 +214,7 @@ theorem pipe_end_dot (kEnd : KaniRestEnd) (kH : KaniRestHBlank) {p : NetPipeline
   exact ⟨p2, by simp [pipeIdle, f3, e3], r2⟩
 
 /-- The pipeline in HBlank or VBlank: at rest, or just stopped. -/
-def HRest (p : NetPipeline) : Prop := hblank_rest p = ok true ∨ Stopping p
+def HRest (p : NetPipeline) : Prop := hblank_rest p = ok true ∨ ceres_core.mode3.Stops p
 
 /-- A dot of HBlank or VBlank (its first edge a rise, neither a line
 start nor a stop): the pipeline rests. -/

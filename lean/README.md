@@ -161,10 +161,19 @@ emulator's types yet.
   related dot inputs make the same mode 3 input, that the line's end is in
   HBlank's relation, and that its known difference takes mode 3's.
 - `Sketch/DmgScan.lean`: `dmg_agrees_scan`, the same with the scan's phase
-  too (`scan_phase`, on `scan_dot_steps`): what stands for it is how the
-  line holds the scan's blocks (`ScanInLine`: for the line being scanned,
-  its state taken apart and put back) and, at the scan's end, the store's
-  mapping onto mode 3's start (`hEnd`).
+  too (`scan_phase`, on `scan_dot_steps`, the netlist's pipeline stepping
+  beside the scan on `pipe_scan_dot`): what stands for it is how the line
+  holds the scan's blocks and the pipeline (`ScanInLine`: for the line
+  being scanned, its state taken apart and put back; the pipeline fed the
+  scan's outputs as `scan_inputs` has them) and, at the scan's end, the
+  store's mapping onto mode 3's start (`hEnd`, which is given the
+  pipeline as `before_start` has it).
+- `Sketch/DmgHBlank.lean`: `dmg_agrees_hblank`, the same with HBlank's
+  phase too (`hblank_phase`, the pipeline from mode 3's stop at rest, on
+  `pipe_hblank_dot`): what stands for it is how the line holds the
+  pipeline and the rest in HBlank (`HBlankInLine`: the rest of the line's
+  dot left open, as ceres's HBlank), the idle inputs the line gives the
+  pipeline, and the line's end into the scan's start (`hNext`).
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
   axioms, with no `sorry`.
 
