@@ -309,7 +309,9 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
     (`pipe_hblank_dot`, on Kani's `netlist_rest_*`), beside the scan, ended,
     which feeds it no line start and no stop (`line_idle_dot`); what stands
     for it (`HBlankInLine`) is the rest of the line in HBlank (the LCD
-    timing, ceres's HBlank: nothing compares them) and the line's end into
+    timing, ceres's HBlank: its background rests there, from mode 3's end
+    by Kani, `ceres_drawn_rests`, and unit by unit as measured,
+    `mapping-mode3-start`; ceres's `Ppu` is not translated) and the line's end into
     the scan's start (`hEnd`: the scan's lead-in from there is Kani's,
     `netlist_scan_lead_in`, and the pipeline at rest is where the scan's
     dot takes it from).

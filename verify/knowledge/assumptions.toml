@@ -166,7 +166,7 @@ facts = ["sprite-at-167-mode-0-pulse"]
 [mapping-mode3-start]
 title = "On a visible line, but line 0 after the LCD is turned on, ceres's mode 3 loop starts at h = 163 with its position at -16 and no blank pixel inserted, where render's mode 3 rose at h = 154 and its pipeline is as background::relation::before_start has it at h = 162 (the sprite fetch at rest), whatever SCX is and whatever sprites the scan found, the window idle or armed (its WY latches the frame's)"
 evidence = "measured"
-how = "The netlist: tests/render_edge.rs over the 638 ROMs of transcription-render-edge, 868,141 line starts with the window idle, all rising at 154 and as before_start at 162. With the window armed (WY matched in the frame, not started): the same test over Gambatte's 203 DMG window ROMs and Mealybug's 2 m3_window ROMs, 458,684 line starts, 18,924 armed, all rising at 154 and as before_start at 162 with the frame's WY latches (task 1.3). Ceres: the first tile fetch of each line (the loop's first dot) over 508 of those ROMs, 12 frames each: 596,900 lines after line 0 and 4,064 line 0s at h = 163, and 508 line 0s after the LCD was turned on at 169. Mode3Start follows OamScanObject's fixed sleeps, and end_line or the first line puts the position back at -16. The netlist's half is also proved edge by edge, from mode 3's end on the line before through HBlank (or VBlank) and the scan (pipeline-rests, scan-outputs); the outline does not chain those claims into the line yet."
+how = "The netlist: tests/render_edge.rs over the 638 ROMs of transcription-render-edge, 868,141 line starts with the window idle, all rising at 154 and as before_start at 162. With the window armed (WY matched in the frame, not started): the same test over Gambatte's 203 DMG window ROMs and Mealybug's 2 m3_window ROMs, 458,684 line starts, 18,924 armed, all rising at 154 and as before_start at 162 with the frame's WY latches (task 1.3). Ceres: the first tile fetch of each line (the loop's first dot) over 508 of those ROMs, 12 frames each: 596,900 lines after line 0 and 4,064 line 0s at h = 163, and 508 line 0s after the LCD was turned on at 169. Mode3Start follows OamScanObject's fixed sleeps, and end_line or the first line puts the position back at -16. The netlist's half is also proved edge by edge, from mode 3's end on the line before through HBlank (or VBlank) and the scan (pipeline-rests, scan-outputs), and ceres's position, blank pixel and FIFO from its mode 3's end (ceres-drawn-rests, proved) and, unit by unit through HBlank, the line's end and the scan, kept so with the state machine on its way to the loop (measured: ppu::display::proofs::tests::lines_lock_as_measured checks `rests` at every unit on every visible line, every LCDC and four OAMs; a unit from any state does not fit in Kani, whose symbolic execution then takes mode 3's loop in through the abort); what stays measured is where ceres's loop starts on the netlist's clock (h = 163), and the objects and window the line starts with."
 rests_on = ["readable-model-is-dmg-sim"]
 
 [mapping-scx-write]
@@ -285,6 +285,10 @@ evidence = "proved"
 
 [pipeline-rests]
 title = "Render's pipeline outside mode 3 rests: the rise after mode 3's stop drops it into background::relation::rest::hblank_rest, which every HBlank and VBlank edge keeps; from the line's end it takes, edge by edge, the shapes rest::pipe_at has, whatever LCDC, LY, hclk, VBlank and the CPU's bus give it, to before_start at h = 162 (the netlist's half of mapping-mode3-start)"
+evidence = "proved"
+
+[ceres-drawn-rests]
+title = "Mode 3 leaves ceres's background as the next line's first dot takes it: from every pair related where ceres has drawn the line, with mode3_done's end_line, at the lead-in's start, no blank pixel inserted, the FIFO sound, no object fetch aborted"
 evidence = "proved"
 
 # What the proofs leave out

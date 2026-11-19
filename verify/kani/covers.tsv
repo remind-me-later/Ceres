@@ -14,6 +14,8 @@ memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relat
 memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relation::step_agrees	byte 0	SATISFIED
 memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relation::step_agrees	byte 159	SATISFIED
 memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relation::step_agrees	the transfer ends	SATISFIED
+ppu::display::background::bisim::ceres_drawn_rests	52894f01010a81c2	ppu::display::background::bisim::ceres_drawn_rests	a related pair, the line drawn	SATISFIED
+ppu::display::background::bisim::ceres_drawn_rests_window	664160391b5c2a2c	ppu::display::background::bisim::ceres_drawn_rests_window	a related pair, the line drawn in the window	SATISFIED
 ppu::display::background::bisim::netlist_mode3_armed_attributes	504ac23f1e3f79f5	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
 ppu::display::background::bisim::netlist_mode3_armed_fetch	722858736179e939	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
 ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	8cb33ae4469ead2b	ppu::display::background::bisim::dot_from	a related pair	SATISFIED

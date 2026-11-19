@@ -296,6 +296,51 @@ fn cpu_locks_at_mode3_end() {
     assert!(end == Some(2), "mode 3 does not end 2 units after");
 }
 
+/// Where the state machine is between mode 3's end (`HBlankStart`, after
+/// `mode3_done`) and the next line's loop, with the line's length so far
+/// (`cycles_for_line`) short of the abort's (`dmg-lines-not-cut`): HBlank
+/// counts to at most 454 before `HBlankPalettesUnlock` resets it, the scan
+/// to at most 89. The line after is visible.
+#[cfg(test)]
+const fn between_lines(state: State, wait: i32, cfl: i32, line: u8, index: u8) -> bool {
+    let hblank = (line < super::LINES - 1) & (wait >= 0) & (wait <= super::LINE_LENGTH);
+    let scan = (line < super::LINES) & (cfl >= 0) & (cfl <= 100) & (wait >= 0) & (wait <= 3);
+    match state {
+        State::HBlankStart => hblank & (cfl >= 0) & (cfl <= 450),
+        State::HBlankHdma => hblank & (cfl >= 0) & (cfl <= 452),
+        State::HBlankPalettesUnlock => hblank & (cfl >= 0) & (cfl <= 454),
+        State::LineEnd | State::NextLine => hblank & (cfl == 0),
+        State::LineOamWriteLock
+        | State::LineLy
+        | State::OamScanStart
+        | State::Mode3PalettesLock => scan,
+        State::OamScanObject => scan & (index < 40),
+        State::Mode3Start => scan & (wait >= 1),
+        _ => false,
+    }
+}
+
+/// The background between lines as mode 3's first dot takes it
+/// (`background::relation::start_before`): at the lead-in's start, no
+/// blank pixel inserted, the FIFO sound, no object fetch aborted; and the
+/// state machine on its way there.
+#[cfg(test)]
+fn rests(ppu: &Ppu) -> bool {
+    let pace = &ppu.pace;
+    let bg = &pace.bg;
+    (bg.position == super::pos(-16))
+        & !bg.insert_blank
+        & bg.fifo.sound()
+        & !pace.object_fetch_aborted
+        & between_lines(
+            pace.state,
+            pace.wait,
+            pace.cfl,
+            ppu.d.current_line,
+            pace.objs.index,
+        )
+}
+
 #[cfg(test)]
 mod tests {
     use {
@@ -379,6 +424,15 @@ mod tests {
                             next_line = Some(unit);
                             break;
                         }
+                        // Between the lines, nothing touches the background and
+                        // the state machine goes on to the loop (`rests`, part of
+                        // `mapping-mode3-start`).
+                        let between = (line > 0 && loop_start.is_none())
+                            || (end.is_some() && line < super::super::LINES - 1);
+                        assert!(
+                            !between || rests(&ppu),
+                            "line {line}, LCDC {lcdc:02X}, OAM {seed}: unit {unit} does not rest"
+                        );
                         ppu.run_display(&mut ints);
                         // Mode 3's end: the unit in which HBlankStart runs
                         // (`timing_mode3_end`); the timing unit's first sight

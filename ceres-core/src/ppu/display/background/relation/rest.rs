@@ -281,3 +281,18 @@ pub(crate) fn scan_agrees(p: NetPipeline, h: i32, free: Free) -> bool {
     p.edge(scan_inputs(h + 1, free));
     pipe_at(&p, h + 1) & ((h + 1 != 162) | (p == before_start(&p)))
 }
+
+/// Ceres's background as mode 3 leaves it: from a pair related where ceres
+/// has drawn the line, `mode3_done`'s part in it (`end_line`, which
+/// `ceres_dot` leaves out: the relation follows the loop, not what runs
+/// after it) puts it at the lead-in's start, with no blank pixel inserted,
+/// the FIFO sound and no object fetch aborted, as the next line's first dot
+/// takes it (`start_before`).
+pub(crate) fn drawn_agrees(l: &Mode3Loop, net: &NetPipeline, g: Ghost) -> bool {
+    if !(related(l, net, g) & drawn(&l.pace)) {
+        return true;
+    }
+    let mut bg = l.pace.bg.clone();
+    _ = bg.end_line();
+    (bg.position == pos(-16)) & !bg.insert_blank & bg.fifo.sound() & !l.pace.object_fetch_aborted
+}

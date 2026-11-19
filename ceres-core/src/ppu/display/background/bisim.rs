@@ -1205,3 +1205,40 @@ fn netlist_rest_scan() {
     kani::cover!(pipe_at(&p, h) & (h == 161), "before_start next");
     assert!(scan_agrees(p, h, kani::any()));
 }
+
+/// Ceres's background where mode 3 leaves it (`relation::rest::
+/// drawn_agrees`), from every related pair where the line is drawn, with
+/// the window off.
+// @assumes transcription-render-edge
+// @discharges ceres-drawn-rests
+#[kani::proof]
+#[kani::unwind(12)]
+fn ceres_drawn_rests() {
+    let (l, net, g) = dot_pair(State::HBlankStart, None, Window::Off);
+    kani::cover!(
+        related_but_pipeline(&l, &net, g),
+        "a related pair, the line drawn"
+    );
+    assert!(super::relation::rest::drawn_agrees(&l, &net, g));
+}
+
+/// The same in the window, from the `window_dot` harnesses' pairs where the
+/// line is drawn.
+// @assumes transcription-render-edge
+// @assumes lead-in-objects
+// @discharges ceres-drawn-rests
+#[kani::proof]
+#[kani::unwind(12)]
+fn ceres_drawn_rests_window() {
+    let i: usize = kani::any();
+    kani::assume(i < WINDOW_PAIRS.len());
+    let (window, object) = WINDOW_PAIRS[i];
+    kani::assume(object.is_none());
+    let (l, net, g, _) = window_pair(window, object);
+    kani::assume(matches!(l.pace.state, State::HBlankStart));
+    kani::cover!(
+        related_but_pipeline(&l, &net, g),
+        "a related pair, the line drawn in the window"
+    );
+    assert!(super::relation::rest::drawn_agrees(&l, &net, g));
+}
