@@ -14,60 +14,60 @@ memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relat
 memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relation::step_agrees	byte 0	SATISFIED
 memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relation::step_agrees	byte 159	SATISFIED
 memory::dma::bisim::netlist_dma_bisimulation	d9659e50fa44b2f4	memory::dma::relation::step_agrees	the transfer ends	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_attributes	40d598f052ace45a	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch	0918ae3d4e4dd649	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	a1f461e97360e18c	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	4969362faa8bc333	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_high	7582c9e211dbdf6c	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_low	83594de0499bcf56	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_pixel	f14527d8b21a3ad4	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_armed_wait	a024d55cfd59102e	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_attributes	4ed715febea804b0	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	SCX written in the lead-in	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	WX in the next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	lead-in restarted	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	line drawn	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	netlist still discards	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	netlist's fetcher ahead	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	object pushed	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	object pushed in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	object waits for the tile	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	push next dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	the window's first pixel held for an object	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	two objects left	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_covers	4d6ae54e54dd8b79	ppu::display::background::bisim::netlist_mode3_dot_covers	unmatched lead-in	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_drawn	28fee6b0c8f7464f	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch	7b11cfddb9eb3ebf	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	d5825fbc77d3c603	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	802a297ece68fbec	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_high	9accb1bf8ef496f1	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_low	edd6f8958a5d9410	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_pixel	41c3eda7cc65af48	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_dot_wait	c7c3142e2ce01cd0	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_inside_attributes	339357a931718f94	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_inside_fetch	338822498f2e23d9	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	83a66f5a88aeb770	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	96f6aec761159ca0	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_inside_high	c8287968274dd6d8	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_inside_low	7811ac5b0cf6faa5	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_inside_wait	82e5f500ff8396c4	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	a blank pixel drawn	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	an object at WX + 1 stops the start	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	an object stops the start's pixels	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	line drawn in the start	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	line drawn in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	the check reaches WX	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	the lead-in in the window	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	the start's last dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	the window waits for SCX's discard	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	the window's column wrapped	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	the window's first dot	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_covers	43305e00599a0aba	ppu::display::background::bisim::netlist_mode3_window_covers	the window's row pushed	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_inside	523fe3cb31dc2278	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_reached	922ca92f99f4ebfb	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_starting	185fda2d21022f0d	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
-ppu::display::background::bisim::netlist_mode3_window_starting_wait	70bdf6fad87706aa	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_attributes	2735b8592d1955cc	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch	1f38dc6cc6f6bbea	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_after_push	3dbdb326c6a141bf	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_fetch_pushed	b75bfcaddbd0df8e	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_high	1a3fc0344727d7a4	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_low	a746a6bf66d6dcd3	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_pixel	680136bea3737ffc	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_armed_wait	5d76656c412cd8d2	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_attributes	508a4d035502dee6	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	SCX written in the lead-in	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	WX in the next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	lead-in restarted	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	line drawn	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	netlist still discards	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	netlist's fetcher ahead	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	object pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	object pushed in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	object waits for the tile	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	push next dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	the window's first pixel held for an object	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	two objects left	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_covers	2e6229f5eda92862	ppu::display::background::bisim::netlist_mode3_dot_covers	unmatched lead-in	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_drawn	f11bf0eb3adb553a	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch	3ae80fa8e18c82b2	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch_after_push	e09665a61fd7515c	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_fetch_pushed	b514a05c7ae38c23	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_high	0e3cc0441cd16b21	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_low	40a913c34fc5ec60	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_pixel	24f67217a2d7b612	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_dot_wait	573aab24903675b2	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_attributes	18c9caf39df1856d	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch	2ba071c38f629379	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_after_push	548356be660d0456	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_fetch_pushed	8224b36951572cd0	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_high	156cc9994878a635	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_low	c88917266e9b8361	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_inside_wait	347576b51b7010f1	ppu::display::background::bisim::dot_from	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	a blank pixel drawn	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	an object at WX + 1 stops the start	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	an object stops the start's pixels	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	line drawn in the start	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	line drawn in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	the check reaches WX	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	the lead-in in the window	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	the start's last dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	the window waits for SCX's discard	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	the window's column wrapped	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	the window's first dot	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_covers	4102de442ca79f3c	ppu::display::background::bisim::netlist_mode3_window_covers	the window's row pushed	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_inside	5740b50e2a46089d	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_reached	a2dd20609c860e2f	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_starting	92b8c2720e6c436c	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
+ppu::display::background::bisim::netlist_mode3_window_starting_wait	b019689c8cc4bc94	ppu::display::background::bisim::window_dot	a related pair	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	915c8cc7c2311447	ppu::display::objects::bisim::netlist_scan_dma	a DMA that ends in the scan	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	915c8cc7c2311447	ppu::display::objects::bisim::netlist_scan_dma	a DMA that starts in the scan, ten sprites	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	915c8cc7c2311447	ppu::display::objects::bisim::netlist_scan_dma	the CPU halts during the scan	SATISFIED
