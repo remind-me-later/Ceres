@@ -1,6 +1,7 @@
 import Sketch.Chip
 import Sketch.Dmg
 import Sketch.DmgReal
+import Sketch.DmgMode3
 
 /-! The outline's theorems rest on Lean's own axioms and on their
 hypotheses (the blocks' claims) only: the build of `Sketch` fails if one
@@ -23,3 +24,9 @@ info: 'ceres_core.sketch.dmg.dmg_agrees_real' depends on axioms: [propext, Class
 -/
 #guard_msgs in
 #print axioms ceres_core.sketch.dmg.dmg_agrees_real
+
+/--
+info: 'ceres_core.sketch.dmg.dmg_agrees_mode3' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.sketch.dmg.dmg_agrees_mode3

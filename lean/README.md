@@ -125,6 +125,13 @@ emulator's types yet.
   for it today: a proof to plug in, Kani's not yet translated, or nothing.
 - `Sketch/DmgReal.lean`: `dmg_agrees_real`, the same with the real M-cycle
   blocks (`hPer_real`), on Kani's five claims.
+- `Sketch/DmgMode3.lean`: `dmg_agrees_mode3`, the same with the line's
+  mode 3 phase taken from Kani's dot harnesses (`mode3_phase`, on
+  `mode3_dot_steps` through `StepsInto.embed`): what stands for it is how
+  the line holds mode 3's blocks (its dot is the pipeline's and the loop's
+  on its state taken apart and put back, the rest left alone), that
+  related dot inputs make the same mode 3 input, that the line's end is in
+  HBlank's relation, and that its known difference takes mode 3's.
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
   axioms, with no `sorry`.
 

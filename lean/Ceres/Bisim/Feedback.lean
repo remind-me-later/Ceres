@@ -87,4 +87,34 @@ theorem Steps.phases {Sn Sc In Ic On Oc ι : Type}
   rintro n c ⟨k, hr⟩ i j hij
   exact h k n c hr i j hij
 
+/-- A block's step inside a larger state: the larger step takes the
+block's state out (`pn`, `pc`), steps it on the input made from its own
+(`inN`, `inC`), puts it back (`setN`, `setC`) and gives an output made
+from the block's (`outN`, `outC`). The rest of the state is left as it
+was: `F`, what relates it, holds of whatever the block's states become.
+Then the larger step carries the block's claim: from states whose blocks
+`R` relates and whose rest `F` does, into those `Q'` makes of the
+block's `R'`. -/
+theorem StepsInto.embed {Sn Sc In Ic On Oc Ln Lc DIn DIc DOn DOc : Type}
+    {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → In → Prop}
+    {R R' : Sn → Sc → Prop} (h : StepsInto net cer RI RO K R R')
+    {dotN : Ln → DIn → Result (DOn × Ln)} {dotC : Lc → DIc → Result (DOc × Lc)}
+    (pn : Ln → Sn) (pc : Lc → Sc) (setN : Ln → Sn → Ln) (setC : Lc → Sc → Lc)
+    (inN : DIn → In) (inC : DIc → Ic) (outN : On → DOn) (outC : Oc → DOc)
+    (hN : ∀ n i, dotN n i = (do let (o, s) ← net (pn n) (inN i); ok (outN o, setN n s)))
+    (hC : ∀ c j, dotC c j = (do let (p, t) ← cer (pc c) (inC j); ok (outC p, setC c t)))
+    {RI' : DIn → DIc → Prop} (hI : ∀ i j, RI' i j → RI (inN i) (inC j))
+    {RO' : DOn → DOc → Prop} (hO : ∀ o p, RO o p → RO' (outN o) (outC p))
+    (F Q' : Ln → Lc → Prop)
+    (hQ' : ∀ n c s t, F n c → R' s t → Q' (setN n s) (setC c t)) :
+    StepsInto dotN dotC RI' RO' (fun n i => K (pn n) (inN i))
+      (fun n c => R (pn n) (pc c) ∧ F n c) Q' := by
+  rintro n c ⟨hr, hf⟩ i j hij
+  rcases h (pn n) (pc c) hr (inN i) (inC j) (hI i j hij) with k | ⟨o, s, p, t, hn, hc, ho, hr'⟩
+  · exact Or.inl k
+  · refine Or.inr ⟨outN o, setN n s, outC p, setC c t, ?_, ?_, hO o p ho, hQ' n c s t hf hr'⟩
+    · simp [hN, hn]
+    · simp [hC, hc]
+
 end ceres_core.bisim

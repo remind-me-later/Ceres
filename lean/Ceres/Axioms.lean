@@ -52,6 +52,12 @@ info: 'ceres_core.bisim.Steps.feedback' depends on axioms: [propext, Classical.c
 #print axioms ceres_core.bisim.Steps.feedback
 
 /--
+info: 'ceres_core.bisim.StepsInto.embed' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.bisim.StepsInto.embed
+
+/--
 info: 'ceres_core.mode3.mode3_dot_steps' depends on axioms: [propext, Classical.choice, Quot.sound]
 -/
 #guard_msgs in
