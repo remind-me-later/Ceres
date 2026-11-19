@@ -290,12 +290,13 @@ pub(crate) fn ceres_first_dot(l: &mut Mode3Loop) {
 
 /// The first dot from the netlist's state before it, and ceres's after the
 /// line before (its position back at the lead-in's start, and no blank pixel
-/// inserted; the window idle or armed), with the mixer's SCX in the dot before
-/// (`last_scx`) and in this one: both related.
+/// inserted; the window idle or armed), with the mixer's SCX in this dot
+/// (the loop has the dot before's, as in `step_agrees`): both related, and
+/// mode 3 goes on.
 pub(crate) fn start_agrees(
     l: &mut Mode3Loop,
     net: &mut NetPipeline,
-    last_scx: u8,
+    mixer_scx: u8,
     rising: EdgeInputs,
     falling: EdgeInputs,
 ) -> bool {
@@ -304,20 +305,22 @@ pub(crate) fn start_agrees(
         & !falling.clk
         & quiet(&rising, l)
         & quiet(&falling, l)
-        & writes(net, &rising, &falling, last_scx)
+        & writes(net, &rising, &falling, l.mixer_scx)
         & (!l.window_enabled | holds_wx(&net.inputs, &rising) & holds_wx(&rising, &falling)))
     {
         return true;
     }
+    l.mixer_scx = mixer_scx;
     let snapshot = Before::of(&l.pace);
     ceres_first_dot(l);
     net.edge(rising);
+    let stopped_early = net.stop_mode3();
     net.edge(falling);
     let rest = Ghost {
         age: 0,
         ..Ghost::at_rest(&l.pace.bg)
     };
-    related(l, net, rest.after(snapshot, &l.pace))
+    !stopped_early & !net.stop_mode3() & related(l, net, rest.after(snapshot, &l.pace))
 }
 
 /// The two sides before the loop's first dot, as `start_agrees` takes

@@ -78,19 +78,24 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   netlist's two edges against ceres's dot, from related states into related
   ones or the line's end (ceres drawn, the netlist's mode 3 stopped at the
   dot's second edge); `netlist_mode3_start` (`KaniMode3Start`) gives
-  `mode3_start`, the loop's first dot into related states. The harnesses are
-  split by ceres's sleep and the window; `netlist_mode3_dot_split` checks
-  that together they take every related pair and every input the guard lets
-  through. One thing is taken on trust: the guard (quiet inputs, WX held, the
-  lead-in matched) reads ceres's state, so the block's known difference is
-  the guard failing for some ceres state related to the netlist's.
+  `mode3_start_steps`, the loop's first dot as a block (the same netlist
+  dot against ceres's first, `cerStart`), from the scan's end as
+  `start_before` has it (`Starting`) into related states, mode 3 going on in
+  the netlist. The harnesses are split by ceres's sleep and the window;
+  `netlist_mode3_dot_split` checks that together they take every related
+  pair and every input the guard lets through. One thing is taken on trust:
+  the guard (quiet inputs, WX held, the lead-in matched) reads ceres's
+  state, so the block's known difference is the guard failing for some
+  ceres state related to the netlist's.
 - `Ceres/Bisim/Line.lean`: a line's start, the OAM scan before mode 3. The
   scan is the proved one (`scan_agrees`), and mode 3's start a hypothesis
   (`hStart`: from the scan's end, ceres's first ten sprites in the
   netlist's slots, mode 3's states are related; Kani's
-  `netlist_mode3_start` for the pipeline): `scan_then_mode3`. The
-  outline's `chip_agrees` does not route a line's dots between the two
-  blocks yet: its `hM3` still stands for the scan's dots too.
+  `netlist_mode3_start` for the pipeline): `scan_then_mode3`; with
+  `hStart` landing in `Starting`, `scan_into_mode3` runs the scan and then
+  mode 3's first dot into related states. The outline's `chip_agrees` does
+  not route a line's dots between the two blocks yet: its `hM3` still
+  stands for the scan's dots too.
 - `Ceres/Axioms.lean`: the build fails if a theorem comes to rest on more
   than Lean's own axioms (`sorry`, or the compiler's through
   `native_decide`).
@@ -126,10 +131,11 @@ emulator's types yet.
 - `Sketch/DmgReal.lean`: `dmg_agrees_real`, the same with the real M-cycle
   blocks (`hPer_real`), on Kani's five claims.
 - `Sketch/DmgMode3.lean`: `dmg_agrees_mode3`, the same with the line's
-  mode 3 phase taken from Kani's dot harnesses (`mode3_phase`, on
-  `mode3_dot_steps` through `StepsInto.embed`): what stands for it is how
-  the line holds mode 3's blocks (its dot is the pipeline's and the loop's
-  on its state taken apart and put back, the rest left alone), that
+  mode 3 phases taken from Kani's harnesses (`start_phase`, mode 3's
+  first dot, on `mode3_start_steps`; `mode3_phase`, on `mode3_dot_steps`;
+  both through `StepsInto.embed`): what stands for them is how the line
+  holds mode 3's blocks (`Mode3InLine`: its dot is the pipeline's and the
+  loop's on its state taken apart and put back, the rest left alone), that
   related dot inputs make the same mode 3 input, that the line's end is in
   HBlank's relation, and that its known difference takes mode 3's.
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own

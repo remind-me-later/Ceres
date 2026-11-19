@@ -43,7 +43,9 @@ open ceres_core.bisim
 inductive Phase
   /-- The OAM scan, the line's first 80 dots. -/
   | scan
-  /-- Mode 3, the pixel pipeline. -/
+  /-- Mode 3's first dot, from the scan's end. -/
+  | start
+  /-- Mode 3, the pixel pipeline, from its second dot. -/
   | mode3
   /-- HBlank, to the line's end. -/
   | hblank
@@ -270,18 +272,25 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
   - `scan`: proved in Lean a sprite's window at a time (`scan_steps`, on
     Kani's three window claims); a window is two dots, so it needs a dot's
     cut, or the M-cycle's dots taken two windows at a time.
-  - `scan` into `mode3`: `scan_then_mode3` (`Line.lean`) and `mode3_start`
-    (on Kani's `netlist_mode3_start`), still to be joined.
-  - `mode3`: plugged in, `dmg_agrees_mode3` (`DmgMode3.lean`): Kani's dot
-    harnesses (`KaniMode3Dot`, every related pair: `netlist_mode3_dot_split`)
-    through `mode3_dot_steps`, within their scope (`lead-in-objects`,
-    `wx0-lead-in-matches` open; WX and LCDC's window and object bits held;
-    the pixels' values not compared: the dot gives only whether mode 3
-    ended). What stands for it: the line's state as the pipeline and the loop
-    with the rest left alone (`hN`, `hC`, `hFrame`, the get-put laws), the
-    dot's mode 3 input made from the M-cycle's (`hI`: the mixer's SCX, the
-    two edges' inputs), and the known difference, one-sided (the guard reads
-    ceres's state, `Steps`'s `K` does not: `hK`).
+  - `scan` into `start`: the scan's last dot leaves the line where
+    `start_before` has mode 3's blocks (`Starting`); for the whole scan,
+    `scan_into_mode3` (`Line.lean`), with the store's mapping onto mode 3's
+    blocks as its hypothesis (`hStart`).
+  - `start`, mode 3's first dot: plugged in, `start_phase`
+    (`DmgMode3.lean`), on Kani's `netlist_mode3_start` through
+    `mode3_start_steps`, into `mode3`.
+  - `mode3`: plugged in, `mode3_phase` in `dmg_agrees_mode3`
+    (`DmgMode3.lean`): Kani's dot harnesses (`KaniMode3Dot`, every related
+    pair: `netlist_mode3_dot_split`) through `mode3_dot_steps`, within
+    their scope (`lead-in-objects`, `wx0-lead-in-matches` open; WX and
+    LCDC's window and object bits held; the pixels' values not compared:
+    the dot gives only whether mode 3 ended). What stands for it and
+    `start`'s (`Mode3InLine`): the line's state as the pipeline and the
+    loop, in those phases, with the rest left alone (`hN`, `hC`, `hCs`,
+    `hFrame`, the get-put laws), the dot's mode 3 input made from the
+    M-cycle's (`hI`: the mixer's SCX, the two edges' inputs), and the known
+    difference, one-sided (the guard reads ceres's state, `Steps`'s `K`
+    does not: `hK`, `hKs`).
   - `mode3` into `hblank`: Kani's (`mode3-end-background`); in
     `dmg_agrees_mode3`, `hEnd`: the ended pair is in HBlank's relation.
   - `hblank`, `vblank`, `off`: no claim; the scan's lead-in from a line's

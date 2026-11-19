@@ -4534,7 +4534,7 @@ def ppu.display.background.relation.ghost.Ghost.after
             }
 
 /-- [ceres_core::ppu::display::background::relation::WX_AHEAD]
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 352:0-352:24 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 355:0-355:24 -/
 @[global_simps, irreducible]
 def ppu.display.background.relation.WX_AHEAD : Std.I16 := 7#i16
 
@@ -4808,7 +4808,7 @@ def ppu.display.background.relation.objects.objects_ok
     ppu.display.background.relation.FULL) && b2)))
 
 /-- [ceres_core::ppu::display::background::relation::WIN_X_MASK]
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 355:0-355:28 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 358:0-358:28 -/
 @[global_simps, irreducible]
 def ppu.display.background.relation.WIN_X_MASK : Std.U8 := 31#u8
 
@@ -8806,7 +8806,7 @@ def ppu.display.background.relation.window.net_window_off
   ok (((¬ net.sary) && (¬ net.wy_latch)) && b)
 
 /-- [ceres_core::ppu::display::background::relation::LAST_WX]
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 349:0-349:24 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 352:0-352:24 -/
 @[global_simps, irreducible]
 def ppu.display.background.relation.LAST_WX : Std.U8 := 165#u8
 
@@ -9404,14 +9404,14 @@ def ppu.display.fifo.Fifo.sound
   else ok false
 
 /-- [ceres_core::ppu::display::background::relation::objects_fit]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 437:0-439:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 440:0-442:1 -/
 def ppu.display.background.relation.objects_fit
   (l : ppu.display.background.relation.Mode3Loop) : Result Bool := do
   ok ((l.pace.objs.count <= l.pace.objs.found) && (l.pace.objs.found <=
     ppu.display.background.relation.MAX_OBJECTS))
 
 /-- [ceres_core::ppu::display::background::relation::shaped]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 426:0-434:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 429:0-437:1 -/
 def ppu.display.background.relation.shaped
   (l : ppu.display.background.relation.Mode3Loop)
   (g : ppu.display.background.relation.ghost.Ghost) :
@@ -9424,7 +9424,7 @@ def ppu.display.background.relation.shaped
     (g.window_fine <= 7#u8)) && b) && b1)
 
 /-- [ceres_core::ppu::display::background::relation::related_but_pipeline]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 367:0-379:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 370:0-382:1 -/
 def ppu.display.background.relation.related_but_pipeline
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)
@@ -9448,7 +9448,7 @@ def ppu.display.background.relation.related_but_pipeline
   else ok false
 
 /-- [ceres_core::ppu::display::background::relation::related]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 359:0-361:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 362:0-364:1 -/
 def ppu.display.background.relation.related
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)
@@ -9508,7 +9508,7 @@ def ppu.display.background.relation.objects.starting_objects
     ((¬ l.objects_enabled) || b1))
 
 /-- [ceres_core::ppu::display::background::relation::start_before]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 328:0-342:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 331:0-345:1 -/
 def ppu.display.background.relation.start_before
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline) :
@@ -9625,10 +9625,10 @@ def ppu.display.background.relation.start_before
   else ok false
 
 /-- [ceres_core::ppu::display::background::relation::start_agrees]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 295:0-321:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 296:0-324:1 -/
 def ppu.display.background.relation.start_agrees
   (l : ppu.display.background.relation.Mode3Loop)
-  (net : ceres_netlist.render_edge.NetPipeline) (last_scx : Std.U8)
+  (net : ceres_netlist.render_edge.NetPipeline) (mixer_scx : Std.U8)
   (rising : ceres_netlist.render_edge.EdgeInputs)
   (falling : ceres_netlist.render_edge.EdgeInputs) :
   Result (Bool × ppu.display.background.relation.Mode3Loop ×
@@ -9638,22 +9638,26 @@ def ppu.display.background.relation.start_agrees
   let b1 ← ppu.display.background.relation.writes.quiet rising l
   let b2 ← ppu.display.background.relation.writes.quiet falling l
   let b3 ←
-    ppu.display.background.relation.writes.writes net rising falling last_scx
+    ppu.display.background.relation.writes.writes net rising falling
+      l.mixer_scx
   let b4 ← ppu.display.background.relation.window.holds_wx net.inputs rising
   let b5 ← ppu.display.background.relation.window.holds_wx rising falling
   if (((((b && rising.clk) && (¬ falling.clk)) && b1) && b2) && b3) && ((¬
     l.window_enabled) || (b4 && b5))
   then
     let snapshot ← ppu.display.background.relation.ghost.Before.of l.pace
-    let l1 ← ppu.display.background.relation.ceres_first_dot l
+    let l1 ←
+      ppu.display.background.relation.ceres_first_dot { l with mixer_scx }
     let net1 ← ceres_netlist.render_edge.NetPipeline.edge net rising
+    let stopped_early ← ceres_netlist.render_edge.NetPipeline.stop_mode3 net1
     let net2 ← ceres_netlist.render_edge.NetPipeline.edge net1 falling
     let g ← ppu.display.background.relation.ghost.Ghost.at_rest l1.pace.bg
+    let b6 ← ceres_netlist.render_edge.NetPipeline.stop_mode3 net2
     let g1 ←
       ppu.display.background.relation.ghost.Ghost.after { g with age := 0#u8 }
         snapshot l1.pace
-    let b6 ← ppu.display.background.relation.related l1 net2 g1
-    ok (b6, l1, net2)
+    let b7 ← ppu.display.background.relation.related l1 net2 g1
+    ok (((¬ stopped_early) && (¬ b6)) && b7, l1, net2)
   else ok (true, l, net)
 
 /-- [ceres_core::ppu::display::background::relation::window::lead_in_matches]:
@@ -9668,7 +9672,7 @@ def ppu.display.background.relation.window.lead_in_matches
     && (i = ppu.display.background.relation.LAST_UNMATCHED))) || (i1 = 7#u8))
 
 /-- [ceres_core::ppu::display::background::relation::step_agrees]:
-    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 386:0-418:1 -/
+    Source: 'ceres-core/src/ppu/display/background/relation/mod.rs', lines 389:0-421:1 -/
 def ppu.display.background.relation.step_agrees
   (l : ppu.display.background.relation.Mode3Loop)
   (net : ceres_netlist.render_edge.NetPipeline)

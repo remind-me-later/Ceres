@@ -68,3 +68,15 @@ info: 'ceres_core.mode3.mode3_start' depends on axioms: [propext, Classical.choi
 -/
 #guard_msgs in
 #print axioms ceres_core.mode3.mode3_start
+
+/--
+info: 'ceres_core.mode3.mode3_start_steps' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.mode3.mode3_start_steps
+
+/--
+info: 'ceres_core.scan.scan_into_mode3' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.scan.scan_into_mode3

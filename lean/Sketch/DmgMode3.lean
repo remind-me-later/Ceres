@@ -6,33 +6,69 @@ open Aeneas Aeneas.Std Result
 # Mode 3 in the outline's line
 
 `dmg_agrees` takes the PPU's line a dot at a time, phase by phase
-(`hPhase`), each phase's claim a hypothesis. This file discharges the mode 3
-phase's claim from `mode3_dot_steps` (Kani's dot harnesses, through Aeneas's
-translation), leaving smaller hypotheses about how the line holds mode 3's
-blocks:
+(`hPhase`), each phase's claim a hypothesis. This file discharges two of
+them from Kani's harnesses, through Aeneas's translation: mode 3's first
+dot (`start`, from the scan's end: `mode3_start_steps`, on
+`netlist_mode3_start`) and the rest of mode 3 (`mode3`: `mode3_dot_steps`,
+on the dot harnesses). What stands for them is how the line holds mode 3's
+blocks (`Mode3InLine`):
 
-- `hN`, `hC`: in mode 3, the line's dot is the pipeline's dot (the
-  netlist's two edges) and the mode 3 loop's dot (ceres's), on the line's
-  state taken apart (`pn`, `pc`) and put back (`setN`, `setC`, which `pn`
-  and `pc` take out again: `hGetN`, `hGetC`), the rest of the line left as
-  it was; the dot gives whether mode 3 ended (`endN`).
+- `hN`, `hC`, `hCs`: in those phases, the line's dot is the pipeline's
+  dot (the netlist's two edges, the same in both phases) and the mode 3
+  loop's dot (ceres's: its first, or the loop's), on the line's state taken
+  apart (`pn`, `pc`) and put back (`setN`, `setC`, which `pn` and `pc`
+  take out again: `hGetN`, `hGetC`), the rest of the line left as it was;
+  the dot gives whether mode 3 ended (`endN`).
 - `hI`: related dot inputs make the same mode 3 input (the mixer's SCX,
   the two edges' inputs).
-- `hRL`: the mode 3 phase's relation is the blocks' (`Related`) with the
-  rest of the line's (`F`), which a mode 3 dot leaves alone (`hFrame`).
+- `hRS`, `hRL`: the phases' relations are the blocks' (`Starting`: the scan's
+  end as `start_before` has it; `Related`) with the rest of the line's (`F`),
+  which a mode 3 dot leaves alone (`hFrame`).
 - `hEnd`: once ceres has drawn the line and the netlist's mode 3 stopped
   (`Ended`), the line is in HBlank, as `RL hblank` has it (Kani's
   `mode3-end-background` for the pipeline; HBlank's relation is open).
-- `hK`: the line's known difference takes mode 3's (`DotK`: the guard turns
-  the dot's input away).
+- `hK`, `hKs`: the line's known difference takes mode 3's (`DotK`,
+  `StartK`: the guard turns the dot's input away).
 
-The dot's output is only whether mode 3 ended: the pixels it draws are not
-compared yet.
+The scan's side of the join, that the scan's last dot leaves the line in
+`start`'s relation, is the scan's phase's claim (`scan_then_mode3` gives
+it for the whole scan with `R3 := Starting`; a dot's cut of the scan is
+open). The dot's output is only whether mode 3 ended: the pixels it draws
+are not compared yet.
 -/
 
 namespace ceres_core.sketch.dmg
 open ceres_core.bisim ceres_core.mode3
 open ceres_core.ppu.display.background.relation ceres_netlist.render_edge
+
+/-- How the line holds mode 3's blocks, the netlist's pipeline and ceres's
+loop, in the phases they run (`start`, `mode3`). -/
+structure Mode3InLine {Ln Lc DIn DIc DO : Type}
+    (dotN : Ln → DIn → Result (DO × Ln)) (dotC : Lc → DIc → Result (DO × Lc))
+    (RDI : DIn → DIc → Prop) (KDot : Ln → DIn → Prop) (RL : Phase → Ln → Lc → Prop) where
+  pn : Ln → NetPipeline
+  pc : Lc → Mode3Loop
+  setN : Ln → NetPipeline → Ln
+  setC : Lc → Mode3Loop → Lc
+  inN : DIn → DotIn
+  inC : DIc → DotIn
+  endN : Bool → DO
+  F : Ln → Lc → Prop
+  hGetN : ∀ n s, pn (setN n s) = s
+  hGetC : ∀ c t, pc (setC c t) = t
+  hI : ∀ i j, RDI i j → inN i = inC j
+  hRS : ∀ n c, RL .start n c ↔ Starting (pn n) (pc c) ∧ F n c
+  hRL : ∀ n c, RL .mode3 n c ↔ Related (pn n) (pc c) ∧ F n c
+  hFrame : ∀ n c s t, F n c → F (setN n s) (setC c t)
+  hN : ∀ n c i, RL .start n c ∨ RL .mode3 n c →
+    dotN n i = (do let (o, s) ← netStep (pn n) (inN i); ok (endN o.2, setN n s))
+  hCs : ∀ n c j, RL .start n c →
+    dotC c j = (do let (p, t) ← cerStart (pc c) (inC j); ok (endN p, setC c t))
+  hC : ∀ n c j, RL .mode3 n c →
+    dotC c j = (do let (p, t) ← cerStep (pc c) (inC j); ok (endN p, setC c t))
+  hEnd : ∀ n c s t, F n c → Ended s t → RL .hblank (setN n s) (setC c t)
+  hKs : ∀ n i, StartK (pn n) (inN i) → KDot n i
+  hK : ∀ n i, DotK (pn n) (inN i) → KDot n i
 
 section
 
@@ -91,91 +127,74 @@ stops at the dot's second edge where ceres had drawn the line. -/
 theorem dotOut_ended {s : Bool × Bool} {d : Bool} (h : DotOut s d) : s.2 = d := by
   rcases h with ⟨rfl, -, h⟩ | ⟨rfl, -, h⟩ <;> exact h
 
+/-- Mode 3's first dot in the line, from Kani's start harness: from the
+scan's end, a dot leaves the line in mode 3. -/
+-- @assumes mapping-mode3-start
+theorem start_phase (kStart : KaniMode3Start) (m : Mode3InLine dotN dotC RDI KDot RL) :
+    StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL .start)
+      (fun n c => ∃ k', RL k' n c) := by
+  have e := StepsInto.embed (mode3_start_steps kStart) m.pn m.pc m.setN m.setC m.inN m.inC
+    (fun o => m.endN o.2) m.endN m.F (fun n c => ∃ k', RL k' n c)
+    (fun n c i hr hf => m.hN n c i (Or.inl ((m.hRS n c).2 ⟨hr, hf⟩)))
+    (fun n c j hr hf => m.hCs n c j ((m.hRS n c).2 ⟨hr, hf⟩))
+    (RI' := RDI) m.hI (RO' := fun o p => o = p)
+    (fun o p h => congrArg m.endN (dotOut_ended h))
+    (fun n c s t hf hr => ⟨.mode3, (m.hRL _ _).2
+      ⟨by rw [m.hGetN, m.hGetC]; exact hr, m.hFrame n c s t hf⟩⟩)
+  intro n c hr i j hij
+  rcases e n c ((m.hRS n c).1 hr) i j hij with k | x
+  · exact Or.inl (m.hKs n i k)
+  · exact Or.inr x
+
 /-- The mode 3 phase of the line, from Kani's dot harnesses: a dot from
 mode 3's states leaves the line in mode 3 or, the line drawn, in HBlank. -/
 -- @assumes mode3-end-background
 -- @assumes mode3-window-armed
 -- @assumes mode3-window-start
-theorem mode3_phase (kani : KaniMode3Dot)
-    (pn : Ln → NetPipeline) (pc : Lc → Mode3Loop)
-    (setN : Ln → NetPipeline → Ln) (setC : Lc → Mode3Loop → Lc)
-    (inN : DIn → DotIn) (inC : DIc → DotIn) (endN : Bool → DO)
-    (hN : ∀ n i, dotN n i =
-      (do let (o, s) ← netStep (pn n) (inN i); ok (endN o.2, setN n s)))
-    (hC : ∀ c j, dotC c j =
-      (do let (p, t) ← cerStep (pc c) (inC j); ok (endN p, setC c t)))
-    (hGetN : ∀ n s, pn (setN n s) = s) (hGetC : ∀ c t, pc (setC c t) = t)
-    (hI : ∀ i j, RDI i j → inN i = inC j)
-    (F : Ln → Lc → Prop)
-    (hRL : ∀ n c, RL .mode3 n c ↔ Related (pn n) (pc c) ∧ F n c)
-    (hFrame : ∀ n c s t, F n c → F (setN n s) (setC c t))
-    (hEnd : ∀ n c s t, F n c → Ended s t → RL .hblank (setN n s) (setC c t))
-    (hK : ∀ n i, DotK (pn n) (inN i) → KDot n i) :
+theorem mode3_phase (kani : KaniMode3Dot) (m : Mode3InLine dotN dotC RDI KDot RL) :
     StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL .mode3)
       (fun n c => ∃ k', RL k' n c) := by
-  have e := StepsInto.embed (mode3_dot_steps kani) pn pc setN setC inN inC
-    (fun o => endN o.2) endN hN hC (RI' := RDI) hI (RO' := fun o p => o = p)
-    (fun o p h => congrArg endN (dotOut_ended h)) F (fun n c => ∃ k', RL k' n c)
+  have e := StepsInto.embed (mode3_dot_steps kani) m.pn m.pc m.setN m.setC m.inN m.inC
+    (fun o => m.endN o.2) m.endN m.F (fun n c => ∃ k', RL k' n c)
+    (fun n c i hr hf => m.hN n c i (Or.inr ((m.hRL n c).2 ⟨hr, hf⟩)))
+    (fun n c j hr hf => m.hC n c j ((m.hRL n c).2 ⟨hr, hf⟩))
+    (RI' := RDI) m.hI (RO' := fun o p => o = p)
+    (fun o p h => congrArg m.endN (dotOut_ended h))
     (by
       rintro n c s t hf (hr | he)
-      · exact ⟨.mode3, (hRL _ _).2 ⟨by rw [hGetN, hGetC]; exact hr, hFrame n c s t hf⟩⟩
-      · exact ⟨.hblank, hEnd n c s t hf he⟩)
+      · exact ⟨.mode3, (m.hRL _ _).2 ⟨by rw [m.hGetN, m.hGetC]; exact hr, m.hFrame n c s t hf⟩⟩
+      · exact ⟨.hblank, m.hEnd n c s t hf he⟩)
   intro n c hr i j hij
-  rcases e n c ((hRL n c).1 hr) i j hij with k | x
-  · exact Or.inl (hK n i k)
+  rcases e n c ((m.hRL n c).1 hr) i j hij with k | x
+  · exact Or.inl (m.hK n i k)
   · exact Or.inr x
 
-/-- The outline's `hPhase` with its mode 3 phase discharged: the other
-phases' claims (`hOther`) and `mode3_phase`'s hypotheses give it all. -/
-theorem phases_with_mode3 (kani : KaniMode3Dot)
-    (hOther : ∀ k, k ≠ .mode3 → StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k)
-      (fun n c => ∃ k', RL k' n c))
-    (pn : Ln → NetPipeline) (pc : Lc → Mode3Loop)
-    (setN : Ln → NetPipeline → Ln) (setC : Lc → Mode3Loop → Lc)
-    (inN : DIn → DotIn) (inC : DIc → DotIn) (endN : Bool → DO)
-    (hN : ∀ n i, dotN n i =
-      (do let (o, s) ← netStep (pn n) (inN i); ok (endN o.2, setN n s)))
-    (hC : ∀ c j, dotC c j =
-      (do let (p, t) ← cerStep (pc c) (inC j); ok (endN p, setC c t)))
-    (hGetN : ∀ n s, pn (setN n s) = s) (hGetC : ∀ c t, pc (setC c t) = t)
-    (hI : ∀ i j, RDI i j → inN i = inC j)
-    (F : Ln → Lc → Prop)
-    (hRL : ∀ n c, RL .mode3 n c ↔ Related (pn n) (pc c) ∧ F n c)
-    (hFrame : ∀ n c s t, F n c → F (setN n s) (setC c t))
-    (hEnd : ∀ n c s t, F n c → Ended s t → RL .hblank (setN n s) (setC c t))
-    (hK : ∀ n i, DotK (pn n) (inN i) → KDot n i) :
+/-- The outline's `hPhase` with mode 3's phases discharged: the other
+phases' claims (`hOther`) and how the line holds mode 3's blocks give it
+all. -/
+theorem phases_with_mode3 (kani : KaniMode3Dot) (kStart : KaniMode3Start)
+    (m : Mode3InLine dotN dotC RDI KDot RL)
+    (hOther : ∀ k, k ≠ .start → k ≠ .mode3 →
+      StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k) (fun n c => ∃ k', RL k' n c)) :
     ∀ k, StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k)
       (fun n c => ∃ k', RL k' n c) := by
   intro k
   cases k with
-  | mode3 => exact mode3_phase kani pn pc setN setC inN inC endN hN hC hGetN hGetC hI F hRL hFrame hEnd hK
-  | scan => exact hOther _ (by intro h; cases h)
-  | hblank => exact hOther _ (by intro h; cases h)
-  | vblank => exact hOther _ (by intro h; cases h)
-  | off => exact hOther _ (by intro h; cases h)
-  | first => exact hOther _ (by intro h; cases h)
+  | start => exact start_phase kStart m
+  | mode3 => exact mode3_phase kani m
+  | scan => exact hOther _ (by intro h; cases h) (by intro h; cases h)
+  | hblank => exact hOther _ (by intro h; cases h) (by intro h; cases h)
+  | vblank => exact hOther _ (by intro h; cases h) (by intro h; cases h)
+  | off => exact hOther _ (by intro h; cases h) (by intro h; cases h)
+  | first => exact hOther _ (by intro h; cases h) (by intro h; cases h)
 
-/-- `dmg_agrees` with the line's mode 3 phase taken from Kani's dot
-harnesses (`phases_with_mode3`): the other phases' claims and
-`mode3_phase`'s hypotheses on how the line holds mode 3's blocks stand for
-`hPhase`. -/
-theorem dmg_agrees_mode3 (kani : KaniMode3Dot)
-    (hOther : ∀ k, k ≠ .mode3 → StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k)
-      (fun n c => ∃ k', RL k' n c))
-    (pn : Ln → NetPipeline) (pc : Lc → Mode3Loop)
-    (setN : Ln → NetPipeline → Ln) (setC : Lc → Mode3Loop → Lc)
-    (inN : DIn → DotIn) (inC : DIc → DotIn) (endN : Bool → DO)
-    (hN : ∀ n i, dotN n i =
-      (do let (o, s) ← netStep (pn n) (inN i); ok (endN o.2, setN n s)))
-    (hC : ∀ c j, dotC c j =
-      (do let (p, t) ← cerStep (pc c) (inC j); ok (endN p, setC c t)))
-    (hGetN : ∀ n s, pn (setN n s) = s) (hGetC : ∀ c t, pc (setC c t) = t)
-    (hI : ∀ i j, RDI i j → inN i = inC j)
-    (F : Ln → Lc → Prop)
-    (hRL : ∀ n c, RL .mode3 n c ↔ Related (pn n) (pc c) ∧ F n c)
-    (hFrame : ∀ n c s t, F n c → F (setN n s) (setC c t))
-    (hEnd : ∀ n c s t, F n c → Ended s t → RL .hblank (setN n s) (setC c t))
-    (hK : ∀ n i, DotK (pn n) (inN i) → KDot n i)
+/-- `dmg_agrees` with the line's mode 3 phases taken from Kani's harnesses
+(`phases_with_mode3`): the other phases' claims and how the line holds
+mode 3's blocks (`Mode3InLine`) stand for `hPhase`. -/
+theorem dmg_agrees_mode3 (kani : KaniMode3Dot) (kStart : KaniMode3Start)
+    (m : Mode3InLine dotN dotC RDI KDot RL)
+    (hOther : ∀ k, k ≠ .start → k ≠ .mode3 →
+      StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k) (fun n c => ∃ k', RL k' n c))
     (hLocks : ∀ n c, (∃ k, RL k n c) → locksN n = locksC c)
     (hMem : Steps memN memC (fun i j => RAcc i.1 j.1 ∧ i.2 = j.2) RMO KMem RM)
     (hDots : ∀ a b, RAcc a.1 b.1 ∧ RMO a.2 b.2 → List.Forall₂ RDI (dotsN a) (dotsC b))
@@ -199,8 +218,8 @@ theorem dmg_agrees_mode3 (kani : KaniMode3Dot)
         (close (fun d x => (outC d x, x)) nextC
           (bus locksC dotC dotsC memC ended perC busC joyC apuC))
         (fun x y => x = y) (BusOut RMO RSeen RBO RJO RAO) K n c :=
-  dmg_agrees (phases_with_mode3 kani hOther pn pc setN setC inN inC endN hN hC hGetN hGetC hI F
-    hRL hFrame hEnd hK) hLocks hMem hDots hPer hBusSide hJoySerial hApu hOut hNext
+  dmg_agrees (phases_with_mode3 kani kStart m hOther) hLocks hMem hDots hPer hBusSide
+    hJoySerial hApu hOut hNext
 
 end
 

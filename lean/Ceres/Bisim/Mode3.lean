@@ -220,31 +220,32 @@ theorem mode3_dot_steps (kani : KaniMode3Dot) :
 /-- What Kani proves of the loop's first dot (`netlist_mode3_start`; its
 loop as `start_before` takes it, `netlist_mode3_dot_split`). -/
 def KaniMode3Start : Prop :=
-  ∀ l net last_scx rising falling, ∃ l' net',
-    start_agrees l net last_scx rising falling = ok (true, l', net')
+  ∀ l net mixer rising falling, ∃ l' net',
+    start_agrees l net mixer rising falling = ok (true, l', net')
 
-/-- The inputs `start_agrees` takes the first dot from. -/
-def startGuard (l : Mode3Loop) (net : NetPipeline) (last_scx : U8)
-    (rising falling : EdgeInputs) : Result Bool := do
+/-- The inputs `start_agrees` takes the first dot from (the loop has the
+mixer's SCX in the dot before). -/
+def startGuard (l : Mode3Loop) (net : NetPipeline) (rising falling : EdgeInputs) :
+    Result Bool := do
   let b ← start_before l net
   let b1 ← writes.quiet rising l
   let b2 ← writes.quiet falling l
-  let b3 ← writes.writes net rising falling last_scx
+  let b3 ← writes.writes net rising falling l.mixer_scx
   let b4 ← window.holds_wx net.inputs rising
   let b5 ← window.holds_wx rising falling
   ok ((((((b && rising.clk) && (¬ falling.clk)) && b1) && b2) && b3) &&
     ((¬ l.window_enabled) || (b4 && b5)))
 
 /-- The loop's first dot, from the netlist's state at the end of the dot
-before (`before_start`, `mapping-mode3-start`) and the scan's objects:
-both sides step, and the pair is related, with some ghost. -/
+before (`before_start`, `mapping-mode3-start`) and the scan's objects,
+with the mixer's SCX `mixer`: both sides step, mode 3 going on in the
+netlist, and the pair is related, with some ghost. -/
 -- @assumes mapping-mode3-start
-theorem mode3_start (kani : KaniMode3Start) {l net last_scx rising falling}
-    (hg : startGuard l net last_scx rising falling = ok true) :
-    ∃ l' net', ceres_first_dot l = ok l' ∧
-      (do let n1 ← NetPipeline.edge net rising; NetPipeline.edge n1 falling) = ok net' ∧
-      Related net' l' := by
-  obtain ⟨l', net', k⟩ := kani l net last_scx rising falling
+theorem mode3_start (kani : KaniMode3Start) {l net mixer rising falling}
+    (hg : startGuard l net rising falling = ok true) :
+    ∃ l' net', ceres_first_dot { l with mixer_scx := mixer } = ok l' ∧
+      netDot net rising falling = ok ((false, false), net') ∧ Related net' l' := by
+  obtain ⟨l', net', k⟩ := kani l net mixer rising falling
   unfold start_agrees at k
   unfold startGuard at hg
   obtain ⟨b, hb, hg⟩ := bind_eq_ok hg
@@ -259,12 +260,57 @@ theorem mode3_start (kani : KaniMode3Start) {l net last_scx rising falling}
   obtain ⟨snap, -, k⟩ := bind_eq_ok k
   obtain ⟨l1, hl1, k⟩ := bind_eq_ok k
   obtain ⟨n1, hn1, k⟩ := bind_eq_ok k
+  obtain ⟨s1, hs1, k⟩ := bind_eq_ok k
   obtain ⟨n2, hn2, k⟩ := bind_eq_ok k
   obtain ⟨g0, -, k⟩ := bind_eq_ok k
+  obtain ⟨s2, hs2, k⟩ := bind_eq_ok k
   obtain ⟨g1, -, k⟩ := bind_eq_ok k
-  obtain ⟨b6, hb6, k⟩ := bind_eq_ok k
+  obtain ⟨b7, hb7, k⟩ := bind_eq_ok k
   simp only [Result.ok.injEq, Prod.mk.injEq] at k
-  obtain ⟨rfl, rfl, rfl⟩ := k
-  exact ⟨l1, n2, hl1, by simp [hn1, hn2], g1, hb6⟩
+  obtain ⟨hk, rfl, rfl⟩ := k
+  cases s1 <;> cases s2 <;> simp at hk
+  subst hk
+  exact ⟨l1, n2, hl1, by simp [netDot, hn1, hs1, hn2, hs2], g1, hb7⟩
+
+/-- Ceres's first dot of the loop as a block's step: mode 3 goes on. -/
+def cerStart (l : Mode3Loop) (i : DotIn) : Result (Bool × Mode3Loop) := do
+  let l1 ← ceres_first_dot { l with mixer_scx := i.1 }
+  ok (false, l1)
+
+/-- The states the first dot starts from: the scan's end as `start_before`
+has it. -/
+def Starting (net : NetPipeline) (l : Mode3Loop) : Prop := start_before l net = ok true
+
+/-- The first dot's known differences: the guard turns the input away, for
+a ceres state at the start with the netlist's (the netlist's side of it, as
+`DotK`). -/
+def StartK (net : NetPipeline) (i : DotIn) : Prop :=
+  ∃ l, Starting net l ∧ startGuard l net i.2.1 i.2.2 = ok false
+
+/-- The first dot as a block: from the scan's end, the netlist's dot (the
+same as in the rest of mode 3, `netStep`) and ceres's first (`cerStart`)
+leave the pair in mode 3's relation, neither side's mode 3 ending. -/
+-- @assumes mapping-mode3-start
+theorem mode3_start_steps (kani : KaniMode3Start) :
+    StepsInto netStep cerStart (fun i j => i = j) DotOut StartK Starting Related := by
+  rintro net l hs i j rfl
+  obtain ⟨mixer, rising, falling⟩ := i
+  obtain ⟨l', net', k⟩ := kani l net mixer rising falling
+  have hg : ∃ b, startGuard l net rising falling = ok b := by
+    unfold start_agrees at k
+    obtain ⟨b, hb, k⟩ := bind_eq_ok k
+    obtain ⟨b1, hb1, k⟩ := bind_eq_ok k
+    obtain ⟨b2, hb2, k⟩ := bind_eq_ok k
+    obtain ⟨b3, hb3, k⟩ := bind_eq_ok k
+    obtain ⟨b4, hb4, k⟩ := bind_eq_ok k
+    obtain ⟨b5, hb5, k⟩ := bind_eq_ok k
+    exact ⟨_, by simp only [startGuard, hb, hb1, hb2, hb3, hb4, hb5, bind_ok]; rfl⟩
+  obtain ⟨b, hb⟩ := hg
+  cases b with
+  | false => exact Or.inl ⟨l, hs, hb⟩
+  | true =>
+    obtain ⟨l2, net2, hc, hn, hr⟩ := mode3_start kani (mixer := mixer) hb
+    exact Or.inr ⟨(false, false), net2, false, l2, hn, by simp [cerStart, hc],
+      Or.inr ⟨rfl, rfl, rfl⟩, hr⟩
 
 end ceres_core.mode3
