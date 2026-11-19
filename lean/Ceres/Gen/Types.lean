@@ -697,6 +697,17 @@ inductive ppu.display.background.relation.pipeline.SpritePhase where
 | Low : ppu.display.background.relation.pipeline.SpritePhase
 | High : ppu.display.background.relation.pipeline.SpritePhase
 
+/-- [ceres_core::ppu::display::background::relation::rest::Free]
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 32:0-40:1 -/
+structure ppu.display.background.relation.rest.Free where
+  lcdc : Std.U8
+  ly : Std.U8
+  hclk : Bool
+  mode1 : Bool
+  cpu_wr_sync : Bool
+  addr : Std.U16
+  data : Std.U8
+
 /-- [ceres_core::ppu::display::objects::OamLatches]
     Source: 'ceres-core/src/ppu/display/objects/mod.rs', lines 59:0-62:1 -/
 structure ppu.display.objects.OamLatches where

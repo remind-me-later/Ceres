@@ -440,3 +440,6 @@ pub(crate) const fn shaped(l: &Mode3Loop, g: Ghost) -> bool {
 pub(crate) const fn objects_fit(l: &Mode3Loop) -> bool {
     (l.pace.objs.count <= l.pace.objs.found) & (l.pace.objs.found <= MAX_OBJECTS)
 }
+
+/// The pipeline outside mode 3, from its end to the next line's start.
+pub(crate) mod rest;

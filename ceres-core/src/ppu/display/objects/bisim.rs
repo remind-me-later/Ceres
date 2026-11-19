@@ -491,3 +491,64 @@ fn netlist_scan_tail() {
         any_line()
     ));
 }
+
+use super::relation::{ended_agrees, lead_in_outputs, scan_ended, tail_outputs, window_outputs};
+
+/// The lead-in's outputs to render (`relation::lead_in_outputs`).
+// @assumes transcription-scan
+// @assumes transcription-oam-latches
+// @assumes mapping-half-dot
+// @discharges scan-outputs
+#[kani::proof]
+#[kani::unwind(11)]
+fn netlist_scan_lead_in_outputs() {
+    assert!(lead_in_outputs(
+        kani::any(),
+        kani::any(),
+        kani::any(),
+        any_line(),
+        kani::any()
+    ));
+}
+
+/// A window's outputs to render (`relation::window_outputs`).
+// @assumes transcription-scan
+// @assumes transcription-oam-latches
+// @assumes mapping-half-dot
+// @discharges scan-outputs
+#[kani::proof]
+#[kani::unwind(11)]
+fn netlist_scan_window_outputs() {
+    assert!(window_outputs(
+        any_net_side(),
+        &any_ceres_side(),
+        any_line(),
+        kani::any(),
+        kani::any()
+    ));
+}
+
+/// The tail's outputs to render (`relation::tail_outputs`).
+// @assumes transcription-scan
+// @assumes transcription-oam-latches
+// @assumes mapping-half-dot
+// @discharges scan-outputs
+#[kani::proof]
+#[kani::unwind(11)]
+fn netlist_scan_tail_outputs() {
+    assert!(tail_outputs(any_net_side(), &any_ceres_side(), any_line()));
+}
+
+/// The scan through mode 3 and HBlank (`relation::ended_agrees`): ended, it
+/// stays ended, and gives render nothing.
+// @assumes transcription-scan
+// @assumes mapping-half-dot
+// @discharges scan-outputs
+#[kani::proof]
+#[kani::unwind(11)]
+fn netlist_scan_ended() {
+    let scan = any_net_side().scan;
+    let h: i32 = kani::any();
+    kani::cover!(scan_ended(&scan) & (h == 903), "the line's last edge");
+    assert!(ended_agrees(scan, h, any_line(), kani::any()));
+}

@@ -414,6 +414,129 @@ pub(crate) const fn scan(
     (net, ceres)
 }
 
+/// What the scan gives render after its edge `h` (`NetChip::step_render`,
+/// with the LCD on): the line's start over `-6` and `-5`, the stop at
+/// `154`, CENO from `-2` to `157` (`background::relation::rest::
+/// scan_inputs`, which the pipeline's claims take).
+pub(crate) const fn outputs_at(scan: &NetScan, h: i32) -> bool {
+    let line_start = scan.line_start();
+    (line_start == ((h == -6) | (h == -5)))
+        & ((scan.stop_scan() & !line_start) == (h == 154))
+        & (scan.ceno == ((h >= -2) & (h <= 157)))
+}
+
+/// The netlist's edge `h`, then whether the scan's outputs are as
+/// `outputs_at` has them.
+const fn edge_out(net: &mut NetSide, h: i32, line: Line, y: u8) -> bool {
+    net_edge(net, h, line, y);
+    outputs_at(&net.scan, h)
+}
+
+/// The lead-in's outputs: from the line's end (`lead_in_agrees`'s), at
+/// each of its edges.
+pub(crate) const fn lead_in_outputs(
+    count: u8,
+    not_saving: bool,
+    held: u8,
+    line: Line,
+    ys: LeadYs,
+) -> bool {
+    if !((count <= SLOTS) & (line.ly < 144)) {
+        return true;
+    }
+    let LeadYs { y39, y0, y1, y2 } = ys;
+    let mut net = net_at_line_end(count, not_saving, held);
+    let n = &mut net;
+    outputs_at(&n.scan, -8)
+        & edge_out(n, -7, line, y39)
+        & edge_out(n, -6, line, y0)
+        & edge_out(n, -5, line, y0)
+        & edge_out(n, -4, line, y0)
+        & edge_out(n, -3, line, y0)
+        & edge_out(n, -2, line, y1)
+        & edge_out(n, -1, line, y1)
+        & edge_out(n, 0, line, y1)
+        & edge_out(n, 1, line, y1)
+        & edge_out(n, 2, line, y2)
+        & edge_out(n, 3, line, y2)
+        & edge_out(n, 4, line, y2)
+        & edge_out(n, 5, line, y2)
+}
+
+/// A window's outputs, `2` to `38`: from a related pair, at each of its
+/// edges.
+pub(crate) const fn window_outputs(
+    net: NetSide,
+    ceres: &CeresSide,
+    line: Line,
+    j: u8,
+    y: u8,
+) -> bool {
+    if !(related(&net, ceres, line, j) & (j >= 2) & (j <= 38)) {
+        return true;
+    }
+    let h = 4 * j as i32 - 2;
+    let mut net = net;
+    let n = &mut net;
+    edge_out(n, h, line, y)
+        & edge_out(n, h + 1, line, y)
+        & edge_out(n, h + 2, line, y)
+        & edge_out(n, h + 3, line, y)
+}
+
+/// The tail's outputs: from a pair related at window 39, at each of its
+/// edges.
+pub(crate) const fn tail_outputs(net: NetSide, ceres: &CeresSide, line: Line) -> bool {
+    if !related(&net, ceres, line, 39) {
+        return true;
+    }
+    let y = ceres.latches.y;
+    let mut net = net;
+    let n = &mut net;
+    edge_out(n, 154, line, y)
+        & edge_out(n, 155, line, y)
+        & edge_out(n, 156, line, y)
+        & edge_out(n, 157, line, y)
+        & edge_out(n, 158, line, y)
+        & edge_out(n, 159, line, y)
+        & edge_out(n, 160, line, y)
+        & edge_out(n, 161, line, y)
+        & edge_out(n, 162, line, y)
+}
+
+/// The scan after its stop (`tail_agrees`'s): at the last sprite, the
+/// stop's flip-flops set, nothing scanning.
+pub(crate) const fn scan_ended(scan: &NetScan) -> bool {
+    !scan.scanning
+        & (scan.index == 39)
+        & scan.byba
+        & scan.doba
+        & !scan.start_scan
+        & !scan.anel
+        & !scan.ceno
+        & (scan.count <= SLOTS)
+}
+
+/// An edge of mode 3 or HBlank, `163` to `903` (the line's end is `904`,
+/// `-8`), from the scan ended, OAM giving any Y: the scan stays ended, and
+/// gives render no line start, no stop and CENO low.
+pub(crate) const fn ended_agrees(scan: NetScan, h: i32, line: Line, y: u8) -> bool {
+    if !(scan_ended(&scan) & (h >= 163) & (h <= 903)) {
+        return true;
+    }
+    let clocks = Clocks {
+        rising: h & 1 != 0,
+        wuvu_before: wuvu(h - 1),
+        wuvu_after: wuvu(h),
+        wosu_before: wosu(h - 1),
+        vclk: false,
+        ly: line.ly,
+    };
+    let mut scan = scan;
+    scan.edge(clocks, y, line.tall);
+    scan_ended(&scan) & !scan.line_start() & !scan.stop_scan() & !scan.ceno
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -449,6 +572,7 @@ mod tests {
             let not_saving = next(&mut x) & 1 != 0;
             let held = next(&mut x);
             assert!(lead_in_agrees(count, not_saving, held, line, lead_ys(&ys)));
+            assert!(lead_in_outputs(count, not_saving, held, line, lead_ys(&ys)));
             let mut net = net_at_line_end(count, not_saving, held);
             let mut ceres = ceres_at_line_end(held);
             lead_in(&mut net, &mut ceres, line, lead_ys(&ys));
@@ -458,6 +582,7 @@ mod tests {
             );
             for j in 2..39_u8 {
                 assert!(step_agrees(net, ceres, line, j, ys[usize::from(j) + 1]));
+                assert!(window_outputs(net, &ceres, line, j, ys[usize::from(j) + 1]));
                 step(&mut net, &mut ceres, line, j, ys[usize::from(j) + 1]);
                 assert!(
                     related(&net, &ceres, line, j + 1),
@@ -466,10 +591,19 @@ mod tests {
                 );
             }
             assert!(tail_agrees(net, &ceres, line), "run {run}: the tail");
+            assert!(
+                tail_outputs(net, &ceres, line),
+                "run {run}: the tail's outputs"
+            );
             // The whole scan is these steps.
             let (whole_net, whole_ceres) = scan(count, not_saving, held, line, ys);
             tail(&mut net, line, ys[39]);
             assert!(whole_net.slots == net.slots && whole_ceres.first == ceres.first);
+            // Ended, the scan gives render nothing through mode 3 and HBlank.
+            assert!(scan_ended(&net.scan));
+            for h in 163..904 {
+                assert!(ended_agrees(net.scan, h, line, ys[39]));
+            }
             // And ceres's list is the whole-scan model's.
             let mut first = [None; 10];
             let mut found = 0;

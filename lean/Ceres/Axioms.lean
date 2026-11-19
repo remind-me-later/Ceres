@@ -5,6 +5,7 @@ import Ceres.Bisim.Close
 import Ceres.Bisim.Feedback
 import Ceres.Bisim.Mode3
 import Ceres.Bisim.ScanDots
+import Ceres.Bisim.Rest
 
 /-! The theorems rest on Lean's own axioms only: the build fails if one
 comes to need another (`sorry`, or the compiler's, through `native_decide`
@@ -93,3 +94,27 @@ info: 'ceres_core.scan.scan_end_saves' depends on axioms: [propext, Classical.ch
 -/
 #guard_msgs in
 #print axioms ceres_core.scan.scan_end_saves
+
+/--
+info: 'ceres_core.rest.end_edges' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.rest.end_edges
+
+/--
+info: 'ceres_core.rest.pipe_scan_dot' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.rest.pipe_scan_dot
+
+/--
+info: 'ceres_core.rest.pipe_idle_dot' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.rest.pipe_idle_dot
+
+/--
+info: 'ceres_core.rest.pipe_hblank_dot' depends on axioms: [propext, Classical.choice, Quot.sound]
+-/
+#guard_msgs in
+#print axioms ceres_core.rest.pipe_hblank_dot

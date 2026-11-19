@@ -1108,3 +1108,100 @@ fn in_window_pair(l: &Mode3Loop, g: Ghost, (window, object): (Option<u8>, Option
         }
         & ((g.window != 0) | (g.window_fine == 0) & ((p + 7 == i16::from(l.wx)) | delay))
 }
+
+use super::relation::rest::{end_agrees, hblank_agrees, hblank_rest, pipe_at, scan_agrees};
+
+/// An edge of HBlank or VBlank (`relation::hblank_agrees`): out of mode 3,
+/// with no line start and no stop, the pipeline rests.
+// @assumes transcription-render-edge
+// @discharges pipeline-rests
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_rest_hblank() {
+    let p = any_pipeline();
+    let i = any_inputs();
+    kani::cover!(hblank_rest(&p) & i.mode1, "VBlank");
+    kani::cover!(
+        hblank_rest(&p) & p.voga & (p.px == 167),
+        "HBlank after mode 3"
+    );
+    assert!(hblank_agrees(p, i));
+}
+
+/// Mode 3's end with the window off (`relation::end_agrees`): from every
+/// related pair where the line is drawn, the stop and the rise after it
+/// leave the pipeline at rest.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @discharges pipeline-rests
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_rest_end() {
+    let (l, net, g) = dot_pair(State::HBlankStart, None, Window::Off);
+    let related = related_but_pipeline(&l, &net, g);
+    kani::cover!(related, "a related pair, the line drawn");
+    if related {
+        let rising = quiet_inputs(&l, true);
+        let falling = quiet_inputs(&l, false);
+        assert!(end_agrees(
+            &l,
+            net,
+            g,
+            kani::any(),
+            rising,
+            falling,
+            any_inputs()
+        ));
+    }
+}
+
+/// Mode 3's end in the window (`relation::end_agrees`), from the pairs of
+/// the `window_dot` harnesses where the line is drawn.
+// @assumes transcription-render-edge
+// @assumes mapping-scx-write
+// @assumes mode3-hooks-keep-pace
+// @assumes lead-in-objects
+// @discharges pipeline-rests
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_rest_end_window() {
+    let i: usize = kani::any();
+    kani::assume(i < WINDOW_PAIRS.len());
+    let (window, object) = WINDOW_PAIRS[i];
+    kani::assume(object.is_none());
+    let (l, net, g, _) = window_pair(window, object);
+    kani::assume(matches!(l.pace.state, State::HBlankStart));
+    let related = related_but_pipeline(&l, &net, g);
+    kani::cover!(related, "a related pair, the line drawn in the window");
+    if related {
+        let rising = quiet_inputs(&l, true);
+        let falling = quiet_inputs(&l, false);
+        assert!(end_agrees(
+            &l,
+            net,
+            g,
+            kani::any(),
+            rising,
+            falling,
+            any_inputs()
+        ));
+    }
+}
+
+/// An edge of the scan (`relation::scan_agrees`): from the line's end to
+/// mode 3's rise and `before_start`, the pipeline at each edge as
+/// `relation::pipe_at` has it.
+// @assumes transcription-render-edge
+// @assumes scan-outputs
+// @discharges pipeline-rests
+#[kani::proof]
+#[kani::unwind(12)]
+fn netlist_rest_scan() {
+    let p = any_pipeline();
+    let h: i32 = kani::any();
+    kani::cover!(pipe_at(&p, h) & (h == -7), "the line starts");
+    kani::cover!(pipe_at(&p, h) & (h == 100), "the scan");
+    kani::cover!(pipe_at(&p, h) & (h == 161), "before_start next");
+    assert!(scan_agrees(p, h, kani::any()));
+}

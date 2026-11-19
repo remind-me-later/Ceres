@@ -45,6 +45,13 @@ CARGO_TARGET_DIR=$ROOT/target/charon "$CHARON" cargo --preset=aeneas \
 	--start-from crate::ppu::display::objects::relation::scan \
 	--start-from crate::ppu::display::background::relation::step_agrees \
 	--start-from crate::ppu::display::background::relation::start_agrees \
+	--start-from crate::ppu::display::background::relation::rest::hblank_agrees \
+	--start-from crate::ppu::display::background::relation::rest::end_agrees \
+	--start-from crate::ppu::display::background::relation::rest::scan_agrees \
+	--start-from crate::ppu::display::objects::relation::lead_in_outputs \
+	--start-from crate::ppu::display::objects::relation::window_outputs \
+	--start-from crate::ppu::display::objects::relation::tail_outputs \
+	--start-from crate::ppu::display::objects::relation::ended_agrees \
 	--include ceres_netlist \
 	--dest-file "$work/ceres.llbc" -- -p ceres-core --features verify >"$work/charon.log" 2>&1 || {
 	tail -n 30 "$work/charon.log" >&2

@@ -72,6 +72,17 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   from the line's end to the scan's last edge (`162`), where the netlist's
   slots hold ceres's first ten sprites (`scan_end_saves`). OAM giving a dot
   a Y other than its window's is the known difference.
+- `Ceres/Bisim/Rest.lean`: the netlist's pixel pipeline outside mode 3,
+  where it rests rather than following ceres (`background::relation::rest`):
+  from a pair related where ceres has drawn the line, mode 3's stop and
+  the rise after it leave it at rest (`netlist_rest_end`,
+  `netlist_rest_end_window`, `end_edges`); every HBlank or VBlank edge keeps
+  it there (`netlist_rest_hblank`, `pipe_idle_dot`); and from the line's end
+  each edge of the scan, with the scan's outputs at that edge (which
+  `netlist_scan_*_outputs` and `netlist_scan_ended` show the scan gives),
+  takes it through an exact shape to `before_start` at `h = 162`, the
+  pipeline mode 3's first dot starts from (`netlist_rest_scan`,
+  `pipe_scan_dot`, a dot at a time beside `netScan`).
 - `Ceres/Bisim/Iterate.lean`: `Steps.iterate`, a block that steps one input
   at a time steps over a list of them (the scan over a line's windows; in
   the outline, mode 3's pipeline over an M-cycle's dots).

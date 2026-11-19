@@ -9714,6 +9714,223 @@ def ppu.display.background.relation.step_agrees
       ok (((¬ stopped_early) && (¬ b6)) && b7, l1, net2)
   else ok (true, l, net)
 
+/-- [ceres_core::ppu::display::background::relation::rest::COUNT_MAX]
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 43:0-43:24 -/
+@[global_simps, irreducible]
+def ppu.display.background.relation.rest.COUNT_MAX : Std.U8 := 7#u8
+
+/-- [ceres_core::ppu::display::background::relation::rest::out_of_mode3]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 49:0-67:1 -/
+def ppu.display.background.relation.rest.out_of_mode3
+  (p : ceres_netlist.render_edge.NetPipeline) : Result Bool := do
+  ok ((((((((((((((((¬ p.mode3) && (p.fetcher.count <=
+    ppu.display.background.relation.rest.COUNT_MAX)) && (¬ p.fetcher.lyzu)) &&
+    (¬ p.fetcher.nyka)) && (¬ p.fetcher.pory)) && (¬ p.fetcher.pygo)) && (¬
+    p.fetcher.started)) && (p.fine = 0#u8)) && (¬ p.puxa)) && (¬ p.nyze)) &&
+    p.discard) && (¬ p.ryfa)) && (¬ p.rene)) && (p.sprite.step <=
+    ppu.display.background.relation.SPRITE_DONE)) && (¬ p.sprite.tobu)) && (¬
+    p.sprite.vonu))
+
+/-- [ceres_core::ppu::display::background::relation::rest::idle_inputs]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 71:0-73:1 -/
+def ppu.display.background.relation.rest.idle_inputs
+  (i : ceres_netlist.render_edge.EdgeInputs) : Result Bool := do
+  ok ((((¬ i.ppu_reset) && (¬ i.hard_reset)) && (¬ i.line_start)) && (¬
+    i.stop_scan))
+
+/-- [ceres_core::ppu::display::background::relation::rest::window_rests]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 78:0-80:1 -/
+def ppu.display.background.relation.rest.window_rests
+  (p : ceres_netlist.render_edge.NetPipeline) : Result Bool := do
+  ok (((((¬ p.pyco) && (¬ p.nunu)) && (¬ p.rydy)) && (¬ p.sovy)) && ((¬
+    p.in_window) || p.nopa))
+
+/-- [ceres_core::ppu::display::background::relation::rest::hblank_rest]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 84:0-86:1 -/
+def ppu.display.background.relation.rest.hblank_rest
+  (p : ceres_netlist.render_edge.NetPipeline) : Result Bool := do
+  let b ← ppu.display.background.relation.rest.out_of_mode3 p
+  let b1 ← ppu.display.background.relation.rest.window_rests p
+  let b2 ← ppu.display.background.relation.rest.idle_inputs p.inputs
+  ok ((b && b1) && b2)
+
+/-- [ceres_core::ppu::display::background::relation::rest::line_cleared]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 91:0-101:1 -/
+def ppu.display.background.relation.rest.line_cleared
+  (p : ceres_netlist.render_edge.NetPipeline) : Result Bool := do
+  ok (((((((((¬ p.voga) && (p.px = 0#u8)) && (¬ p.pyco)) && (¬ p.nunu)) &&
+    (¬ p.in_window)) && (p.win_x = 0#u8)) && (¬ p.rydy)) && (¬ p.sovy)) &&
+    (p.fetched = 0#u16))
+
+/-- [ceres_core::ppu::display::background::relation::rest::lead_step]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 111:0-119:1 -/
+def ppu.display.background.relation.rest.lead_step
+  (h : Std.I32) : Result Std.U8 := do
+  if h <= (-4)#i32
+  then ok 0#u8
+  else
+    if h >= 5#i32
+    then ok 5#u8
+    else let i ← h + 5#i32
+         let i1 ← i >>> 1#i32
+         ok (IScalar.hcast .U8 i1)
+
+/-- [ceres_core::ppu::display::background::relation::rest::scan_inputs]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 124:0-140:1 -/
+def ppu.display.background.relation.rest.scan_inputs
+  (h : Std.I32) (free : ppu.display.background.relation.rest.Free) :
+  Result ceres_netlist.render_edge.EdgeInputs
+  := do
+  let i ← lift (h &&& 1#i32)
+  ok
+    {
+      clk := (i != 0#i32),
+      ppu_reset := false,
+      hard_reset := false,
+      lcdc := free.lcdc,
+      ly := free.ly,
+      hclk := free.hclk,
+      mode1 := free.mode1,
+      line_start := ((h = (-6)#i32) || (h = (-5)#i32)),
+      stop_scan := (h = 154#i32),
+      ceno := ((h >= (-2)#i32) && (h <= 157#i32)),
+      cpu_wr_sync := free.cpu_wr_sync,
+      addr := free.addr,
+      data := free.data
+    }
+
+/-- [ceres_core::ppu::display::background::relation::rest::inputs_at]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 143:0-160:1 -/
+def ppu.display.background.relation.rest.inputs_at
+  (i : ceres_netlist.render_edge.EdgeInputs) (h : Std.I32) : Result Bool := do
+  let want ←
+    ppu.display.background.relation.rest.scan_inputs h
+      {
+        lcdc := i.lcdc,
+        ly := i.ly,
+        hclk := i.hclk,
+        mode1 := i.mode1,
+        cpu_wr_sync := i.cpu_wr_sync,
+        addr := i.addr,
+        data := i.data
+      }
+  ok ((((((i.clk = want.clk) && (i.ppu_reset = want.ppu_reset)) &&
+    (i.hard_reset = want.hard_reset)) && (i.line_start = want.line_start)) &&
+    (i.stop_scan = want.stop_scan)) && (i.ceno = want.ceno))
+
+/-- [ceres_core::ppu::display::background::relation::rest::rise_count]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 170:0-172:1 -/
+def ppu.display.background.relation.rest.rise_count
+  (h : Std.I32) : Result Std.U8 := do
+  let i ← h - 154#i32
+  let i1 ← i / 2#i32
+  ok (IScalar.hcast .U8 i1)
+
+/-- [ceres_core::ppu::display::background::relation::rest::rise_lyzu]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 174:0-176:1 -/
+def ppu.display.background.relation.rest.rise_lyzu
+  (h : Std.I32) : Result Bool := do
+  ok ((((h = 157#i32) || (h = 158#i32)) || (h = 161#i32)) || (h = 162#i32))
+
+/-- [ceres_core::ppu::display::background::relation::rest::pipe_at]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 180:0-224:1 -/
+def ppu.display.background.relation.rest.pipe_at
+  (p : ceres_netlist.render_edge.NetPipeline) (h : Std.I32) : Result Bool := do
+  if h <= (-7)#i32
+  then ppu.display.background.relation.rest.hblank_rest p
+  else
+    if h <= 153#i32
+    then
+      let b ← ppu.display.background.relation.rest.out_of_mode3 p
+      let b1 ← ppu.display.background.relation.rest.line_cleared p
+      let b2 ← ppu.display.background.relation.rest.inputs_at p.inputs h
+      let i ← ppu.display.background.relation.rest.lead_step h
+      ok (((((((b && b1) && ((h = (-6)#i32) || (¬ p.nopa))) && ((h = (-6)#i32)
+        || (¬ p.sprite.sobu))) && b2) && p.sprite.busy) && (p.sprite.step =
+        i)) && ((h < 6#i32) || (((p.sprite.tyfo && (¬ p.sprite.sobu)) && (¬
+        p.sprite.suda)) && (¬ p.sprite.seba))))
+    else
+      let b ← ppu.display.background.relation.rest.line_cleared p
+      let b1 ← ppu.display.background.relation.rest.inputs_at p.inputs h
+      let i ← ppu.display.background.relation.rest.rise_count h
+      let b2 ← ppu.display.background.relation.rest.rise_lyzu h
+      ok (((((((((((((((((((((((p.mode3 && b) && (¬ p.nopa)) && b1) &&
+        (p.fetcher.count = i)) && (p.fetcher.lyzu = b2)) && (¬
+        p.fetcher.nyka)) && (¬ p.fetcher.pory)) && (¬ p.fetcher.pygo)) && (¬
+        p.fetcher.started)) && (p.fine = 0#u8)) && (¬ p.puxa)) && (¬ 
+        p.nyze)) && p.discard) && (¬ p.ryfa)) && (¬ p.rene)) && (¬
+        p.sprite.sobu)) && (¬ p.sprite.suda)) && (p.sprite.step =
+        ppu.display.background.relation.SPRITE_DONE)) && p.sprite.busy) && (¬
+        p.sprite.tobu)) && (¬ p.sprite.vonu)) && (¬ p.sprite.seba)) &&
+        p.sprite.tyfo)
+
+/-- [ceres_core::ppu::display::background::relation::rest::hblank_agrees]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 228:0-235:1 -/
+def ppu.display.background.relation.rest.hblank_agrees
+  (p : ceres_netlist.render_edge.NetPipeline)
+  (i : ceres_netlist.render_edge.EdgeInputs) :
+  Result Bool
+  := do
+  let b ← ppu.display.background.relation.rest.hblank_rest p
+  let b1 ← ppu.display.background.relation.rest.idle_inputs i
+  if b && b1
+  then
+    let p1 ← ceres_netlist.render_edge.NetPipeline.edge p i
+    ppu.display.background.relation.rest.hblank_rest p1
+  else ok true
+
+/-- [ceres_core::ppu::display::background::relation::rest::end_agrees]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 242:0-271:1 -/
+def ppu.display.background.relation.rest.end_agrees
+  (l : ppu.display.background.relation.Mode3Loop)
+  (net : ceres_netlist.render_edge.NetPipeline)
+  (g : ppu.display.background.relation.ghost.Ghost) (mixer_scx : Std.U8)
+  (rising : ceres_netlist.render_edge.EdgeInputs)
+  (falling : ceres_netlist.render_edge.EdgeInputs)
+  (after : ceres_netlist.render_edge.EdgeInputs) :
+  Result Bool
+  := do
+  let b ← ppu.display.background.relation.related l net g
+  let b1 ← ppu.display.background.relation.drawn l.pace
+  let b2 ← ppu.display.background.relation.writes.quiet rising l
+  let b3 ← ppu.display.background.relation.writes.quiet falling l
+  let b4 ←
+    ppu.display.background.relation.writes.writes net rising falling
+      l.mixer_scx
+  let b5 ← ppu.display.background.relation.window.holds_wx net.inputs rising
+  let b6 ← ppu.display.background.relation.window.holds_wx rising falling
+  let b7 ← ppu.display.background.relation.window.lead_in_matches l mixer_scx
+  let b8 ← ppu.display.background.relation.rest.idle_inputs after
+  if (((((((((b && b1) && rising.clk) && (¬ falling.clk)) && b2) && b3) && b4)
+    && ((¬ l.window_enabled) || (b5 && b6))) && b7) && after.clk) && b8
+  then
+    let net1 ← ceres_netlist.render_edge.NetPipeline.edge net rising
+    let net2 ← ceres_netlist.render_edge.NetPipeline.edge net1 falling
+    let net3 ← ceres_netlist.render_edge.NetPipeline.edge net2 after
+    ppu.display.background.relation.rest.hblank_rest net3
+  else ok true
+
+/-- [ceres_core::ppu::display::background::relation::rest::scan_agrees]:
+    Source: 'ceres-core/src/ppu/display/background/relation/rest.rs', lines 276:0-283:1 -/
+def ppu.display.background.relation.rest.scan_agrees
+  (p : ceres_netlist.render_edge.NetPipeline) (h : Std.I32)
+  (free : ppu.display.background.relation.rest.Free) :
+  Result Bool
+  := do
+  let b ← ppu.display.background.relation.rest.pipe_at p h
+  if ((h >= (-8)#i32) && (h <= 161#i32)) && b
+  then
+    let i ← h + 1#i32
+    let ei ← ppu.display.background.relation.rest.scan_inputs i free
+    let p1 ← ceres_netlist.render_edge.NetPipeline.edge p ei
+    let b1 ← ppu.display.background.relation.rest.pipe_at p1 i
+    let np ← ppu.display.background.relation.pipeline.before_start p1
+    let b2 ←
+      ceres_netlist.render_edge.NetPipeline.Insts.CoreCmpPartialEqNetPipeline.eq
+        p1 np
+    ok (b1 && ((i != 162#i32) || b2))
+  else ok true
+
 /-- [ceres_core::ppu::display::LINE_LENGTH]
     Source: 'ceres-core/src/ppu/display/mod.rs', lines 59:0-59:40 -/
 @[global_simps, irreducible] def ppu.display.LINE_LENGTH : Std.I32 := 456#i32
@@ -10225,6 +10442,161 @@ def ppu.display.objects.relation.scan
     ppu.display.objects.relation.scan_loop line ys net1 ceres1 2#u8
   let net3 ← ppu.display.objects.relation.tail net2 line ceres2.latches.y
   ok (net3, ceres2)
+
+/-- [ceres_core::ppu::display::objects::relation::outputs_at]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 421:0-426:1 -/
+def ppu.display.objects.relation.outputs_at
+  (scan : ceres_netlist.oam_scan.NetScan) (h : Std.I32) : Result Bool := do
+  let line_start ← ceres_netlist.oam_scan.NetScan.line_start scan
+  let b ← ceres_netlist.oam_scan.NetScan.stop_scan scan
+  ok (((line_start = ((h = (-6)#i32) || (h = (-5)#i32))) && ((b && (¬
+    line_start)) = (h = 154#i32))) && (scan.ceno = ((h >= (-2)#i32) && (h <=
+    157#i32))))
+
+/-- [ceres_core::ppu::display::objects::relation::edge_out]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 430:0-433:1 -/
+def ppu.display.objects.relation.edge_out
+  (net : ppu.display.objects.relation.NetSide) (h : Std.I32)
+  (line : ppu.display.objects.relation.Line) (y : Std.U8) :
+  Result (Bool × ppu.display.objects.relation.NetSide)
+  := do
+  let net1 ← ppu.display.objects.relation.net_edge net h line y
+  let b ← ppu.display.objects.relation.outputs_at net1.scan h
+  ok (b, net1)
+
+/-- [ceres_core::ppu::display::objects::relation::lead_in_outputs]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 437:0-464:1 -/
+def ppu.display.objects.relation.lead_in_outputs
+  (count : Std.U8) (not_saving : Bool) (held : Std.U8)
+  (line : ppu.display.objects.relation.Line)
+  (ys : ppu.display.objects.relation.LeadYs) :
+  Result Bool
+  := do
+  if (count <= ceres_netlist.oam_scan.SLOTS) && (line.ly < 144#u8)
+  then
+    let net ←
+      ppu.display.objects.relation.net_at_line_end count not_saving held
+    let b ← ppu.display.objects.relation.outputs_at net.scan (-8)#i32
+    let (b1, n) ←
+      ppu.display.objects.relation.edge_out net (-7)#i32 line ys.y39
+    let (b2, n1) ←
+      ppu.display.objects.relation.edge_out n (-6)#i32 line ys.y0
+    let (b3, n2) ←
+      ppu.display.objects.relation.edge_out n1 (-5)#i32 line ys.y0
+    let (b4, n3) ←
+      ppu.display.objects.relation.edge_out n2 (-4)#i32 line ys.y0
+    let (b5, n4) ←
+      ppu.display.objects.relation.edge_out n3 (-3)#i32 line ys.y0
+    let (b6, n5) ←
+      ppu.display.objects.relation.edge_out n4 (-2)#i32 line ys.y1
+    let (b7, n6) ←
+      ppu.display.objects.relation.edge_out n5 (-1)#i32 line ys.y1
+    let (b8, n7) ← ppu.display.objects.relation.edge_out n6 0#i32 line ys.y1
+    let (b9, n8) ← ppu.display.objects.relation.edge_out n7 1#i32 line ys.y1
+    let (b10, n9) ← ppu.display.objects.relation.edge_out n8 2#i32 line ys.y2
+    let (b11, n10) ←
+      ppu.display.objects.relation.edge_out n9 3#i32 line ys.y2
+    let (b12, n11) ←
+      ppu.display.objects.relation.edge_out n10 4#i32 line ys.y2
+    let (b13, _) ← ppu.display.objects.relation.edge_out n11 5#i32 line ys.y2
+    ok (((((((((((((b && b1) && b2) && b3) && b4) && b5) && b6) && b7) && b8)
+      && b9) && b10) && b11) && b12) && b13)
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::relation::window_outputs]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 468:0-485:1 -/
+def ppu.display.objects.relation.window_outputs
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) (j : Std.U8) (y : Std.U8) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.relation.related net ceres line j
+  if (b && (j >= 2#u8)) && (j <= 38#u8)
+  then
+    let i ← lift (UScalar.hcast .I32 j)
+    let i1 ← 4#i32 * i
+    let h ← i1 - 2#i32
+    let (b1, net1) ← ppu.display.objects.relation.edge_out net h line y
+    let i2 ← h + 1#i32
+    let (b2, net2) ← ppu.display.objects.relation.edge_out net1 i2 line y
+    let i3 ← h + 2#i32
+    let (b3, net3) ← ppu.display.objects.relation.edge_out net2 i3 line y
+    let i4 ← h + 3#i32
+    let (b4, _) ← ppu.display.objects.relation.edge_out net3 i4 line y
+    ok (((b1 && b2) && b3) && b4)
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::relation::tail_outputs]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 489:0-505:1 -/
+def ppu.display.objects.relation.tail_outputs
+  (net : ppu.display.objects.relation.NetSide)
+  (ceres : ppu.display.objects.relation.CeresSide)
+  (line : ppu.display.objects.relation.Line) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.relation.related net ceres line 39#u8
+  if b
+  then
+    let (b1, net1) ←
+      ppu.display.objects.relation.edge_out net 154#i32 line ceres.latches.y
+    let (b2, net2) ←
+      ppu.display.objects.relation.edge_out net1 155#i32 line ceres.latches.y
+    let (b3, net3) ←
+      ppu.display.objects.relation.edge_out net2 156#i32 line ceres.latches.y
+    let (b4, net4) ←
+      ppu.display.objects.relation.edge_out net3 157#i32 line ceres.latches.y
+    let (b5, net5) ←
+      ppu.display.objects.relation.edge_out net4 158#i32 line ceres.latches.y
+    let (b6, net6) ←
+      ppu.display.objects.relation.edge_out net5 159#i32 line ceres.latches.y
+    let (b7, net7) ←
+      ppu.display.objects.relation.edge_out net6 160#i32 line ceres.latches.y
+    let (b8, net8) ←
+      ppu.display.objects.relation.edge_out net7 161#i32 line ceres.latches.y
+    let (b9, _) ←
+      ppu.display.objects.relation.edge_out net8 162#i32 line ceres.latches.y
+    ok ((((((((b1 && b2) && b3) && b4) && b5) && b6) && b7) && b8) && b9)
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::relation::scan_ended]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 509:0-518:1 -/
+def ppu.display.objects.relation.scan_ended
+  (scan : ceres_netlist.oam_scan.NetScan) : Result Bool := do
+  ok ((((((((¬ scan.scanning) && (scan.index = 39#u8)) && scan.byba) &&
+    scan.doba) && (¬ scan.start_scan)) && (¬ scan.anel)) && (¬ scan.ceno))
+    && (scan.count <= ceres_netlist.oam_scan.SLOTS))
+
+/-- [ceres_core::ppu::display::objects::relation::ended_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 523:0-538:1 -/
+def ppu.display.objects.relation.ended_agrees
+  (scan : ceres_netlist.oam_scan.NetScan) (h : Std.I32)
+  (line : ppu.display.objects.relation.Line) (y : Std.U8) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.relation.scan_ended scan
+  if (b && (h >= 163#i32)) && (h <= 903#i32)
+  then
+    let i ← lift (h &&& 1#i32)
+    let i1 ← h - 1#i32
+    let b1 ← ppu.display.objects.relation.wuvu i1
+    let b2 ← ppu.display.objects.relation.wuvu h
+    let b3 ← ppu.display.objects.relation.wosu i1
+    let scan1 ←
+      ceres_netlist.oam_scan.NetScan.edge scan
+        {
+          rising := (i != 0#i32),
+          wuvu_before := b1,
+          wuvu_after := b2,
+          wosu_before := b3,
+          vclk := false,
+          ly := line.ly
+        } y line.tall
+    let b4 ← ppu.display.objects.relation.scan_ended scan1
+    let b5 ← ceres_netlist.oam_scan.NetScan.line_start scan1
+    let b6 ← ceres_netlist.oam_scan.NetScan.stop_scan scan1
+    ok (((b4 && (¬ b5)) && (¬ b6)) && (¬ scan1.ceno))
+  else ok true
 
 /-- [ceres_core::ppu::display::timing::LINE_H]
     Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 44:0-44:36 -/
