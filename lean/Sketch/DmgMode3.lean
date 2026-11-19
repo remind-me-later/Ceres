@@ -1,5 +1,6 @@
 import Sketch.Dmg
 import Ceres.Bisim.Mode3
+import Ceres.Bisim.LineRest
 open Aeneas Aeneas.Std Result
 
 /-!
@@ -13,20 +14,25 @@ dot (`start`, from the scan's end: `mode3_start_steps`, on
 on the dot harnesses). What stands for them is how the line holds mode 3's
 blocks (`Mode3InLine`):
 
-- `hN`, `hC`, `hCs`: in those phases, the line's dot is the pipeline's
-  dot (the netlist's two edges, the same in both phases) and the mode 3
-  loop's dot (ceres's: its first, or the loop's), on the line's state taken
-  apart (`pn`, `pc`) and put back (`setN`, `setC`, which `pn` and `pc`
-  take out again: `hGetN`, `hGetC`), the rest of the line left as it was;
-  the dot gives whether mode 3 ended (`endN`).
+- `hN`, `hC`, `hCs`: in those phases, the netlist's dot is the pipeline's
+  dot (its two edges, the same in both phases) with the scan's beside it
+  (`netBeside`: the scan, ended, stays ended, Kani's `netlist_scan_ended`),
+  and ceres's is the mode 3 loop's dot (its first, or the loop's), on the
+  line's state taken apart (`pn`, `pc`) and put back (`setN`, `setC`,
+  which `pn` and `pc` take out again: `hGetN`, `hGetC`), the rest of the
+  line left as it was; the dot gives whether mode 3 ended (`endN`).
 - `hI`: related dot inputs make the same mode 3 input (the mixer's SCX,
-  the two edges' inputs).
+  the two edges' inputs; the scan's Ys are the netlist's alone).
 - `hRS`, `hRL`: the phases' relations are the blocks' (`Starting`: the scan's
-  end as `start_before` has it; `Related`) with the rest of the line's (`F`),
-  which a mode 3 dot leaves alone (`hFrame`).
+  end as `start_before` has it; `Related`) and the scan's (`ScanIdle`, at
+  `163` for the first dot) with the rest of the line's (`F`), which a mode
+  3 dot leaves alone (`hFrame`).
+- `hCut`: mode 3's states are short of the line's last dot (`903`), the
+  open `dmg-lines-not-cut`.
 - `hEnd`: once ceres has drawn the line and the netlist's mode 3 stopped
   (`Ended`), the line is in HBlank, as `RL hblank` has it (Kani's
-  `mode3-end-background` for the pipeline; HBlank's relation is open).
+  `mode3-end-background` for the pipeline; HBlank's relation is
+  `DmgHBlank.lean`'s).
 - `hK`, `hKs`: the line's known difference takes mode 3's (`DotK`,
   `StartK`: the guard turns the dot's input away).
 
@@ -41,34 +47,47 @@ namespace ceres_core.sketch.dmg
 open ceres_core.bisim ceres_core.mode3
 open ceres_core.ppu.display.background.relation ceres_netlist.render_edge
 
+open ceres_core.ppu.display.objects.relation ceres_netlist.oam_scan in
+/-- The netlist's dot in mode 3: the pipeline's, with the scan's, ended,
+beside it (`scanBlock`). -/
+def netBeside (x : NetPipeline × (Line × (NetScan × I32))) (i : DotIn × (U8 × U8)) :
+    Result ((Bool × Bool) × (NetPipeline × (Line × (NetScan × I32)))) := do
+  let (o, n') ← netStep x.1 i.1
+  let s' ← ceres_core.rest.scanBlock x.2 i.2
+  ok (o, (n', s'))
+
 /-- How the line holds mode 3's blocks, the netlist's pipeline and ceres's
 loop, in the phases they run (`start`, `mode3`). -/
 structure Mode3InLine {Ln Lc DIn DIc DO : Type}
     (dotN : Ln → DIn → Result (DO × Ln)) (dotC : Lc → DIc → Result (DO × Lc))
     (RDI : DIn → DIc → Prop) (KDot : Ln → Lc → DIn → DIc → Prop) (RL : Phase → Ln → Lc → Prop) where
-  pn : Ln → NetPipeline
+  pn : Ln → NetPipeline × (ppu.display.objects.relation.Line × (ceres_netlist.oam_scan.NetScan × I32))
   pc : Lc → Mode3Loop
-  setN : Ln → NetPipeline → Ln
+  setN : Ln → NetPipeline × (ppu.display.objects.relation.Line ×
+    (ceres_netlist.oam_scan.NetScan × I32)) → Ln
   setC : Lc → Mode3Loop → Lc
-  inN : DIn → DotIn
+  inN : DIn → DotIn × (U8 × U8)
   inC : DIc → DotIn
   endN : Bool → DO
   F : Ln → Lc → Prop
   hGetN : ∀ n s, pn (setN n s) = s
   hGetC : ∀ c t, pc (setC c t) = t
-  hI : ∀ i j, RDI i j → inN i = inC j
-  hRS : ∀ n c, RL .start n c ↔ Starting (pn n) (pc c) ∧ F n c
-  hRL : ∀ n c, RL .mode3 n c ↔ Related (pn n) (pc c) ∧ F n c
+  hI : ∀ i j, RDI i j → (inN i).1 = inC j
+  hRS : ∀ n c, RL .start n c ↔ Starting (pn n).1 (pc c) ∧
+    (ceres_core.rest.ScanIdle (pn n).2 ∧ (pn n).2.2.2.val = 163) ∧ F n c
+  hRL : ∀ n c, RL .mode3 n c ↔ Related (pn n).1 (pc c) ∧ ceres_core.rest.ScanIdle (pn n).2 ∧ F n c
   hFrame : ∀ n c s t, F n c → F (setN n s) (setC c t)
   hN : ∀ n c i, RL .start n c ∨ RL .mode3 n c →
-    dotN n i = (do let (o, s) ← netStep (pn n) (inN i); ok (endN o.2, setN n s))
+    dotN n i = (do let (o, s) ← netBeside (pn n) (inN i); ok (endN o.2, setN n s))
   hCs : ∀ n c j, RL .start n c →
     dotC c j = (do let (p, t) ← cerStart (pc c) (inC j); ok (endN p, setC c t))
   hC : ∀ n c j, RL .mode3 n c →
     dotC c j = (do let (p, t) ← cerStep (pc c) (inC j); ok (endN p, setC c t))
-  hEnd : ∀ n c s t, F n c → Ended s t → RL .hblank (setN n s) (setC c t)
-  hKs : ∀ n c i j, StartK (pn n) (pc c) (inN i) (inC j) → KDot n c i j
-  hK : ∀ n c i j, DotK (pn n) (pc c) (inN i) (inC j) → KDot n c i j
+  hEnd : ∀ n c s t, F n c → Ended s.1 t → ceres_core.rest.ScanIdle s.2 →
+    RL .hblank (setN n s) (setC c t)
+  hCut : ∀ n c, RL .mode3 n c → (pn n).2.2.2.val ≤ 901
+  hKs : ∀ n c i j, StartK (pn n).1 (pc c) (inN i).1 (inC j) → KDot n c i j
+  hK : ∀ n c i j, DotK (pn n).1 (pc c) (inN i).1 (inC j) → KDot n c i j
 
 section
 
@@ -130,19 +149,25 @@ theorem dotOut_ended {s : Bool × Bool} {d : Bool} (h : DotOut s d) : s.2 = d :=
 /-- Mode 3's first dot in the line, from Kani's start harness: from the
 scan's end, a dot leaves the line in mode 3. -/
 -- @assumes mapping-mode3-start
-theorem start_phase (kStart : KaniMode3Start) (m : Mode3InLine dotN dotC RDI KDot RL) :
+theorem start_phase (kStart : KaniMode3Start) (kE : ceres_core.rest.KaniScanEnded)
+    (m : Mode3InLine dotN dotC RDI KDot RL) :
     StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL .start)
       (fun n c => ∃ k', RL k' n c) := by
-  have e := StepsInto.embed (mode3_start_steps kStart) m.pn m.pc m.setN m.setC m.inN m.inC
+  have b := StepsInto.beside (mode3_start_steps kStart) (b := ceres_core.rest.scanBlock)
+    (P := fun s => ceres_core.rest.ScanIdle s ∧ s.2.2.val = 163) (P' := ceres_core.rest.ScanIdle)
+    (fun s hs y => ceres_core.rest.scan_block_dot kE hs.1 (le_of_eq_of_le hs.2 (by decide)) y)
+  have e := StepsInto.embed b m.pn m.pc m.setN m.setC m.inN m.inC
     (fun o => m.endN o.2) m.endN m.F (fun n c => ∃ k', RL k' n c)
-    (fun n c i hr hf => m.hN n c i (Or.inl ((m.hRS n c).2 ⟨hr, hf⟩)))
-    (fun n c j hr hf => m.hCs n c j ((m.hRS n c).2 ⟨hr, hf⟩))
+    (fun n c i hr hf => m.hN n c i (Or.inl ((m.hRS n c).2 ⟨hr.1, hr.2, hf⟩)))
+    (fun n c j hr hf => m.hCs n c j ((m.hRS n c).2 ⟨hr.1, hr.2, hf⟩))
     (RI' := RDI) m.hI (RO' := fun o p => o = p)
     (fun o p h => congrArg m.endN (dotOut_ended h))
     (fun n c s t hf hr => ⟨.mode3, (m.hRL _ _).2
-      ⟨by rw [m.hGetN, m.hGetC]; exact hr, m.hFrame n c s t hf⟩⟩)
+      ⟨by rw [m.hGetN, m.hGetC]; exact hr.1, by rw [m.hGetN]; exact hr.2,
+        m.hFrame n c s t hf⟩⟩)
   intro n c hr i j hij
-  rcases e n c ((m.hRS n c).1 hr) i j hij with k | x
+  obtain ⟨h1, h2, h3⟩ := (m.hRS n c).1 hr
+  rcases e n c ⟨⟨h1, h2⟩, h3⟩ i j hij with k | x
   · exact Or.inl (m.hKs n c i j k)
   · exact Or.inr x
 
@@ -151,21 +176,28 @@ mode 3's states leaves the line in mode 3 or, the line drawn, in HBlank. -/
 -- @assumes mode3-end-background
 -- @assumes mode3-window-armed
 -- @assumes mode3-window-start
-theorem mode3_phase (kani : KaniMode3Dot) (m : Mode3InLine dotN dotC RDI KDot RL) :
+-- @assumes dmg-lines-not-cut
+theorem mode3_phase (kani : KaniMode3Dot) (kE : ceres_core.rest.KaniScanEnded)
+    (m : Mode3InLine dotN dotC RDI KDot RL) :
     StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL .mode3)
       (fun n c => ∃ k', RL k' n c) := by
-  have e := StepsInto.embed (mode3_dot_steps kani) m.pn m.pc m.setN m.setC m.inN m.inC
+  have b := StepsInto.beside (mode3_dot_steps kani) (b := ceres_core.rest.scanBlock)
+    (P := fun s => ceres_core.rest.ScanIdle s ∧ s.2.2.val ≤ 901) (P' := ceres_core.rest.ScanIdle)
+    (fun s hs y => ceres_core.rest.scan_block_dot kE hs.1 hs.2 y)
+  have e := StepsInto.embed b m.pn m.pc m.setN m.setC m.inN m.inC
     (fun o => m.endN o.2) m.endN m.F (fun n c => ∃ k', RL k' n c)
-    (fun n c i hr hf => m.hN n c i (Or.inr ((m.hRL n c).2 ⟨hr, hf⟩)))
-    (fun n c j hr hf => m.hC n c j ((m.hRL n c).2 ⟨hr, hf⟩))
+    (fun n c i hr hf => m.hN n c i (Or.inr ((m.hRL n c).2 ⟨hr.1, hr.2.1, hf⟩)))
+    (fun n c j hr hf => m.hC n c j ((m.hRL n c).2 ⟨hr.1, hr.2.1, hf⟩))
     (RI' := RDI) m.hI (RO' := fun o p => o = p)
     (fun o p h => congrArg m.endN (dotOut_ended h))
     (by
-      rintro n c s t hf (hr | he)
-      · exact ⟨.mode3, (m.hRL _ _).2 ⟨by rw [m.hGetN, m.hGetC]; exact hr, m.hFrame n c s t hf⟩⟩
-      · exact ⟨.hblank, m.hEnd n c s t hf he⟩)
+      rintro n c s t hf ⟨hr | he, hs⟩
+      · exact ⟨.mode3, (m.hRL _ _).2
+          ⟨by rw [m.hGetN, m.hGetC]; exact hr, by rw [m.hGetN]; exact hs, m.hFrame n c s t hf⟩⟩
+      · exact ⟨.hblank, m.hEnd n c s t hf he hs⟩)
   intro n c hr i j hij
-  rcases e n c ((m.hRL n c).1 hr) i j hij with k | x
+  obtain ⟨h1, h2, h3⟩ := (m.hRL n c).1 hr
+  rcases e n c ⟨⟨h1, h2, m.hCut n c hr⟩, h3⟩ i j hij with k | x
   · exact Or.inl (m.hK n c i j k)
   · exact Or.inr x
 
@@ -173,6 +205,7 @@ theorem mode3_phase (kani : KaniMode3Dot) (m : Mode3InLine dotN dotC RDI KDot RL
 phases' claims (`hOther`) and how the line holds mode 3's blocks give it
 all. -/
 theorem phases_with_mode3 (kani : KaniMode3Dot) (kStart : KaniMode3Start)
+    (kE : ceres_core.rest.KaniScanEnded)
     (m : Mode3InLine dotN dotC RDI KDot RL)
     (hOther : ∀ k, k ≠ .start → k ≠ .mode3 →
       StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k) (fun n c => ∃ k', RL k' n c)) :
@@ -180,8 +213,8 @@ theorem phases_with_mode3 (kani : KaniMode3Dot) (kStart : KaniMode3Start)
       (fun n c => ∃ k', RL k' n c) := by
   intro k
   cases k with
-  | start => exact start_phase kStart m
-  | mode3 => exact mode3_phase kani m
+  | start => exact start_phase kStart kE m
+  | mode3 => exact mode3_phase kani kE m
   | scan => exact hOther _ (by intro h; cases h) (by intro h; cases h)
   | hblank => exact hOther _ (by intro h; cases h) (by intro h; cases h)
   | vblank => exact hOther _ (by intro h; cases h) (by intro h; cases h)
@@ -192,6 +225,7 @@ theorem phases_with_mode3 (kani : KaniMode3Dot) (kStart : KaniMode3Start)
 (`phases_with_mode3`): the other phases' claims and how the line holds
 mode 3's blocks (`Mode3InLine`) stand for `hPhase`. -/
 theorem dmg_agrees_mode3 (kani : KaniMode3Dot) (kStart : KaniMode3Start)
+    (kE : ceres_core.rest.KaniScanEnded)
     (m : Mode3InLine dotN dotC RDI KDot RL)
     (hOther : ∀ k, k ≠ .start → k ≠ .mode3 →
       StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k) (fun n c => ∃ k', RL k' n c))
@@ -218,7 +252,7 @@ theorem dmg_agrees_mode3 (kani : KaniMode3Dot) (kStart : KaniMode3Start)
         (close (fun d x => (outC d x, x)) nextC
           (bus locksC dotC dotsC memC ended perC busC joyC apuC))
         (fun x y => x = y) (BusOut RMO RSeen RBO RJO RAO) K n c :=
-  dmg_agrees (phases_with_mode3 kani kStart m hOther) hLocks hMem hDots hPer hBusSide
+  dmg_agrees (phases_with_mode3 kani kStart kE m hOther) hLocks hMem hDots hPer hBusSide
     hJoySerial hApu hOut hNext
 
 end

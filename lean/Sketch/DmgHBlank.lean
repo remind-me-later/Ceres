@@ -13,48 +13,54 @@ dot puts the pipeline at rest, and every dot after keeps it there
 takes it from (`rest_pipe_at`). What stands for it is how the line holds
 the pipeline and the rest in HBlank (`HBlankInLine`):
 
-- `hN`, `hC`: in HBlank the line's dot is the pipeline's two edges, on the
-  line's state taken apart (`pp`) and put back (`setP`), and the rest of
-  the line's dot (`restN`, `restC`: the scan ended, the LCD timing, ceres's
-  HBlank; nothing here says what they do); the dot gives `out`, drawing
-  nothing.
-- `hI`: what the line gives the pipeline in HBlank: a dot's first edge is
-  the clock's rise, and no line start, no stop, no reset (the scan ended
-  gives neither: Kani's `netlist_scan_ended`; the LCD on).
+- `hN`, `hC`: in HBlank the netlist's dot is the scan's and the pipeline's
+  edges, the pipeline fed the scan's outputs (`lineIdle`: the scan, ended,
+  gives no line start, no stop and CENO low, Kani's `netlist_scan_ended`,
+  and a dot's first edge, odd, is the clock's rise), on the line's state
+  taken apart (`ph`) and put back (`setH`), and the rest of the line's dot
+  (`restN`, `restC`: the LCD timing, ceres's HBlank; nothing here says
+  what they do); the dot gives `out`, drawing nothing.
 - `hRH`: HBlank's relation is the pipeline's (`HRest`: at rest, or just
-  stopped) with the rest of the line's (`G`).
-- `hNext`: after a dot, with the pipeline at rest, the rest of the line is
-  still in HBlank (`G`), or the line has ended and is at the scan's start,
-  as `RL scan` has it (the scan ended into `net_at_line_end`, ceres's
-  search reset, the pipeline at `-8`: `rest_pipe_at`).
+  stopped) and the scan's (`ScanIdle`: ended, at an odd edge up to `903`)
+  with the rest of the line's (`G`).
+- `hStay`, `hEnd`: after a dot short of the line's end the rest of the
+  line is still in HBlank (`G`); after its last, edge `904` (the next
+  line's `-8`), the line is at the scan's start, as `RL scan` has it,
+  given the scan ended and the pipeline at rest (the scan into
+  `net_at_line_end`, `scan-latches-equal-at-start`; ceres's search reset;
+  the pipeline at `-8`: `rest_pipe_at`).
 
 HBlank has no known difference: a dot always goes through.
 -/
 
 namespace ceres_core.sketch.dmg
 open ceres_core.bisim ceres_core.scan ceres_core.rest
-open ceres_core.ppu.display.background.relation.rest ceres_netlist.render_edge
+open ceres_core.ppu.display.background.relation.rest ceres_netlist.render_edge ceres_netlist.oam_scan
 
 /-- How the line holds the netlist's pipeline, and the rest, in HBlank. -/
 structure HBlankInLine {Ln Lc DIn DIc DO : Type}
     (dotN : Ln → DIn → Result (DO × Ln)) (dotC : Lc → DIc → Result (DO × Lc))
     (RDI : DIn → DIc → Prop) (RL : Phase → Ln → Lc → Prop) where
-  pp : Ln → NetPipeline
-  setP : Ln → NetPipeline → Ln
-  idleN : DIn → EdgeInputs × EdgeInputs
+  ph : Ln → ppu.display.objects.relation.Line × ((NetScan × I32) × NetPipeline)
+  setH : Ln → ppu.display.objects.relation.Line × ((NetScan × I32) × NetPipeline) → Ln
+  idleN : DIn → (U8 × U8) × (Free × Free)
   restN : Ln → DIn → Ln
   restC : Lc → DIc → Lc
   out : DO
   G : Ln → Lc → Prop
-  hGetP : ∀ n p, pp (setP n p) = p
-  hRH : ∀ n c, RL .hblank n c ↔ HRest (pp n) ∧ G n c
-  hI : ∀ i, (idleN i).1.clk = true ∧ idle_inputs (idleN i).1 = ok true ∧
-    idle_inputs (idleN i).2 = ok true
+  hGetH : ∀ n x, ph (setH n x) = x
+  hRH : ∀ n c, RL .hblank n c ↔
+    HRest (ph n).2.2 ∧ ScanIdle ((ph n).1, (ph n).2.1) ∧ G n c
   hN : ∀ n c i, RL .hblank n c →
-    dotN n i = (do let (_, p) ← pipeIdle (pp n) (idleN i); ok (out, setP (restN n i) p))
+    dotN n i = (do
+      let (_, r) ← lineIdle (ph n).1 (ph n).2 (idleN i)
+      ok (out, setH (restN n i) ((ph n).1, r)))
   hC : ∀ n c j, RL .hblank n c → dotC c j = ok (out, restC c j)
-  hNext : ∀ n c i j p, RDI i j → G n c → hblank_rest p = ok true →
-    G (setP (restN n i) p) (restC c j) ∨ RL .scan (setP (restN n i) p) (restC c j)
+  hStay : ∀ n c i j r, RDI i j → G n c → r.1.2.val ≤ 903 →
+    G (setH (restN n i) ((ph n).1, r)) (restC c j)
+  hEnd : ∀ n c i j r, RDI i j → G n c → r.1.2.val = 905 →
+    ppu.display.objects.relation.scan_ended r.1.1 = ok true → hblank_rest r.2 = ok true →
+    RL .scan (setH (restN n i) ((ph n).1, r)) (restC c j)
 
 section
 
@@ -110,26 +116,31 @@ variable {RC : Cn → Cc → Prop}
 /-- HBlank's phase of the line: a dot leaves the pipeline at rest, the line
 in HBlank or, at its end, at the scan's start. -/
 -- @assumes pipeline-rests
-theorem hblank_phase (kEnd : KaniRestEnd) (kH : KaniRestHBlank)
+theorem hblank_phase (kE : KaniScanEnded) (kEnd : KaniRestEnd) (kH : KaniRestHBlank)
     (m : HBlankInLine dotN dotC RDI RL) :
     StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL .hblank)
       (fun n c => ∃ k', RL k' n c) := by
   intro n c hr i j hij
-  obtain ⟨hp, hg⟩ := (m.hRH n c).1 hr
-  obtain ⟨hc1, h1, h2⟩ := m.hI i
-  obtain ⟨p', hp', hr'⟩ := pipe_hblank_dot kEnd kH hp hc1 h1 h2
-  refine Or.inr ⟨m.out, m.setP (m.restN n i) p', m.out, m.restC c j, ?_, m.hC n c j hr, rfl, ?_⟩
-  · rw [m.hN n c i hr, hp']
+  obtain ⟨hp, ⟨he, hodd, hlo, hhi⟩, hg⟩ := (m.hRH n c).1 hr
+  simp only at he hodd hlo hhi
+  obtain ⟨r, hl, hrv, hre, hrr⟩ := line_idle_dot kE kEnd kH (m.idleN i) he hodd hlo hhi hp
+  refine Or.inr ⟨m.out, m.setH (m.restN n i) ((m.ph n).1, r), m.out, m.restC c j, ?_,
+    m.hC n c j hr, rfl, ?_⟩
+  · rw [m.hN n c i hr, hl]
     simp
-  · rcases m.hNext n c i j p' hij hg hr' with hg' | hs
-    · exact ⟨.hblank, (m.hRH _ _).2 ⟨by rw [m.hGetP]; exact Or.inl hr', hg'⟩⟩
-    · exact ⟨.scan, hs⟩
+  · by_cases hcut : (m.ph n).2.1.2.val ≤ 901
+    · refine ⟨.hblank, (m.hRH _ _).2 ⟨?_, ?_, m.hStay n c i j r hij hg (by omega)⟩⟩
+      · rw [m.hGetH]; exact Or.inl hrr
+      · rw [m.hGetH]
+        exact ⟨hre, by simp only; omega, by simp only; omega, by simp only; omega⟩
+    · exact ⟨.scan, m.hEnd n c i j r hij hg (by omega) hre hrr⟩
 
 /-- The outline's `hPhase` with the scan's, mode 3's and HBlank's phases
 discharged: the other phases' claims (`hOther`: VBlank, the LCD off, line
 0) and how the line holds the blocks give it all. -/
 theorem phases_with_hblank (kStep : KaniScanStep) (kLead : KaniScanLeadIn)
-    (kTail : KaniScanTail) (kRest : KaniRestScan) (kEnd : KaniRestEnd) (kH : KaniRestHBlank)
+    (kTail : KaniScanTail) (kRest : KaniRestScan) (kF : KaniScanFlags) (kE : KaniScanEnded)
+    (kEnd : KaniRestEnd) (kH : KaniRestHBlank)
     (kani : ceres_core.mode3.KaniMode3Dot) (kStart : ceres_core.mode3.KaniMode3Start)
     (ms : ScanInLine dotN dotC RDI KDot RL) (m : Mode3InLine dotN dotC RDI KDot RL)
     (mh : HBlankInLine dotN dotC RDI RL)
@@ -137,9 +148,9 @@ theorem phases_with_hblank (kStep : KaniScanStep) (kLead : KaniScanLeadIn)
       StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k) (fun n c => ∃ k', RL k' n c)) :
     ∀ k, StepsInto dotN dotC RDI (fun o p => o = p) KDot (RL k)
       (fun n c => ∃ k', RL k' n c) :=
-  phases_with_scan kStep kLead kTail kRest kani kStart ms m fun k h1 h2 h3 => by
+  phases_with_scan kStep kLead kTail kRest kF kE kani kStart ms m fun k h1 h2 h3 => by
     cases k with
-    | hblank => exact hblank_phase kEnd kH mh
+    | hblank => exact hblank_phase kE kEnd kH mh
     | scan => exact absurd rfl h1
     | start => exact absurd rfl h2
     | mode3 => exact absurd rfl h3
@@ -150,7 +161,8 @@ theorem phases_with_hblank (kStep : KaniScanStep) (kLead : KaniScanLeadIn)
 /-- `dmg_agrees` with the line's scan, mode 3 and HBlank phases taken from
 Kani's harnesses (`phases_with_hblank`). -/
 theorem dmg_agrees_hblank (kStep : KaniScanStep) (kLead : KaniScanLeadIn)
-    (kTail : KaniScanTail) (kRest : KaniRestScan) (kEnd : KaniRestEnd) (kH : KaniRestHBlank)
+    (kTail : KaniScanTail) (kRest : KaniRestScan) (kF : KaniScanFlags) (kE : KaniScanEnded)
+    (kEnd : KaniRestEnd) (kH : KaniRestHBlank)
     (kani : ceres_core.mode3.KaniMode3Dot) (kStart : ceres_core.mode3.KaniMode3Start)
     (ms : ScanInLine dotN dotC RDI KDot RL) (m : Mode3InLine dotN dotC RDI KDot RL)
     (mh : HBlankInLine dotN dotC RDI RL)
@@ -179,7 +191,7 @@ theorem dmg_agrees_hblank (kStep : KaniScanStep) (kLead : KaniScanLeadIn)
         (close (fun d x => (outC d x, x)) nextC
           (bus locksC dotC dotsC memC ended perC busC joyC apuC))
         (fun x y => x = y) (BusOut RMO RSeen RBO RJO RAO) K n c :=
-  dmg_agrees (phases_with_hblank kStep kLead kTail kRest kEnd kH kani kStart ms m mh hOther)
+  dmg_agrees (phases_with_hblank kStep kLead kTail kRest kF kE kEnd kH kani kStart ms m mh hOther)
     hLocks hMem hDots hPer hBusSide hJoySerial hApu hOut hNext
 
 end

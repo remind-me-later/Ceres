@@ -128,4 +128,25 @@ theorem StepsInto.embed {Sn Sc In Ic On Oc Ln Lc DIn DIc DOn DOc : Type}
     · simp [hN n c i hr hf, hn]
     · simp [hC n c j hr hf, hc]
 
+/-- A block with a netlist-only block beside it, which goes through and
+keeps an invariant (`P` into `P'`): together they step as the first. -/
+theorem StepsInto.beside {Sn Sc In Ic On Oc S I2 : Type}
+    {net : Sn → In → Result (On × Sn)} {cer : Sc → Ic → Result (Oc × Sc)}
+    {RI : In → Ic → Prop} {RO : On → Oc → Prop} {K : Sn → Sc → In → Ic → Prop}
+    {R R' : Sn → Sc → Prop} (h : StepsInto net cer RI RO K R R')
+    {b : S → I2 → Result S} {P P' : S → Prop}
+    (hb : ∀ s, P s → ∀ i, ∃ s', b s i = ok s' ∧ P' s') :
+    StepsInto
+      (fun (x : Sn × S) (i : In × I2) => do
+        let (o, n') ← net x.1 i.1
+        let s' ← b x.2 i.2
+        ok (o, (n', s')))
+      cer (fun i j => RI i.1 j) RO (fun x c i j => K x.1 c i.1 j)
+      (fun x c => R x.1 c ∧ P x.2) (fun x c => R' x.1 c ∧ P' x.2) := by
+  rintro ⟨n, s⟩ c ⟨hr, hp⟩ ⟨i, i2⟩ j hij
+  rcases h n c hr i j hij with k | ⟨o, n', p, c', hn, hc, ho, hr'⟩
+  · exact Or.inl k
+  · obtain ⟨s', hs, hp'⟩ := hb s hp i2
+    exact Or.inr ⟨o, (n', s'), p, c', by simp [hn, hs], hc, ho, hr', hp'⟩
+
 end ceres_core.bisim

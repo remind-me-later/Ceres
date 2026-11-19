@@ -552,3 +552,31 @@ fn netlist_scan_ended() {
     kani::cover!(scan_ended(&scan) & (h == 903), "the line's last edge");
     assert!(ended_agrees(scan, h, any_line(), kani::any()));
 }
+
+/// The scan's flip-flops edge by edge (`relation::flags_agrees`): from
+/// `relation::flags_at` at `h`, at `h + 1`, with the outputs to render
+/// `relation::outputs_at` has.
+// @assumes transcription-scan
+// @assumes transcription-oam-latches
+// @assumes mapping-half-dot
+// @discharges scan-outputs
+#[kani::proof]
+#[kani::unwind(11)]
+fn netlist_scan_flags() {
+    let net = any_net_side();
+    let h: i32 = kani::any();
+    kani::cover!(
+        super::relation::flags_at(&net.scan, h) & (h == -6),
+        "the line starts"
+    );
+    kani::cover!(
+        super::relation::flags_at(&net.scan, h) & (h == 153),
+        "the stop next"
+    );
+    assert!(super::relation::flags_agrees(
+        net,
+        h,
+        any_line(),
+        kani::any()
+    ));
+}

@@ -9781,7 +9781,7 @@ def ppu.display.background.relation.rest.scan_inputs
   (h : Std.I32) (free : ppu.display.background.relation.rest.Free) :
   Result ceres_netlist.render_edge.EdgeInputs
   := do
-  let i ← lift (h &&& 1#i32)
+  let i ← h % 2#i32
   ok
     {
       clk := (i != 0#i32),
@@ -10567,35 +10567,87 @@ def ppu.display.objects.relation.scan_ended
     scan.doba) && (¬ scan.start_scan)) && (¬ scan.anel)) && (¬ scan.ceno))
     && (scan.count <= ceres_netlist.oam_scan.SLOTS))
 
+/-- [ceres_core::ppu::display::objects::relation::scan_edge_at]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 523:0-533:1 -/
+def ppu.display.objects.relation.scan_edge_at
+  (scan : ceres_netlist.oam_scan.NetScan) (h : Std.I32)
+  (line : ppu.display.objects.relation.Line) (y : Std.U8) :
+  Result ceres_netlist.oam_scan.NetScan
+  := do
+  let i ← lift (h &&& 1#i32)
+  let i1 ← h - 1#i32
+  let b ← ppu.display.objects.relation.wuvu i1
+  let b1 ← ppu.display.objects.relation.wuvu h
+  let b2 ← ppu.display.objects.relation.wosu i1
+  ceres_netlist.oam_scan.NetScan.edge scan
+    {
+      rising := (i != 0#i32),
+      wuvu_before := b,
+      wuvu_after := b1,
+      wosu_before := b2,
+      vclk := ((h >= (-7)#i32) && (h <= 0#i32)),
+      ly := line.ly
+    } y line.tall
+
 /-- [ceres_core::ppu::display::objects::relation::ended_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 523:0-538:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 538:0-545:1 -/
 def ppu.display.objects.relation.ended_agrees
   (scan : ceres_netlist.oam_scan.NetScan) (h : Std.I32)
   (line : ppu.display.objects.relation.Line) (y : Std.U8) :
   Result Bool
   := do
   let b ← ppu.display.objects.relation.scan_ended scan
-  if (b && (h >= 163#i32)) && (h <= 903#i32)
+  if (b && (h >= 163#i32)) && (h <= 904#i32)
   then
-    let i ← lift (h &&& 1#i32)
-    let i1 ← h - 1#i32
-    let b1 ← ppu.display.objects.relation.wuvu i1
-    let b2 ← ppu.display.objects.relation.wuvu h
-    let b3 ← ppu.display.objects.relation.wosu i1
-    let scan1 ←
-      ceres_netlist.oam_scan.NetScan.edge scan
-        {
-          rising := (i != 0#i32),
-          wuvu_before := b1,
-          wuvu_after := b2,
-          wosu_before := b3,
-          vclk := false,
-          ly := line.ly
-        } y line.tall
-    let b4 ← ppu.display.objects.relation.scan_ended scan1
-    let b5 ← ceres_netlist.oam_scan.NetScan.line_start scan1
-    let b6 ← ceres_netlist.oam_scan.NetScan.stop_scan scan1
-    ok (((b4 && (¬ b5)) && (¬ b6)) && (¬ scan1.ceno))
+    let scan1 ← ppu.display.objects.relation.scan_edge_at scan h line y
+    let b1 ← ppu.display.objects.relation.scan_ended scan1
+    let b2 ← ceres_netlist.oam_scan.NetScan.line_start scan1
+    let b3 ← ceres_netlist.oam_scan.NetScan.stop_scan scan1
+    ok (((b1 && (¬ b2)) && (¬ b3)) && (¬ scan1.ceno))
+  else ok true
+
+/-- [ceres_core::ppu::display::objects::relation::index_at]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 581:0-583:1 -/
+def ppu.display.objects.relation.index_at (h : Std.I32) : Result Std.U8 := do
+  let i ← h + 6#i32
+  let i1 ← i >>> 2#i32
+  ok (IScalar.hcast .U8 i1)
+
+/-- [ceres_core::ppu::display::objects::relation::flags_at]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 554:0-573:1 -/
+def ppu.display.objects.relation.flags_at
+  (scan : ceres_netlist.oam_scan.NetScan) (h : Std.I32) : Result Bool := do
+  if (h <= (-7)#i32) || (h >= 158#i32)
+  then ppu.display.objects.relation.scan_ended scan
+  else
+    let index ←
+      if h <= (-3)#i32
+      then ok 0#u8
+      else
+        if h >= 150#i32
+        then ok 39#u8
+        else ppu.display.objects.relation.index_at h
+    ok ((((((((scan.start_scan = (h <= 1#i32)) && (scan.anel = ((h >= (-4)#i32)
+      && (h <= 3#i32)))) && (scan.scanning = (h <= 153#i32))) && (scan.ceno =
+      (h >= (-2)#i32))) && (scan.index = index)) && (scan.byba = (h >=
+      154#i32))) && (scan.doba = (h >= 155#i32))) && (scan.count <=
+      ceres_netlist.oam_scan.SLOTS))
+
+/-- [ceres_core::ppu::display::objects::relation::flags_agrees]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 588:0-595:1 -/
+def ppu.display.objects.relation.flags_agrees
+  (net : ppu.display.objects.relation.NetSide) (h : Std.I32)
+  (line : ppu.display.objects.relation.Line) (y : Std.U8) :
+  Result Bool
+  := do
+  let b ← ppu.display.objects.relation.flags_at net.scan h
+  if (((h >= (-8)#i32) && (h <= 161#i32)) && (line.ly < 144#u8)) && b
+  then
+    let i ← h + 1#i32
+    let net1 ← ppu.display.objects.relation.net_edge net i line y
+    let b1 ← ppu.display.objects.relation.outputs_at net1.scan i
+    let b2 ← ppu.display.objects.relation.flags_at net1.scan i
+    ok (b1 && b2)
   else ok true
 
 /-- [ceres_core::ppu::display::timing::LINE_H]

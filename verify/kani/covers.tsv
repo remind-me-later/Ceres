@@ -76,13 +76,15 @@ ppu::display::background::bisim::netlist_rest_end	1b75a3376634c766	ppu::display:
 ppu::display::background::bisim::netlist_rest_end_window	9177de4800e08bb2	ppu::display::background::bisim::netlist_rest_end_window	a related pair, the line drawn in the window	SATISFIED
 ppu::display::background::bisim::netlist_rest_hblank	048fe260c4f4f53b	ppu::display::background::bisim::netlist_rest_hblank	HBlank after mode 3	SATISFIED
 ppu::display::background::bisim::netlist_rest_hblank	048fe260c4f4f53b	ppu::display::background::bisim::netlist_rest_hblank	VBlank	SATISFIED
-ppu::display::background::bisim::netlist_rest_scan	fa20c82e2b805a68	ppu::display::background::bisim::netlist_rest_scan	before_start next	SATISFIED
-ppu::display::background::bisim::netlist_rest_scan	fa20c82e2b805a68	ppu::display::background::bisim::netlist_rest_scan	the line starts	SATISFIED
-ppu::display::background::bisim::netlist_rest_scan	fa20c82e2b805a68	ppu::display::background::bisim::netlist_rest_scan	the scan	SATISFIED
+ppu::display::background::bisim::netlist_rest_scan	8831ed870ea6a773	ppu::display::background::bisim::netlist_rest_scan	before_start next	SATISFIED
+ppu::display::background::bisim::netlist_rest_scan	8831ed870ea6a773	ppu::display::background::bisim::netlist_rest_scan	the line starts	SATISFIED
+ppu::display::background::bisim::netlist_rest_scan	8831ed870ea6a773	ppu::display::background::bisim::netlist_rest_scan	the scan	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	915c8cc7c2311447	ppu::display::objects::bisim::netlist_scan_dma	a DMA that ends in the scan	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	915c8cc7c2311447	ppu::display::objects::bisim::netlist_scan_dma	a DMA that starts in the scan, ten sprites	SATISFIED
 ppu::display::objects::bisim::netlist_scan_dma	915c8cc7c2311447	ppu::display::objects::bisim::netlist_scan_dma	the CPU halts during the scan	SATISFIED
-ppu::display::objects::bisim::netlist_scan_ended	4fd7d33effbcf875	ppu::display::objects::bisim::netlist_scan_ended	the line's last edge	SATISFIED
+ppu::display::objects::bisim::netlist_scan_ended	f5b06710bf960215	ppu::display::objects::bisim::netlist_scan_ended	the line's last edge	SATISFIED
+ppu::display::objects::bisim::netlist_scan_flags	4e26106f6bef06a4	ppu::display::objects::bisim::netlist_scan_flags	the line starts	SATISFIED
+ppu::display::objects::bisim::netlist_scan_flags	4e26106f6bef06a4	ppu::display::objects::bisim::netlist_scan_flags	the stop next	SATISFIED
 ppu::display::objects::bisim::netlist_scan_selection	8e60612657f4a9ee	ppu::display::objects::bisim::netlist_scan_selection	ten sprites on the line	SATISFIED
 ppu::display::objects::bisim::netlist_scan_selection	8e60612657f4a9ee	ppu::display::objects::bisim::netlist_scan_selection	the height changes during the scan	SATISFIED
 ppu::display::objects::bisim::netlist_scan_selection	8e60612657f4a9ee	ppu::display::objects::bisim::netlist_scan_selection	three sprites on the line	SATISFIED

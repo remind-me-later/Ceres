@@ -517,24 +517,81 @@ pub(crate) const fn scan_ended(scan: &NetScan) -> bool {
         & (scan.count <= SLOTS)
 }
 
-/// An edge of mode 3 or HBlank, `163` to `903` (the line's end is `904`,
-/// `-8`), from the scan ended, OAM giving any Y: the scan stays ended, and
-/// gives render no line start, no stop and CENO low.
-pub(crate) const fn ended_agrees(scan: NetScan, h: i32, line: Line, y: u8) -> bool {
-    if !(scan_ended(&scan) & (h >= 163) & (h <= 903)) {
-        return true;
-    }
+/// The scan's edge at half dot `h` alone, OAM giving `y` (`net_edge`'s
+/// first part): what it does in mode 3 and HBlank, where OAM's latches are
+/// the sprite fetch's.
+pub(crate) const fn scan_edge_at(scan: &mut NetScan, h: i32, line: Line, y: u8) {
     let clocks = Clocks {
         rising: h & 1 != 0,
         wuvu_before: wuvu(h - 1),
         wuvu_after: wuvu(h),
         wosu_before: wosu(h - 1),
-        vclk: false,
+        vclk: (h >= -7) & (h <= 0),
         ly: line.ly,
     };
-    let mut scan = scan;
     scan.edge(clocks, y, line.tall);
+}
+
+/// An edge of mode 3 or HBlank, `163` to `904` (the line's end, the next
+/// line's `-8`), from the scan ended, OAM giving any Y: the scan stays
+/// ended, and gives render no line start, no stop and CENO low.
+pub(crate) const fn ended_agrees(scan: NetScan, h: i32, line: Line, y: u8) -> bool {
+    if !(scan_ended(&scan) & (h >= 163) & (h <= 904)) {
+        return true;
+    }
+    let mut scan = scan;
+    scan_edge_at(&mut scan, h, line, y);
     scan_ended(&scan) & !scan.line_start() & !scan.stop_scan() & !scan.ceno
+}
+
+/// The scan's flip-flops that make its outputs, after the edge `h` of a
+/// visible line's scan (`-8` to `162`), as an exact shape: ended at the
+/// line's end and from `158`; CATU over `-6` to `1` and ANEL over `-4` to
+/// `3` (the line's start between them); scanning from `-6` to `153`, CENO
+/// from `-2`; the index at sprite `(h + 6) / 4` (0 at the start, 39 from
+/// `150`); BYBA from `154`, DOBA a half dot later; the count any of the
+/// ten. Measured on `NetChip`'s runs, proved edge by edge (`flags_agrees`).
+pub(crate) const fn flags_at(scan: &NetScan, h: i32) -> bool {
+    if (h <= -7) | (h >= 158) {
+        return scan_ended(scan);
+    }
+    let index = if h <= -3 {
+        0
+    } else if h >= 150 {
+        39
+    } else {
+        index_at(h)
+    };
+    (scan.start_scan == (h <= 1))
+        & (scan.anel == ((h >= -4) & (h <= 3)))
+        & (scan.scanning == (h <= 153))
+        & (scan.ceno == (h >= -2))
+        & (scan.index == index)
+        & (scan.byba == (h >= 154))
+        & (scan.doba == (h >= 155))
+        & (scan.count <= SLOTS)
+}
+
+/// The scan's index after the edge `h`, from `-2` to `149`.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "from -2 to 149, `h + 6` over 4 is 1 to 38"
+)]
+const fn index_at(h: i32) -> u8 {
+    ((h + 6) >> 2) as u8
+}
+
+/// An edge of the scan, `h + 1` (`-7` to `162`), from its flip-flops at
+/// `h`, OAM giving any Y: they are at `h + 1`, and its outputs to render
+/// are `outputs_at`'s.
+pub(crate) const fn flags_agrees(net: NetSide, h: i32, line: Line, y: u8) -> bool {
+    if !((h >= -8) & (h <= 161) & (line.ly < 144) & flags_at(&net.scan, h)) {
+        return true;
+    }
+    let mut net = net;
+    net_edge(&mut net, h + 1, line, y);
+    outputs_at(&net.scan, h + 1) & flags_at(&net.scan, h + 1)
 }
 
 #[cfg(test)]
@@ -552,6 +609,26 @@ mod tests {
 
     /// Whole scans with random Ys, many on the line: the pair is related
     /// after the lead-in and after every step, and the tail ends it.
+    /// The scan's flip-flops follow `flags_at` edge by edge, whatever OAM
+    /// gives, from the line's end to its last edge.
+    #[test]
+    fn flags_follow_the_scan() {
+        let mut x = 11_u32;
+        for _ in 0..2_000_u32 {
+            let line = Line {
+                ly: next(&mut x) % 144,
+                tall: next(&mut x) & 1 != 0,
+            };
+            let mut net = net_at_line_end(next(&mut x) % 11, next(&mut x) & 1 != 0, next(&mut x));
+            for h in -8..162 {
+                let y = next(&mut x);
+                assert!(flags_agrees(net, h, line, y), "h {h}");
+                net_edge(&mut net, h + 1, line, y);
+            }
+            assert!(flags_at(&net.scan, 162));
+        }
+    }
+
     #[test]
     fn scans_stay_related() {
         let mut x = 7_u32;

@@ -83,6 +83,15 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   takes it through an exact shape to `before_start` at `h = 162`, the
   pipeline mode 3's first dot starts from (`netlist_rest_scan`,
   `pipe_scan_dot`, a dot at a time beside `netScan`).
+- `Ceres/Bisim/LineRest.lean`: the scan and the pipeline together, as the
+  chip wires them (render takes the scan's outputs after each edge):
+  Kani proves the scan's flip-flops edge by edge (`netlist_scan_flags`,
+  `flags_at`), so from the scan's states the pipeline fed the scan's
+  outputs is the pipeline fed `scan_inputs` (`line_scan_dot`); after the
+  scan, ended, the scan stays ended through mode 3 and HBlank and feeds the
+  pipeline nothing (`netlist_scan_ended`: `scan_block_dot`,
+  `line_idle_dot`). `StepsInto.beside` (`Feedback.lean`) puts such a
+  netlist-only block beside mode 3's.
 - `Ceres/Bisim/Iterate.lean`: `Steps.iterate`, a block that steps one input
   at a time steps over a list of them (the scan over a line's windows; in
   the outline, mode 3's pipeline over an M-cycle's dots).
@@ -171,9 +180,11 @@ emulator's types yet.
 - `Sketch/DmgHBlank.lean`: `dmg_agrees_hblank`, the same with HBlank's
   phase too (`hblank_phase`, the pipeline from mode 3's stop at rest, on
   `pipe_hblank_dot`): what stands for it is how the line holds the
-  pipeline and the rest in HBlank (`HBlankInLine`: the rest of the line's
-  dot left open, as ceres's HBlank), the idle inputs the line gives the
-  pipeline, and the line's end into the scan's start (`hNext`).
+  pipeline, the scan beside it, and the rest in HBlank (`HBlankInLine`:
+  the rest of the line's dot left open, as ceres's HBlank), and the line's
+  end into the scan's start (`hEnd`). With these files the netlist's line
+  steps both its scan and its pipeline in the scan, mode 3 and HBlank; the
+  rest of the line is still a hypothesis.
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
   axioms, with no `sorry`.
 

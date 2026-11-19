@@ -123,7 +123,7 @@ const fn lead_step(h: i32) -> u8 {
 /// (BYBA before DOBA), CENO from `-2` to `157`; the clock high at odd `h`.
 pub(crate) const fn scan_inputs(h: i32, free: Free) -> EdgeInputs {
     EdgeInputs {
-        clk: h & 1 != 0,
+        clk: h % 2 != 0,
         ppu_reset: false,
         hard_reset: false,
         lcdc: free.lcdc,

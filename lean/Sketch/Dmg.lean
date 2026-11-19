@@ -281,8 +281,8 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
     known difference, OAM giving a dot a Y other than its window's (`hK`).
   - `scan` into `start`: `hEnd` in `ScanInLine`, the store's mapping onto
     mode 3's pipeline and loop (`Starting`), given the pipeline as
-    `before_start` has it (proved: the pipeline steps beside the scan,
-    `pipe_scan_dot`, fed the outputs Kani shows the scan gives); for a
+    `before_start` has it (proved: the pipeline steps after the scan, fed
+    its outputs, `line_scan_dot`, `pipe_scan_dot`); for a
     whole scan the same hypothesis gives `scan_into_mode3` (`Line.lean`).
   - `start`, mode 3's first dot: plugged in, `start_phase`
     (`DmgMode3.lean`), on Kani's `netlist_mode3_start` through
@@ -298,21 +298,21 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
     `hFrame`, the get-put laws), the dot's mode 3 input made from the
     M-cycle's (`hI`: the mixer's SCX, the two edges' inputs), and the known
     difference, the guard failing on the pair (`hK`, `hKs`: the line's
-    takes mode 3's). The rest left alone is not the netlist's line yet:
-    its scan, ended, steps in mode 3 too; Kani shows it stays ended and
-    gives the pipeline nothing (`netlist_scan_ended`), which `Mode3InLine`
-    does not carry.
+    takes mode 3's). The netlist's scan, ended, steps beside the pipeline
+    (`netlist_scan_ended`), as long as mode 3 does not reach the line's
+    last dot (`hCut`, `dmg-lines-not-cut`, open).
   - `mode3` into `hblank`: Kani's (`mode3-end-background`); in
     `dmg_agrees_mode3`, `hEnd`: the ended pair (with the dot it came from,
     `Stops`) is in HBlank's relation.
   - `hblank`: plugged in for the netlist's pipeline, `hblank_phase` in
     `dmg_agrees_hblank` (`DmgHBlank.lean`): from mode 3's stop at rest
-    (`pipe_hblank_dot`, on Kani's `netlist_rest_*`); what stands for it
-    (`HBlankInLine`) is the rest of the line in HBlank (the scan ended,
-    ceres's HBlank: nothing compares them), the idle inputs the line gives
-    the pipeline, and the line's end into the scan's start (`hNext`: the
-    scan's lead-in from there is Kani's, `netlist_scan_lead_in`, and the
-    pipeline at rest is where the scan's dot takes it from).
+    (`pipe_hblank_dot`, on Kani's `netlist_rest_*`), beside the scan, ended,
+    which feeds it no line start and no stop (`line_idle_dot`); what stands
+    for it (`HBlankInLine`) is the rest of the line in HBlank (the LCD
+    timing, ceres's HBlank: nothing compares them) and the line's end into
+    the scan's start (`hEnd`: the scan's lead-in from there is Kani's,
+    `netlist_scan_lead_in`, and the pipeline at rest is where the scan's
+    dot takes it from).
   - `vblank`, `off`: no claim (the pipeline rests in VBlank as in HBlank:
     `netlist_rest_hblank` takes VBlank's inputs).
   - `first` (line 0 after the LCD is turned on): no claim for the PPU (the
