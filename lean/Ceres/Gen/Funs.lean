@@ -9764,21 +9764,21 @@ def ppu.display.objects.on_line
   else ok false
 
 /-- [ceres_core::ppu::display::objects::relation::wuvu]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 80:0-82:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 83:0-85:1 -/
 def ppu.display.objects.relation.wuvu (h : Std.I32) : Result Bool := do
   let i ← h + 912#i32
   let i1 ← lift (i &&& 2#i32)
   ok (i1 != 0#i32)
 
 /-- [ceres_core::ppu::display::objects::relation::wosu]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 84:0-86:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 87:0-89:1 -/
 def ppu.display.objects.relation.wosu (h : Std.I32) : Result Bool := do
   let i ← h + 913#i32
   let i1 ← lift (i &&& 2#i32)
   ok (i1 != 0#i32)
 
 /-- [ceres_core::ppu::display::objects::relation::net_edge]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 90:0-121:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 93:0-124:1 -/
 def ppu.display.objects.relation.net_edge
   (net : ppu.display.objects.relation.NetSide) (h : Std.I32)
   (line : ppu.display.objects.relation.Line) (y : Std.U8) :
@@ -9824,7 +9824,7 @@ def ppu.display.objects.relation.net_edge
     ok { scan := ns, latches := nol, scanned := i2, slots := a }
 
 /-- [ceres_core::ppu::display::objects::relation::ceres_read]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 124:0-131:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 127:0-134:1 -/
 def ppu.display.objects.relation.ceres_read
   (ceres : ppu.display.objects.relation.CeresSide)
   (line : ppu.display.objects.relation.Line) (y : Std.U8) :
@@ -9845,7 +9845,7 @@ def ppu.display.objects.relation.ceres_read
   ok { latches := ol, read := i1, first := a, found := i }
 
 /-- [ceres_core::ppu::display::objects::relation::net_window]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 135:0-141:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 138:0-144:1 -/
 def ppu.display.objects.relation.net_window
   (net : ppu.display.objects.relation.NetSide)
   (line : ppu.display.objects.relation.Line) (j : Std.U8) (y : Std.U8) :
@@ -9863,7 +9863,7 @@ def ppu.display.objects.relation.net_window
   ppu.display.objects.relation.net_edge net3 i4 line y
 
 /-- [ceres_core::ppu::display::objects::relation::step]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 145:0-148:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 148:0-151:1 -/
 def ppu.display.objects.relation.step
   (net : ppu.display.objects.relation.NetSide)
   (ceres : ppu.display.objects.relation.CeresSide)
@@ -9876,7 +9876,7 @@ def ppu.display.objects.relation.step
   ok (net1, ceres1)
 
 /-- [ceres_core::ppu::display::objects::relation::same_slot]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 152:0-158:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 155:0-161:1 -/
 def ppu.display.objects.relation.same_slot
   (a : Option Std.U8) (b : Option Std.U8) : Result Bool := do
   match a with
@@ -9888,7 +9888,7 @@ def ppu.display.objects.relation.same_slot
               | some y => ok (x = y)
 
 /-- [ceres_core::ppu::display::objects::relation::slots_are]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 165:4-169:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 168:4-172:5 -/
 @[rust_loop_body]
 def ppu.display.objects.relation.slots_are_loop.body
   (net : ppu.display.objects.relation.NetSide) (n : Std.Usize)
@@ -9912,7 +9912,7 @@ def ppu.display.objects.relation.slots_are_loop.body
   else ok (done ok1)
 
 /-- [ceres_core::ppu::display::objects::relation::slots_are]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 165:4-169:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 168:4-172:5 -/
 @[rust_loop]
 def ppu.display.objects.relation.slots_are_loop
   (net : ppu.display.objects.relation.NetSide)
@@ -9926,7 +9926,7 @@ def ppu.display.objects.relation.slots_are_loop
     (ceres, ok1, i)
 
 /-- [ceres_core::ppu::display::objects::relation::slots_are]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 162:0-171:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 165:0-174:1 -/
 @[reducible]
 def ppu.display.objects.relation.slots_are
   (net : ppu.display.objects.relation.NetSide)
@@ -9936,7 +9936,7 @@ def ppu.display.objects.relation.slots_are
   ppu.display.objects.relation.slots_are_loop net ceres n true 0#usize
 
 /-- [ceres_core::ppu::display::objects::relation::unpack]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 196:0-201:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 199:0-204:1 -/
 def ppu.display.objects.relation.unpack
   (slot : Option Std.U8) : Result (Bool × Std.U8) := do
   match slot with
@@ -9944,7 +9944,7 @@ def ppu.display.objects.relation.unpack
   | some index => ok (true, index)
 
 /-- [ceres_core::ppu::display::objects::relation::list_is_sound]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 179:4-190:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 182:4-193:5 -/
 @[rust_loop_body]
 def ppu.display.objects.relation.list_is_sound_loop.body
   (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
@@ -9965,7 +9965,7 @@ def ppu.display.objects.relation.list_is_sound_loop.body
   else ok (done ok1)
 
 /-- [ceres_core::ppu::display::objects::relation::list_is_sound]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 179:4-190:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 182:4-193:5 -/
 @[rust_loop]
 def ppu.display.objects.relation.list_is_sound_loop
   (i : Std.U8) (a : Array (Option Std.U8) 10#usize) (i1 : Std.Usize)
@@ -9978,7 +9978,7 @@ def ppu.display.objects.relation.list_is_sound_loop
     (ok1, last, i2)
 
 /-- [ceres_core::ppu::display::objects::relation::list_is_sound]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 175:0-192:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 178:0-195:1 -/
 @[reducible]
 def ppu.display.objects.relation.list_is_sound
   (ceres : ppu.display.objects.relation.CeresSide) : Result Bool := do
@@ -9987,7 +9987,7 @@ def ppu.display.objects.relation.list_is_sound
     (-1)#i32 0#usize
 
 /-- [ceres_core::ppu::display::objects::relation::related]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 210:0-241:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 213:0-244:1 -/
 def ppu.display.objects.relation.related
   (net : ppu.display.objects.relation.NetSide)
   (ceres : ppu.display.objects.relation.CeresSide)
@@ -10022,7 +10022,7 @@ def ppu.display.objects.relation.related
     ppu.display.objects.MAX_OBJECTS_PER_LINE)) = ((ceres.found = i4) && b)))
 
 /-- [ceres_core::ppu::display::objects::relation::step_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 245:0-252:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 248:0-255:1 -/
 def ppu.display.objects.relation.step_agrees
   (net : ppu.display.objects.relation.NetSide)
   (ceres : ppu.display.objects.relation.CeresSide)
@@ -10038,7 +10038,7 @@ def ppu.display.objects.relation.step_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::objects::relation::NO_SPRITES]
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 256:0-256:98 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 259:0-259:98 -/
 @[global_simps, irreducible]
 def ppu.display.objects.relation.NO_SPRITES : Array (Option Std.U8) 10#usize :=
   Array.make 10#usize [
@@ -10046,7 +10046,7 @@ def ppu.display.objects.relation.NO_SPRITES : Array (Option Std.U8) 10#usize :=
     ]
 
 /-- [ceres_core::ppu::display::objects::relation::net_at_line_end]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 261:0-281:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 264:0-284:1 -/
 def ppu.display.objects.relation.net_at_line_end
   (count : Std.U8) (not_saving : Bool) (held : Std.U8) :
   Result ppu.display.objects.relation.NetSide
@@ -10071,7 +10071,7 @@ def ppu.display.objects.relation.net_at_line_end
     }
 
 /-- [ceres_core::ppu::display::objects::relation::ceres_at_line_end]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 284:0-291:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 287:0-294:1 -/
 def ppu.display.objects.relation.ceres_at_line_end
   (held : Std.U8) : Result ppu.display.objects.relation.CeresSide := do
   ok
@@ -10082,42 +10082,52 @@ def ppu.display.objects.relation.ceres_at_line_end
       found := 0#usize
     }
 
+/-- [ceres_core::ppu::display::objects::relation::lead_ys]:
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 308:0-315:1 -/
+def ppu.display.objects.relation.lead_ys
+  (ys : Array Std.U8 40#usize) :
+  Result ppu.display.objects.relation.LeadYs
+  := do
+  let i ← Array.index_usize ys 39#usize
+  let i1 ← Array.index_usize ys 0#usize
+  let i2 ← Array.index_usize ys 1#usize
+  let i3 ← Array.index_usize ys 2#usize
+  ok { y39 := i, y0 := i1, y1 := i2, y2 := i3 }
+
 /-- [ceres_core::ppu::display::objects::relation::lead_in]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 297:0-315:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 321:0-340:1 -/
 def ppu.display.objects.relation.lead_in
   (net : ppu.display.objects.relation.NetSide)
   (ceres : ppu.display.objects.relation.CeresSide)
-  (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 4#usize) :
+  (line : ppu.display.objects.relation.Line)
+  (ys : ppu.display.objects.relation.LeadYs) :
   Result (ppu.display.objects.relation.NetSide ×
     ppu.display.objects.relation.CeresSide)
   := do
-  let y39 ← Array.index_usize ys 0#usize
-  let y0 ← Array.index_usize ys 1#usize
-  let y1 ← Array.index_usize ys 2#usize
-  let y2 ← Array.index_usize ys 3#usize
-  let net1 ← ppu.display.objects.relation.net_edge net (-7)#i32 line y39
-  let net2 ← ppu.display.objects.relation.net_edge net1 (-6)#i32 line y0
-  let net3 ← ppu.display.objects.relation.net_edge net2 (-5)#i32 line y0
-  let net4 ← ppu.display.objects.relation.net_edge net3 (-4)#i32 line y0
-  let net5 ← ppu.display.objects.relation.net_edge net4 (-3)#i32 line y0
-  let ceres1 ← ppu.display.objects.relation.ceres_read ceres line y0
-  let net6 ← ppu.display.objects.relation.net_edge net5 (-2)#i32 line y1
-  let net7 ← ppu.display.objects.relation.net_edge net6 (-1)#i32 line y1
-  let net8 ← ppu.display.objects.relation.net_edge net7 0#i32 line y1
-  let net9 ← ppu.display.objects.relation.net_edge net8 1#i32 line y1
-  let ceres2 ← ppu.display.objects.relation.ceres_read ceres1 line y1
-  let net10 ← ppu.display.objects.relation.net_edge net9 2#i32 line y2
-  let net11 ← ppu.display.objects.relation.net_edge net10 3#i32 line y2
-  let net12 ← ppu.display.objects.relation.net_edge net11 4#i32 line y2
-  let net13 ← ppu.display.objects.relation.net_edge net12 5#i32 line y2
-  let ceres3 ← ppu.display.objects.relation.ceres_read ceres2 line y2
+  let net1 ← ppu.display.objects.relation.net_edge net (-7)#i32 line ys.y39
+  let net2 ← ppu.display.objects.relation.net_edge net1 (-6)#i32 line ys.y0
+  let net3 ← ppu.display.objects.relation.net_edge net2 (-5)#i32 line ys.y0
+  let net4 ← ppu.display.objects.relation.net_edge net3 (-4)#i32 line ys.y0
+  let net5 ← ppu.display.objects.relation.net_edge net4 (-3)#i32 line ys.y0
+  let net6 ← ppu.display.objects.relation.net_edge net5 (-2)#i32 line ys.y1
+  let net7 ← ppu.display.objects.relation.net_edge net6 (-1)#i32 line ys.y1
+  let net8 ← ppu.display.objects.relation.net_edge net7 0#i32 line ys.y1
+  let net9 ← ppu.display.objects.relation.net_edge net8 1#i32 line ys.y1
+  let net10 ← ppu.display.objects.relation.net_edge net9 2#i32 line ys.y2
+  let net11 ← ppu.display.objects.relation.net_edge net10 3#i32 line ys.y2
+  let net12 ← ppu.display.objects.relation.net_edge net11 4#i32 line ys.y2
+  let net13 ← ppu.display.objects.relation.net_edge net12 5#i32 line ys.y2
+  let ceres1 ← ppu.display.objects.relation.ceres_read ceres line ys.y0
+  let ceres2 ← ppu.display.objects.relation.ceres_read ceres1 line ys.y1
+  let ceres3 ← ppu.display.objects.relation.ceres_read ceres2 line ys.y2
   ok (net13, ceres3)
 
 /-- [ceres_core::ppu::display::objects::relation::lead_in_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 319:0-333:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 344:0-358:1 -/
 def ppu.display.objects.relation.lead_in_agrees
   (count : Std.U8) (not_saving : Bool) (held : Std.U8)
-  (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 4#usize) :
+  (line : ppu.display.objects.relation.Line)
+  (ys : ppu.display.objects.relation.LeadYs) :
   Result Bool
   := do
   if (count <= ceres_netlist.oam_scan.SLOTS) && (line.ly < 144#u8)
@@ -10130,47 +10140,19 @@ def ppu.display.objects.relation.lead_in_agrees
     ppu.display.objects.relation.related net1 ceres1 line 2#u8
   else ok true
 
-/-- [ceres_core::ppu::display::objects::relation::tail]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 339:4-342:5 -/
-@[rust_loop_body]
-def ppu.display.objects.relation.tail_loop.body
-  (line : ppu.display.objects.relation.Line) (y39 : Std.U8)
-  (net : ppu.display.objects.relation.NetSide) (h : Std.I32) :
-  Result (ControlFlow (ppu.display.objects.relation.NetSide × Std.I32)
-    ppu.display.objects.relation.NetSide)
-  := do
-  if h <= 161#i32
-  then
-    let net1 ← ppu.display.objects.relation.net_edge net h line y39
-    let h1 ← h + 1#i32
-    ok (cont (net1, h1))
-  else ok (done net)
-
-/-- [ceres_core::ppu::display::objects::relation::tail]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 339:4-342:5 -/
-@[rust_loop]
-def ppu.display.objects.relation.tail_loop
-  (net : ppu.display.objects.relation.NetSide)
-  (line : ppu.display.objects.relation.Line) (y39 : Std.U8) (h : Std.I32) :
-  Result ppu.display.objects.relation.NetSide
-  := do
-  loop
-    (fun (net1, h1) => ppu.display.objects.relation.tail_loop.body line y39
-      net1 h1)
-    (net, h)
-
 /-- [ceres_core::ppu::display::objects::relation::tail]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 337:0-343:1 -/
-@[reducible]
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 364:0-368:1 -/
 def ppu.display.objects.relation.tail
   (net : ppu.display.objects.relation.NetSide)
   (line : ppu.display.objects.relation.Line) (y39 : Std.U8) :
   Result ppu.display.objects.relation.NetSide
   := do
-  ppu.display.objects.relation.tail_loop net line y39 154#i32
+  let net1 ← ppu.display.objects.relation.net_window net line 39#u8 y39
+  let net2 ← ppu.display.objects.relation.net_window net1 line 40#u8 y39
+  ppu.display.objects.relation.net_edge net2 162#i32 line y39
 
 /-- [ceres_core::ppu::display::objects::relation::tail_agrees]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 348:0-366:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 373:0-391:1 -/
 def ppu.display.objects.relation.tail_agrees
   (net : ppu.display.objects.relation.NetSide)
   (ceres : ppu.display.objects.relation.CeresSide)
@@ -10189,7 +10171,7 @@ def ppu.display.objects.relation.tail_agrees
   else ok true
 
 /-- [ceres_core::ppu::display::objects::relation::scan]: loop body 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 382:4-385:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 407:4-410:5 -/
 @[rust_loop_body]
 def ppu.display.objects.relation.scan_loop.body
   (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 40#usize)
@@ -10212,7 +10194,7 @@ def ppu.display.objects.relation.scan_loop.body
   else ok (done (net, ceres))
 
 /-- [ceres_core::ppu::display::objects::relation::scan]: loop 0:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 382:4-385:5 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 407:4-410:5 -/
 @[rust_loop]
 def ppu.display.objects.relation.scan_loop
   (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 40#usize)
@@ -10227,7 +10209,7 @@ def ppu.display.objects.relation.scan_loop
     (net, ceres, j)
 
 /-- [ceres_core::ppu::display::objects::relation::scan]:
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 371:0-390:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 396:0-415:1 -/
 def ppu.display.objects.relation.scan
   (count : Std.U8) (not_saving : Bool) (held : Std.U8)
   (line : ppu.display.objects.relation.Line) (ys : Array Std.U8 40#usize) :
@@ -10237,13 +10219,8 @@ def ppu.display.objects.relation.scan
   let net ←
     ppu.display.objects.relation.net_at_line_end count not_saving held
   let ceres ← ppu.display.objects.relation.ceres_at_line_end held
-  let i ← Array.index_usize ys 39#usize
-  let i1 ← Array.index_usize ys 0#usize
-  let i2 ← Array.index_usize ys 1#usize
-  let i3 ← Array.index_usize ys 2#usize
-  let (net1, ceres1) ←
-    ppu.display.objects.relation.lead_in net ceres line
-      (Array.make 4#usize [ i, i1, i2, i3 ])
+  let ly ← ppu.display.objects.relation.lead_ys ys
+  let (net1, ceres1) ← ppu.display.objects.relation.lead_in net ceres line ly
   let (net2, ceres2) ←
     ppu.display.objects.relation.scan_loop line ys net1 ceres1 2#u8
   let net3 ← ppu.display.objects.relation.tail net2 line ceres2.latches.y

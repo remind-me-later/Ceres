@@ -7,4 +7,5 @@ import Ceres.Bisim.Scan
 import Ceres.Bisim.Line
 import Ceres.Bisim.Feedback
 import Ceres.Bisim.Mode3
+import Ceres.Bisim.ScanDots
 import Ceres.Axioms

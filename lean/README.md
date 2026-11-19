@@ -61,6 +61,16 @@ hypotheses (`KaniTimer`, `KaniIf`, `KaniDma`, `KaniLcd`, `KaniSeq`).
   framework's form (`scan_steps`, the netlist's window and ceres's read
   apart, a window past 38 a known difference), and `Steps.iterate` runs it
   over windows (`scan_windows`).
+- `Ceres/Bisim/ScanDots.lean`: the scan a dot at a time, the outline's
+  step: the netlist's two edges with OAM's Y at each, ceres's read at the
+  dots that have one (`netScan`, `cerScan`). A dot ends inside a window,
+  where Kani relates nothing, so the pairs between dots are those reached
+  from a pair Kani relates (a prefix of the lead-in from the line's end, or
+  one or three of a window's edges from its boundary); Kani's three claims
+  give that those runs go through and where they lead: `scan_dot_steps`,
+  from the line's end to the scan's last edge (`162`), where the netlist's
+  slots hold ceres's first ten sprites (`scan_end_saves`). OAM giving a dot
+  a Y other than its window's is the known difference.
 - `Ceres/Bisim/Iterate.lean`: `Steps.iterate`, a block that steps one input
   at a time steps over a list of them (the scan over a line's windows; in
   the outline, mode 3's pipeline over an M-cycle's dots).
@@ -138,6 +148,11 @@ emulator's types yet.
   loop's on its state taken apart and put back, the rest left alone), that
   related dot inputs make the same mode 3 input, that the line's end is in
   HBlank's relation, and that its known difference takes mode 3's.
+- `Sketch/DmgScan.lean`: `dmg_agrees_scan`, the same with the scan's phase
+  too (`scan_phase`, on `scan_dot_steps`): what stands for it is how the
+  line holds the scan's blocks (`ScanInLine`: for the line being scanned,
+  its state taken apart and put back) and, at the scan's end, the store's
+  mapping onto mode 3's start (`hEnd`).
 - `Sketch/Axioms.lean`: the outline rests on its hypotheses and Lean's own
   axioms, with no `sorry`.
 

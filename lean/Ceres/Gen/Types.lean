@@ -704,13 +704,13 @@ structure ppu.display.objects.OamLatches where
   x : Std.U8
 
 /-- [ceres_core::ppu::display::objects::relation::Line]
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 51:0-54:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 54:0-57:1 -/
 structure ppu.display.objects.relation.Line where
   ly : Std.U8
   tall : Bool
 
 /-- [ceres_core::ppu::display::objects::relation::NetSide]
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 60:0-65:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 63:0-68:1 -/
 structure ppu.display.objects.relation.NetSide where
   scan : ceres_netlist.oam_scan.NetScan
   latches : ceres_netlist.oam.NetOamLatches
@@ -718,12 +718,20 @@ structure ppu.display.objects.relation.NetSide where
   slots : Array (Option Std.U8) 10#usize
 
 /-- [ceres_core::ppu::display::objects::relation::CeresSide]
-    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 70:0-75:1 -/
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 73:0-78:1 -/
 structure ppu.display.objects.relation.CeresSide where
   latches : ppu.display.objects.OamLatches
   read : Std.U8
   first : Array (Option Std.U8) 10#usize
   found : Std.Usize
+
+/-- [ceres_core::ppu::display::objects::relation::LeadYs]
+    Source: 'ceres-core/src/ppu/display/objects/relation.rs', lines 300:0-305:1 -/
+structure ppu.display.objects.relation.LeadYs where
+  y39 : Std.U8
+  y0 : Std.U8
+  y1 : Std.U8
+  y2 : Std.U8
 
 /-- [ceres_core::ppu::display::timing::PendingWrite]
     Source: 'ceres-core/src/ppu/display/timing/mod.rs', lines 48:0-51:1 -/

@@ -269,13 +269,17 @@ Kani's five claims (`KaniLcd`, `KaniTimer`, `KaniIf`, `KaniSeq`,
 `KaniDma`) and these, each with what stands for it today:
 
 - `hPhase`, the PPU's line a dot at a time, phase by phase:
-  - `scan`: proved in Lean a sprite's window at a time (`scan_steps`, on
-    Kani's three window claims); a window is two dots, so it needs a dot's
-    cut, or the M-cycle's dots taken two windows at a time.
-  - `scan` into `start`: the scan's last dot leaves the line where
-    `start_before` has mode 3's blocks (`Starting`); for the whole scan,
-    `scan_into_mode3` (`Line.lean`), with the store's mapping onto mode 3's
-    blocks as its hypothesis (`hStart`).
+  - `scan`: plugged in, `scan_phase` in `dmg_agrees_scan` (`DmgScan.lean`),
+    a dot at a time on Kani's three scan claims (`scan_dot_steps`,
+    `Ceres/Bisim/ScanDots.lean`), from the line's end (`scan_starts`) to
+    its last edge, `162` (`ScanEnd`, where the netlist's slots hold ceres's
+    first ten sprites). What stands for it (`ScanInLine`): the line's state
+    as the scan's blocks for the line being scanned (`hN`, `hC`, `hFrame`,
+    the get-put laws), the dot's Ys made from the M-cycle's (`hI`), and the
+    known difference, OAM giving a dot a Y other than its window's (`hK`).
+  - `scan` into `start`: `hEnd` in `ScanInLine`, the store's mapping onto
+    mode 3's pipeline and loop (`Starting`); for a whole scan the same
+    hypothesis gives `scan_into_mode3` (`Line.lean`).
   - `start`, mode 3's first dot: plugged in, `start_phase`
     (`DmgMode3.lean`), on Kani's `netlist_mode3_start` through
     `mode3_start_steps`, into `mode3`.

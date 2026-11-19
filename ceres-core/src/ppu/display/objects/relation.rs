@@ -17,8 +17,11 @@
 //! Windows 0 and 1 carry the scan's start (`start_scan`, `anel`), and the
 //! last its stop, so a scan is `lead_in` (from the line's end, `h = -8`, to
 //! the boundary of window 2), `step` for windows 2 to 38, which leave the
-//! pair `related` again, and `tail` (window 39 to mode 3). Kani proves the
-//! three; Lean carries `step` over the windows (`lean/Ceres/Bisim/Scan.lean`).
+//! pair `related` again, and `tail` (windows 39 and 40, to mode 3). Kani
+//! proves the three; Lean carries `step` over the windows
+//! (`lean/Ceres/Bisim/Scan.lean`), and cuts the scan into dots, the pairs
+//! between them reached from those the three relate
+//! (`lean/Ceres/Bisim/ScanDots.lean`).
 //!
 //! As in `bisim::netlist_scan_selection`: a visible line, LCDC bit
 //! 2 the same throughout, no OAM DMA, the CPU not addressing OAM. Ceres's
@@ -290,27 +293,49 @@ pub(crate) const fn ceres_at_line_end(held: u8) -> CeresSide {
     }
 }
 
+/// The Ys OAM gives over the lead-in: sprite 39's (from the line before),
+/// then 0's, 1's and 2's.
+#[derive(Clone, Copy)]
+#[cfg_attr(kani, derive(kani::Arbitrary))]
+pub(crate) struct LeadYs {
+    pub y39: u8,
+    pub y0: u8,
+    pub y1: u8,
+    pub y2: u8,
+}
+
+/// The lead-in's Ys, of the line's 40.
+const fn lead_ys(ys: &[u8; 40]) -> LeadYs {
+    LeadYs {
+        y39: ys[39],
+        y0: ys[0],
+        y1: ys[1],
+        y2: ys[2],
+    }
+}
+
 /// From the line's end to window 2: the netlist's edges `-7` to `5`, OAM
 /// giving sprite 39's Y (from the line before), then 0's, 1's and 2's as
 /// the index moves; ceres's reads of sprites 0, 1 and 2 (at `-3`, `1`,
 /// `5`).
-pub(crate) const fn lead_in(net: &mut NetSide, ceres: &mut CeresSide, line: Line, ys: [u8; 4]) {
-    let [y39, y0, y1, y2] = ys;
+pub(crate) const fn lead_in(net: &mut NetSide, ceres: &mut CeresSide, line: Line, ys: LeadYs) {
+    let LeadYs { y39, y0, y1, y2 } = ys;
     net_edge(net, -7, line, y39);
     net_edge(net, -6, line, y0);
     net_edge(net, -5, line, y0);
     net_edge(net, -4, line, y0);
     net_edge(net, -3, line, y0);
-    ceres_read(ceres, line, y0);
     net_edge(net, -2, line, y1);
     net_edge(net, -1, line, y1);
     net_edge(net, 0, line, y1);
     net_edge(net, 1, line, y1);
-    ceres_read(ceres, line, y1);
     net_edge(net, 2, line, y2);
     net_edge(net, 3, line, y2);
     net_edge(net, 4, line, y2);
     net_edge(net, 5, line, y2);
+    // Ceres's reads, at `-3`, `1` and `5`: the two sides do not meet.
+    ceres_read(ceres, line, y0);
+    ceres_read(ceres, line, y1);
     ceres_read(ceres, line, y2);
 }
 
@@ -321,7 +346,7 @@ pub(crate) const fn lead_in_agrees(
     not_saving: bool,
     held: u8,
     line: Line,
-    ys: [u8; 4],
+    ys: LeadYs,
 ) -> bool {
     if !((count <= SLOTS) & (line.ly < 144)) {
         return true;
@@ -332,14 +357,14 @@ pub(crate) const fn lead_in_agrees(
     related(&net, &ceres, line, 2)
 }
 
-/// From window 39 to mode 3: the netlist's edges `154` to `161`, OAM
-/// still giving sprite 39's Y; ceres has read all 40.
+/// From window 39 to mode 3: the netlist's edges `154` to `162`, windows
+/// 39 and 40 and the falling edge that ends the scan's last dot (mode 3's
+/// first dot is `163` and `164`), OAM still giving sprite 39's Y; ceres
+/// has read all 40.
 pub(crate) const fn tail(net: &mut NetSide, line: Line, y39: u8) {
-    let mut h = 154;
-    while h <= 161 {
-        net_edge(net, h, line, y39);
-        h += 1;
-    }
+    net_window(net, line, 39, y39);
+    net_window(net, line, 40, y39);
+    net_edge(net, 162, line, y39);
 }
 
 /// From a related pair at window 39: the netlist's scan stops, at the
@@ -377,7 +402,7 @@ pub(crate) const fn scan(
 ) -> (NetSide, CeresSide) {
     let mut net = net_at_line_end(count, not_saving, held);
     let mut ceres = ceres_at_line_end(held);
-    lead_in(&mut net, &mut ceres, line, [ys[39], ys[0], ys[1], ys[2]]);
+    lead_in(&mut net, &mut ceres, line, lead_ys(&ys));
     let mut j: u8 = 2;
     while j <= 38 {
         step(&mut net, &mut ceres, line, j, ys[j as usize + 1]);
@@ -423,16 +448,10 @@ mod tests {
             let count = next(&mut x) % 11;
             let not_saving = next(&mut x) & 1 != 0;
             let held = next(&mut x);
-            assert!(lead_in_agrees(
-                count,
-                not_saving,
-                held,
-                line,
-                [ys[39], ys[0], ys[1], ys[2]]
-            ));
+            assert!(lead_in_agrees(count, not_saving, held, line, lead_ys(&ys)));
             let mut net = net_at_line_end(count, not_saving, held);
             let mut ceres = ceres_at_line_end(held);
-            lead_in(&mut net, &mut ceres, line, [ys[39], ys[0], ys[1], ys[2]]);
+            lead_in(&mut net, &mut ceres, line, lead_ys(&ys));
             assert!(
                 related(&net, &ceres, line, 2),
                 "run {run}: after the lead-in"

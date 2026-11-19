@@ -26,13 +26,21 @@ namespace ceres_core.scan
 
 open ceres_core.ppu.display.objects.relation
 
+/-- A spec's value, as an equation. -/
+theorem spec_ok_exists {α} {m : Result α} {p : α → Prop} (h : WP.spec m p) :
+    ∃ x, m = ok x ∧ p x := by
+  cases m with
+  | ret x => exact ⟨x, rfl, (WP.spec_ok x).1 h⟩
+  | vis e k => exact absurd h (by simp [WP.spec_vis])
+  | div => exact absurd h (by simp [WP.spec_div])
+
 /-- What Kani proves of a window. -/
 def KaniScanStep : Prop :=
   ∀ net ceres line j y, step_agrees net ceres line j y = ok true
 
 /-- What Kani proves of the scan's start. -/
 def KaniScanLeadIn : Prop :=
-  ∀ count ns held line ys, lead_in_agrees count ns held line ys = ok true
+  ∀ count ns held line (ys : LeadYs), lead_in_agrees count ns held line ys = ok true
 
 /-- What Kani proves of the scan's end. -/
 def KaniScanTail : Prop :=
@@ -149,10 +157,11 @@ theorem scan_agrees (kStep : KaniScanStep) (kLead : KaniScanLeadIn) (kTail : Kan
   obtain ⟨net0, hn⟩ : ∃ n, net_at_line_end count ns held = ok n := ⟨_, rfl⟩
   obtain ⟨ceres0, hce⟩ : ∃ c, ceres_at_line_end held = ok c := ⟨_, rfl⟩
   rw [hn, bind_ok, hce, bind_ok]
-  step as ⟨y39, hy39⟩
-  step as ⟨y0, hy0⟩
-  step as ⟨y1, hy1⟩
-  step as ⟨y2, hy2⟩
+  have hs : lead_ys ys ⦃ _ => True ⦄ := by
+    unfold lead_ys
+    step*
+  obtain ⟨ly, hly, -⟩ := spec_ok_exists hs
+  rw [hly, bind_ok]
   step with lead_in_related kLead hc hl (by rw [hn]) (by rw [hce]) as ⟨net1, ceres1, hp⟩
   step with scan_loop_related kStep line ys net1 ceres1 2#u8 (by scalar_tac) (by scalar_tac) hp
     as ⟨net2, ceres2, hq⟩
@@ -168,14 +177,6 @@ OAM gives (the same on both sides), no output. The relation is `related`
 at the netlist's window, from window 2 on; a window past 38 is outside
 Kani's step (the tail's), a known difference. `Steps.iterate` carries it
 over the windows. -/
-
-/-- A spec's value, as an equation. -/
-theorem spec_ok_exists {α} {m : Result α} {p : α → Prop} (h : WP.spec m p) :
-    ∃ x, m = ok x ∧ p x := by
-  cases m with
-  | ret x => exact ⟨x, rfl, (WP.spec_ok x).1 h⟩
-  | vis e k => exact absurd h (by simp [WP.spec_vis])
-  | div => exact absurd h (by simp [WP.spec_div])
 
 /-- The netlist's window, with its index. -/
 def scanNet (line : Line) (s : NetSide × U8) (y : U8) : Result (Unit × (NetSide × U8)) := do
